@@ -148,6 +148,7 @@ function App() {
         myData={myData}
         opponentData={opponentData}
         lastBattleLog={lastBattleLog}
+        battleLogs={logs}
         onUseSkill={handleUseSkill}
         onActivateZone={handleActivateZone}
       />
@@ -155,81 +156,104 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center p-4">
-      <div className="max-w-4xl w-full">
-        <h1 className="text-4xl font-bold text-center mb-8 text-blue-400">
-          Yubifuru - 1v1 Battle Game
-        </h1>
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-gray-900 text-white flex items-center justify-center p-4">
+      <div className="max-w-2xl w-full">
+        <div className="text-center mb-12">
+          <h1 className="text-5xl font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-600">
+            ⚔️ Yubifuru
+          </h1>
+          <p className="text-gray-400 text-lg">1v1 Battle Game</p>
+        </div>
         
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Game Panel */}
-          <div className="bg-gray-800 rounded-lg p-6 shadow-xl">
-            <div className="mb-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-400">Server Status:</span>
-                <span className={`px-3 py-1 rounded-full text-sm ${
-                  isConnected ? 'bg-green-600' : 'bg-red-600'
-                }`}>
-                  {isConnected ? 'Connected' : 'Disconnected'}
-                </span>
-              </div>
-            </div>
+        <div className="bg-gray-800 bg-opacity-80 backdrop-blur rounded-2xl p-8 shadow-2xl border border-purple-500 border-opacity-30">
+          {/* Connection Status */}
+          <div className="flex items-center justify-center mb-6 gap-2">
+            <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+            <span className="text-sm text-gray-300">
+              {isConnected ? 'サーバーに接続中' : 'サーバーに接続しています...'}
+            </span>
+          </div>
 
-            {!hasJoined ? (
-              <div className="space-y-4">
+          {!hasJoined ? (
+            <>
+              {/* Username Input */}
+              <div className="mb-6">
+                <label className="block text-sm font-semibold mb-3 text-purple-300">
+                  ユーザー名を入力
+                </label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleJoinGame()}
+                  className="w-full px-6 py-3 bg-gray-700 border-2 border-purple-400 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-500 text-white placeholder-gray-400"
+                  placeholder="例: 戦士"
+                  disabled={!isConnected}
+                />
+              </div>
+
+              {/* Join Button */}
+              <button
+                onClick={handleJoinGame}
+                disabled={!isConnected || !username.trim()}
+                className="w-full px-6 py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-600 disabled:to-gray-600 disabled:cursor-not-allowed rounded-xl font-bold text-lg shadow-xl transition-all duration-200 transform hover:scale-105 disabled:hover:scale-100"
+              >
+                🎮 ゲーム開始
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Waiting Screen */}
+              <div className="text-center space-y-6">
                 <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Enter Your Username
-                  </label>
-                  <input
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Your username..."
-                    onKeyPress={(e) => e.key === 'Enter' && handleJoinGame()}
-                  />
+                  <p className="text-green-400 text-lg mb-2">✓ {username} でログイン中</p>
+                  <p className="text-gray-300 text-sm">対戦相手を探しています...</p>
                 </div>
-                <button
-                  onClick={handleJoinGame}
-                  disabled={!isConnected || !username.trim()}
-                  className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed rounded-lg font-semibold transition"
-                >
-                  Join Game
-                </button>
-              </div>
-            ) : (
-              <div className="text-center">
-                <p className="text-green-400 mb-2">✓ Joined as {username}</p>
-                <p className="text-gray-400 text-sm">Waiting for opponent...</p>
-                <div className="mt-4 animate-pulse">
-                  <div className="h-2 bg-blue-600 rounded"></div>
-                </div>
-              </div>
-            )}
-          </div>
 
-          {/* Log Panel */}
-          <div className="bg-gray-800 rounded-lg p-6 shadow-xl">
-            <h2 className="text-xl font-bold mb-4 text-blue-400">📋 Event Logs</h2>
-            <div className="bg-gray-900 rounded p-4 h-96 overflow-y-auto font-mono text-sm">
-              {logs.length === 0 ? (
-                <p className="text-gray-500 italic">No events yet...</p>
-              ) : (
-                logs.map((log, index) => (
-                  <div key={index} className="text-gray-300 mb-1">
-                    {log}
-                  </div>
-                ))
-              )}
+                {/* Loading Animation */}
+                <div className="flex justify-center items-center gap-3 my-8">
+                  <div className="w-4 h-4 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+                  <div className="w-4 h-4 bg-pink-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                  <div className="w-4 h-4 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                </div>
+
+                {/* Waiting Stats */}
+                <div className="bg-gray-700 bg-opacity-50 rounded-lg p-4 space-y-2">
+                  <p className="text-gray-300 text-sm">待機中のプレイヤー数</p>
+                  <p className="text-3xl font-bold text-purple-400">
+                    🔍 検索中...
+                  </p>
+                </div>
+
+                {/* Tips */}
+                <div className="bg-blue-900 bg-opacity-30 border border-blue-500 rounded-lg p-4">
+                  <p className="text-sm text-blue-300">
+                    💡 <strong>ゲームルール:</strong>
+                  </p>
+                  <ul className="text-xs text-blue-200 mt-2 space-y-1 text-left">
+                    <li>• 「指を振る」: ランダムなスキルを使用</li>
+                    <li>• 「ゾーン展開」: MP5を消費して能力を強化（MP足りない場合は灰色）</li>
+                    <li>• HPが0になったら敗北</li>
+                  </ul>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Footer Logs */}
+        {logs.length > 0 && (
+          <div className="mt-8 bg-gray-800 bg-opacity-50 rounded-lg p-4 border border-gray-700 max-h-40 overflow-y-auto">
+            <p className="text-xs text-gray-500 mb-2 font-semibold">📋 ログ</p>
+            <div className="space-y-1">
+              {logs.slice(-5).reverse().map((log, index) => (
+                <p key={index} className="text-xs text-gray-400 font-mono">
+                  {log}
+                </p>
+              ))}
             </div>
           </div>
-        </div>
-
-        <div className="mt-8 text-center text-sm text-gray-500">
-          <p>Zone System: Random skill boosts (2-5 turns)</p>
-          <p className="mt-1">Server-managed random skills</p>
-        </div>
+        )}
       </div>
     </div>
   )

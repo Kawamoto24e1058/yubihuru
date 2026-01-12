@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { PlayerData } from '../types';
 
 interface BattleScreenProps {
   myData: PlayerData;
   opponentData: PlayerData;
   lastBattleLog: string;
+  battleLogs: string[];
   onUseSkill: () => void;
   onActivateZone: (zoneType: 'attack' | 'heal' | 'chaos') => void;
 }
@@ -13,10 +14,23 @@ export default function BattleScreen({
   myData,
   opponentData,
   lastBattleLog,
+  battleLogs,
   onUseSkill,
   onActivateZone,
 }: BattleScreenProps) {
   const [showZoneMenu, setShowZoneMenu] = useState(false);
+  const [damageAnimation, setDamageAnimation] = useState(false);
+  const [lastHp, setLastHp] = useState(myData.state.hp);
+
+  // Damage animation trigger
+  useEffect(() => {
+    if (myData.state.hp < lastHp) {
+      setDamageAnimation(true);
+      const timer = setTimeout(() => setDamageAnimation(false), 300);
+      return () => clearTimeout(timer);
+    }
+    setLastHp(myData.state.hp);
+  }, [myData.state.hp]);
 
   // Get player states
   const myState = myData.state;
@@ -59,7 +73,7 @@ export default function BattleScreen({
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 via-purple-900 to-gray-900 text-white flex flex-col">
       {/* Top Status Area - Opponent */}
-      <div className="p-4 bg-black bg-opacity-50">
+      <div className={`p-4 bg-black bg-opacity-50 transition-all duration-300 ${damageAnimation ? 'shake' : ''}`}>
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-full bg-red-500 flex items-center justify-center text-2xl font-bold">
@@ -106,7 +120,7 @@ export default function BattleScreen({
       </div>
 
       {/* Center Battle Area */}
-      <div className="flex-1 flex flex-col items-center justify-center p-4 relative">
+      <div className="flex-1 flex flex-col items-center justify-center p-4 relative overflow-hidden">
         {/* Active Zone Badge (if any zone is active) */}
         {(activeZone || opponentActiveZone) && (
           <div className="absolute top-8 left-1/2 transform -translate-x-1/2 z-10">
@@ -114,7 +128,7 @@ export default function BattleScreen({
               <div className={`px-6 py-3 rounded-lg ${getZoneColor(activeZone.type)} shadow-2xl animate-pulse`}>
                 <div className="text-center">
                   <div className="text-xl font-bold">{getZoneLabel(activeZone.type)}展開中</div>
-                  <div className="text-sm opacity-90">（残りターン不明）</div>
+                  <div className="text-sm opacity-90">（残り: {activeZone.remainingTurns}ターン）</div>
                 </div>
               </div>
             )}
@@ -122,22 +136,39 @@ export default function BattleScreen({
         )}
 
         {/* Battle Log Display */}
-        {lastBattleLog && (
-          <div className="max-w-2xl w-full">
-            <div className="bg-black bg-opacity-70 border-4 border-yellow-400 rounded-lg p-6 shadow-2xl">
-              <div className="text-center text-xl font-bold leading-relaxed">
+        <div className="max-w-3xl w-full flex flex-col gap-4">
+          {/* Latest Action */}
+          {lastBattleLog && (
+            <div className={`bg-black bg-opacity-70 border-4 border-yellow-400 rounded-lg p-6 shadow-2xl transform transition-transform duration-300 ${
+              damageAnimation ? 'scale-105 border-red-500' : ''
+            }`}>
+              <div className="text-center text-xl font-bold leading-relaxed text-yellow-300 animate-pulse">
                 {lastBattleLog}
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* VS Badge when no action */}
-        {!lastBattleLog && (
-          <div className="text-6xl font-bold text-yellow-400 opacity-50 animate-pulse">
-            VS
-          </div>
-        )}
+          {/* Battle Log History */}
+          {battleLogs.length > 0 && (
+            <div className="bg-black bg-opacity-50 rounded-lg p-4 border border-gray-600 max-h-48 overflow-y-auto">
+              <p className="text-xs text-gray-400 font-bold mb-3 uppercase">📜 バトルログ</p>
+              <div className="space-y-2">
+                {battleLogs.slice().reverse().slice(0, 8).map((log, index) => (
+                  <div key={index} className="text-xs text-gray-300 font-mono border-l-2 border-purple-500 pl-2 py-1">
+                    {log}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* VS Badge when no action */}
+          {!lastBattleLog && (
+            <div className="text-6xl font-bold text-yellow-400 opacity-30 animate-pulse">
+              ⚡ VS ⚡
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Bottom Status Area - Player (Me) */}
@@ -186,29 +217,29 @@ export default function BattleScreen({
           </div>
 
           {/* Action Buttons */}
-          <div className="mt-6 flex gap-4">
+          <div className="mt-8 flex gap-3 flex-col sm:flex-row">
             {/* Main Action Button - "指を振る" */}
             <button
               onClick={onUseSkill}
-              className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-6 px-8 rounded-xl shadow-2xl transform hover:scale-105 transition-all duration-200 text-2xl"
+              className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold py-4 px-6 rounded-xl shadow-2xl transform hover:scale-105 transition-all duration-200 text-xl active:scale-95"
             >
               ✨ 指を振る
             </button>
 
             {/* Zone Activation Button */}
-            <div className="relative">
+            <div className="relative flex-1">
               <button
                 onClick={() => setShowZoneMenu(!showZoneMenu)}
                 disabled={myState.mp < 5}
-                className={`h-full px-6 rounded-xl font-bold shadow-xl transition-all duration-200 ${
+                className={`w-full py-4 px-6 rounded-xl font-bold shadow-xl transition-all duration-200 ${
                   myState.mp >= 5
-                    ? 'bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 transform hover:scale-105'
+                    ? 'bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 transform hover:scale-105 active:scale-95'
                     : 'bg-gray-600 cursor-not-allowed opacity-50'
                 }`}
               >
                 <div className="text-center">
-                  <div className="text-sm">ゾーン展開</div>
-                  <div className="text-xs">(MP 5)</div>
+                  <div className="text-lg">🌀 ゾーン展開</div>
+                  <div className="text-xs opacity-90">(MP 5)</div>
                 </div>
               </button>
 
