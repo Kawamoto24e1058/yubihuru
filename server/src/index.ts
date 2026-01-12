@@ -39,12 +39,10 @@ function getRandomZoneDuration(): number {
 // Helper function to create a random zone
 function createRandomZone(): Zone {
   const types = Object.values(SkillType);
-  const randomType = types[Math.floor(Math.random() * types.length)];
   const boostedType = types[Math.floor(Math.random() * types.length)];
   
   return {
     id: `zone-${Date.now()}`,
-    type: randomType,
     boostedType,
     boostMultiplier: 2.0,
     duration: getRandomZoneDuration(), // RANDOM 2-5 turns
@@ -140,8 +138,60 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Process skill usage and update game state
-    // (Simplified logic - in real implementation, validate turn, calculate damage, etc.)
+    // Basic turn validation
+    const currentPlayerIndex = currentGame.players.findIndex((p) => p.id === socket.id);
+    if (currentPlayerIndex === -1) {
+      socket.emit(SocketEvent.ERROR, { message: 'Player not in game' });
+      return;
+    }
+
+    // Check if it's this player's turn (simplified: alternate between players)
+    const expectedPlayerIndex = currentGame.currentTurn % 2;
+    if (currentPlayerIndex !== expectedPlayerIndex) {
+      socket.emit(SocketEvent.ERROR, { message: 'Not your turn' });
+      return;
+    }
+
+    // Validate skill exists in player's available skills
+    const player = currentGame.players[currentPlayerIndex];
+    const skill = player.availableSkills.find((s) => s.id === payload.skillId);
+    if (!skill) {
+      socket.emit(SocketEvent.ERROR, { message: 'Invalid skill' });
+      return;
+    }
+
+    // Check MP cost
+    if (player.mp < skill.mpCost) {
+      socket.emit(SocketEvent.ERROR, { message: 'Insufficient MP' });
+      return;
+    }
+
+    // Process skill usage (simplified damage calculation)
+    const targetIndex = currentPlayerIndex === 0 ? 1 : 0;
+    const target = currentGame.players[targetIndex];
+    
+    // Deduct MP from player
+    player.mp -= skill.mpCost;
+    
+    // Apply damage to target
+    target.hp = Math.max(0, target.hp - skill.damage);
+
+    // Check for game over
+    if (target.hp <= 0) {
+      currentGame.isGameOver = true;
+      currentGame.winner = player.username;
+      
+      io.to(currentRoomId).emit(SocketEvent.GAME_OVER, {
+        winner: player.username,
+        finalGameState: currentGame,
+      });
+      
+      activeGames.delete(currentRoomId);
+      console.log(`Game over! ${player.username} wins!`);
+      return;
+    }
+
+    // Increment turn
     currentGame.currentTurn++;
 
     // Check if zone duration expired and create new zone

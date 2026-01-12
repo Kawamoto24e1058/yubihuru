@@ -28,8 +28,7 @@ export interface Skill {
  */
 export interface Zone {
   id: string;
-  type: SkillType;
-  boostedType: SkillType;
+  boostedType: SkillType; // The skill type that gets boosted in this zone
   boostMultiplier: number; // Odds multiplier for the boosted skill type
   duration: number; // Random 2-5 turns, set by server
   currentTurn: number; // Track current turn in the zone
