@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   PlayerState,
   Skill,
-} from '@yubifuru/shared/types.js';
+} from './types.js';
 import { SKILLS } from './data/skills.js';
 
 const app = express();

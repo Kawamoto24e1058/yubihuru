@@ -1,4 +1,4 @@
-import { Skill } from '../../shared/types';
+import { Skill } from '../types';
 
 /**
  * 100個の技データ
