@@ -2,16 +2,6 @@ import { useState, useEffect } from 'react'
 import { io, Socket } from 'socket.io-client'
 import './App.css'
 
-// Import shared types
-interface PlayerState {
-  id: string;
-  username: string;
-  hp: number;
-  maxHp: number;
-  mp: number;
-  maxMp: number;
-}
-
 function App() {
   const [socket, setSocket] = useState<Socket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
