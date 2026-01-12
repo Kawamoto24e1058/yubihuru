@@ -1,17 +1,5 @@
 import { useState } from 'react';
-
-interface PlayerData {
-  socketId: string;
-  username: string;
-  state: {
-    hp: number;
-    mp: number;
-    activeZone: {
-      type: 'attack' | 'heal' | 'chaos' | 'none';
-      remainingTurns: number;
-    };
-  };
-}
+import type { PlayerData } from '../types';
 
 interface BattleScreenProps {
   myData: PlayerData;

@@ -2,34 +2,7 @@ import { useState, useEffect } from 'react'
 import { io, Socket } from 'socket.io-client'
 import './App.css'
 import BattleScreen from './components/BattleScreen'
-
-interface GameStartData {
-  roomId: string;
-  player1: {
-    socketId: string;
-    username: string;
-    state: {
-      hp: number;
-      mp: number;
-      activeZone: {
-        type: string;
-        remainingTurns: number;
-      };
-    };
-  };
-  player2: {
-    socketId: string;
-    username: string;
-    state: {
-      hp: number;
-      mp: number;
-      activeZone: {
-        type: string;
-        remainingTurns: number;
-      };
-    };
-  };
-}
+import type { GameStartData } from './types'
 
 function App() {
   const [socket, setSocket] = useState<Socket | null>(null)
