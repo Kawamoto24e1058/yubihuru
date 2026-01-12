@@ -1,0 +1,13 @@
+{
+  "name": "@yubifuru/shared",
+  "version": "1.0.0",
+  "description": "Shared types and utilities for Yubifuru game",
+  "main": "types.ts",
+  "types": "types.ts",
+  "scripts": {
+    "test": "echo \"No tests yet\""
+  },
+  "keywords": ["types", "shared"],
+  "author": "",
+  "license": "MIT"
+}
