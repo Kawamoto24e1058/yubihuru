@@ -11,14 +11,25 @@ export enum SkillType {
 }
 
 /**
- * Skill interface
+ * Skill interface (legacy)
  */
-export interface Skill {
+export interface SkillLegacy {
   id: string;
   name: string;
   type: SkillType;
   damage: number;
   mpCost: number;
+  description: string;
+}
+
+/**
+ * Skill interface (new battle system)
+ */
+export interface Skill {
+  id: number;
+  name: string;
+  type: 'attack' | 'heal' | 'buff' | 'special';
+  power: number; // ダメージ量、回復量、またはバフの場合は0
   description: string;
 }
 
@@ -35,9 +46,9 @@ export interface Zone {
 }
 
 /**
- * Player State interface
+ * Player State interface (legacy)
  */
-export interface PlayerState {
+export interface PlayerStateLegacy {
   id: string;
   username: string;
   hp: number;
@@ -45,7 +56,19 @@ export interface PlayerState {
   mp: number;
   maxMp: number;
   activeZone: Zone | null;
-  availableSkills: Skill[];
+  availableSkills: SkillLegacy[];
+}
+
+/**
+ * Player State interface (new battle system)
+ */
+export interface PlayerState {
+  hp: number; // 初期値100
+  mp: number; // 初期値10
+  activeZone: {
+    type: 'attack' | 'heal' | 'chaos' | 'none';
+    remainingTurns: number;
+  };
 }
 
 /**

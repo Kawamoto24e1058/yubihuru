@@ -1,103 +1,121 @@
-# Yubifuru - 1v1 Battle Game
+# Yubifuru - 1v1 バトルゲーム
 
-A TypeScript monorepo game featuring real-time 1v1 battles with a unique Zone System and random skills.
+独自のゾーンシステムとランダムスキルを特徴とした、リアルタイム1v1バトルを楽しめるTypeScriptモノレポゲームです。
 
-## Stack
+## 技術スタック
 
-- **Client**: React + Vite + Tailwind CSS
-- **Server**: Node.js + Express + Socket.io
-- **Shared**: TypeScript types
+- **クライアント**: React + Vite + Tailwind CSS
+- **サーバー**: Node.js + Express + Socket.io
+- **共通**: TypeScript型定義
 
-## Game Features
+## ゲームの特徴
 
-### Zone System
-The game features a unique **Zone System** that dynamically boosts specific skill odds during battle:
-- Zone duration is **RANDOM (2-5 turns)** and server-managed
-- Each zone boosts specific skill types with multipliers
-- Zones change automatically after their random duration expires
+### ゾーンシステム
+このゲームは、バトル中に特定のスキル発動率を動的に上昇させる独自の**ゾーンシステム**を備えています：
+- ゾーンの持続時間は**ランダム（2〜5ターン）**で、サーバー側で管理されます
+- 各ゾーンは特定のスキルタイプを倍率で強化します
+- ゾーンはランダムな持続時間が経過すると自動的に変化します
 
-### Gameplay
-- Real-time 1v1 battles
-- Random skill distribution
-- HP and MP management
-- Turn-based combat with Socket.io
+### ゲームプレイ
+- リアルタイム1v1バトル
+- ランダムなスキル配分
+- HPとMPの管理
+- Socket.ioを使用したターン制バトル
 
-## Project Structure
+## プロジェクト構成
 
 ```
 yubifuru/
-├── client/          # React + Vite frontend
-├── server/          # Node.js + Socket.io backend
-├── shared/          # Shared TypeScript types
-└── package.json     # Root workspace configuration
+├── client/          # React + Vite フロントエンド
+├── server/          # Node.js + Socket.io バックエンド
+├── shared/          # 共通TypeScript型定義
+└── package.json     # ルートワークスペース設定
 ```
 
-## Setup Instructions
+## セットアップ手順
 
-### Prerequisites
-- Node.js 18+ installed
-- npm or yarn
+### 前提条件
+- Node.js 18以上がインストールされていること
+- npmまたはyarn
 
-### Installation
+### インストール
 
-1. Install dependencies for all workspaces:
+1. すべてのワークスペースの依存関係をインストール：
 ```bash
 npm install
 ```
 
-2. Install workspace dependencies:
+2. ワークスペースの依存関係をインストール：
 ```bash
 npm install --workspaces
 ```
 
-### Development
+### 開発
 
-Run both client and server concurrently:
+クライアントとサーバーを同時に実行：
 ```bash
 npm run dev
 ```
 
-Or run them separately:
+または個別に実行：
 
-**Server** (runs on http://localhost:3000):
+**サーバー** (http://localhost:3000 で実行):
 ```bash
 npm run dev:server
 ```
 
-**Client** (runs on http://localhost:5173):
+**クライアント** (http://localhost:5173 で実行):
 ```bash
 npm run dev:client
 ```
 
-### Build
+### ビルド
 
-Build all packages:
+すべてのパッケージをビルド：
 ```bash
 npm run build
 ```
 
-Or build individually:
+または個別にビルド：
 ```bash
 npm run build:client
 npm run build:server
 ```
 
-## Key Types
+## 主要な型定義
 
-The `shared/types.ts` file contains all shared types:
+`shared/types.ts` ファイルには、すべての共通型定義が含まれています：
 
-- **Skill**: Game skills with types (FIRE, WATER, EARTH, WIND, LIGHT, DARK)
-- **PlayerState**: Player info including hp, mp, and activeZone
-- **Zone**: Zone system with random duration (2-5 turns)
-- **GameState**: Overall game state
-- **SocketEvent**: Socket.io event types
+- **Skill**: ゲームのスキル（FIRE、WATER、EARTH、WIND、LIGHT、DARK）
+- **PlayerState**: hp、mp、activeZoneなどのプレイヤー情報
+- **Zone**: ランダムな持続時間（2〜5ターン）を持つゾーンシステム
+- **GameState**: ゲーム全体の状態
+- **SocketEvent**: Socket.ioイベントの型定義
 
-## Socket.io Events
+## Socket.ioイベント
 
-- `joinGame`: Player joins matchmaking
-- `gameStart`: Game begins with initial state
-- `useSkill`: Player uses a skill
-- `turnUpdate`: Game state updated after turn
+- `joinGame`: プレイヤーがマッチメイキングに参加
+- `gameStart`: ゲームが初期状態で開始
+- `useSkill`: プレイヤーがスキルを使用
+- `turnUpdate`: ターン後にゲーム状態が更新
+
+## 🚀 デプロイ
+
+本番環境へのデプロイ方法については、[DEPLOYMENT.md](DEPLOYMENT.md) を参照してください。
+
+### クイックデプロイ
+
+**バックエンド (Render)**:
+- Root Directory: `server`
+- Build Command: `npm install && npm run build`
+- Start Command: `npm start`
+
+**フロントエンド (Vercel)**:
+- Root Directory: `client`
+- Framework: Vite
+- Environment Variable: `VITE_API_URL` = バックエンドのURL
+
+詳細な手順は [DEPLOYMENT.md](DEPLOYMENT.md) を参照してください。
 - `zoneChange`: Zone changes with new random duration
 - `gameOver`: Game ends with winner
 
