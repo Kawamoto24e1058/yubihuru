@@ -46,6 +46,8 @@ function App() {
   const [winner, setWinner] = useState<string | null>(null)
   const [poisonFlash, setPoisonFlash] = useState(false)
   const [shieldEffect, setShieldEffect] = useState(false)
+  const [myMaxHpExpand, setMyMaxHpExpand] = useState(false)
+  const [opponentMaxHpExpand, setOpponentMaxHpExpand] = useState(false)
 
   useEffect(() => {
     const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
@@ -141,6 +143,20 @@ function App() {
         if (data.isProtected) {
           setShieldEffect(true)
           setTimeout(() => setShieldEffect(false), 600)
+        }
+
+        // 最大HP増加検知（自分）
+        const prevMaxHp = myData?.state.maxHp ?? me.state.maxHp
+        if (me.state.maxHp > prevMaxHp) {
+          setMyMaxHpExpand(true)
+          setTimeout(() => setMyMaxHpExpand(false), 500)
+        }
+
+        // 最大HP増加検知（相手）
+        const prevMaxHpOpponent = opponentData?.state.maxHp ?? opponent.state.maxHp
+        if (opponent.state.maxHp > prevMaxHpOpponent) {
+          setOpponentMaxHpExpand(true)
+          setTimeout(() => setOpponentMaxHpExpand(false), 500)
         }
 
         // 相手が被ダメージを受けても画面揺らさない（演出過多防止）
@@ -318,10 +334,14 @@ function App() {
   if (gameStarted && myData && opponentData) {
     const mySocketId = socket?.id || ''
     const isMyTurn = mySocketId === currentTurnId
-    const myHpPercent = (myData.state.hp / 200) * 100
+    const myHpPercent = (myData.state.hp / myData.state.maxHp) * 100
     const myMpPercent = (myData.state.mp / 5) * 100
-    const opponentHpPercent = (opponentData.state.hp / 200) * 100
+    const opponentHpPercent = (opponentData.state.hp / opponentData.state.maxHp) * 100
     const opponentMpPercent = (opponentData.state.mp / 5) * 100
+    
+    // HPバーの幅を最大HP（1000）に対する比率で計算
+    const myBarWidth = (myData.state.maxHp / 1000) * 100
+    const opponentBarWidth = (opponentData.state.maxHp / 1000) * 100
 
     const zoneBorderMap: Record<string, string> = {
       '強攻のゾーン': 'border-red-500',
@@ -374,9 +394,9 @@ function App() {
                   <div>
                     <div className="flex justify-between text-xs font-bold mb-1">
                       <span>HP</span>
-                      <span>{opponentData.state.hp}/200</span>
+                      <span>{opponentData.state.hp}/{opponentData.state.maxHp}</span>
                     </div>
-                    <div className="h-4 border-2 border-black bg-gray-200">
+                    <div className={`h-4 border-2 border-black bg-gray-200 transition-all duration-300 ${opponentMaxHpExpand ? 'animate-expand-bar' : ''}`} style={{ width: `${opponentBarWidth}%` }}>
                       <div 
                         className="h-full bg-lime-400 transition-all duration-300"
                         style={{ width: `${opponentHpPercent}%` }}
@@ -421,9 +441,9 @@ function App() {
                   <div>
                     <div className="flex justify-between text-xs font-bold mb-1">
                       <span>HP</span>
-                      <span>{myData.state.hp}/200</span>
+                      <span>{myData.state.hp}/{myData.state.maxHp}</span>
                     </div>
-                    <div className="h-4 border-2 border-black bg-gray-200">
+                    <div className={`h-4 border-2 border-black bg-gray-200 transition-all duration-300 ${myMaxHpExpand ? 'animate-expand-bar' : ''}`} style={{ width: `${myBarWidth}%` }}>
                       <div 
                         className={`h-full transition-all duration-300 ${healFlash ? 'animate-flash bg-white' : 'bg-lime-400'}`}
                         style={{ width: `${myHpPercent}%` }}
