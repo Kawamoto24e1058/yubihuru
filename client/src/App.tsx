@@ -39,6 +39,9 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [isShaking, setIsShaking] = useState(false)
   const [selectedZoneType, setSelectedZoneType] = useState<'強攻のゾーン' | '集中のゾーン' | '乱舞のゾーン' | '博打のゾーン'>('強攻のゾーン')
+  const [damageFlash, setDamageFlash] = useState(false)
+  const [healFlash, setHealFlash] = useState(false)
+  const [zoneBanner, setZoneBanner] = useState<string | null>(null)
 
   useEffect(() => {
     const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
@@ -73,16 +76,33 @@ function App() {
       console.log('Battle update:', data)
       setLogs(prev => [data.message, ...prev].slice(0, 10))
       
-      // Update player states
       const mySocketId = newSocket.id || ''
       if (data.gameState) {
         const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
         const opponent = data.gameState.player1.socketId === mySocketId ? data.gameState.player2 : data.gameState.player1
         
-        // Check if we took damage (shake animation)
-        if (myData && me.state.hp < myData.state.hp) {
+        const prevHp = myData?.state.hp ?? me.state.hp
+        const newHp = me.state.hp
+        const prevHpOpponent = opponentData?.state.hp ?? opponent.state.hp
+        const newHpOpponent = opponent.state.hp
+
+        // 被ダメージ判定（自分）
+        if (prevHp > newHp) {
           setIsShaking(true)
+          setDamageFlash(true)
           setTimeout(() => setIsShaking(false), 500)
+          setTimeout(() => setDamageFlash(false), 500)
+        }
+
+        // 回復判定（自分）
+        if (newHp > prevHp) {
+          setHealFlash(true)
+          setTimeout(() => setHealFlash(false), 500)
+        }
+
+        // 相手が被ダメージを受けても画面揺らさない（演出過多防止）
+        if (prevHpOpponent > newHpOpponent) {
+          // optional: could add subtle effect later
         }
         
         setMyData(me)
@@ -105,6 +125,8 @@ function App() {
 
     newSocket.on('zone_activated', (data: any) => {
       setLogs(prev => [`🌀 ${data.username} が ${data.zoneType} ゾーン発動！`, ...prev].slice(0, 10))
+      setZoneBanner(`ZONE ACTIVATED: ${data.zoneType}`)
+      setTimeout(() => setZoneBanner(null), 1000)
       
       // Update state with zone info
       const mySocketId = newSocket.id || ''
@@ -195,8 +217,30 @@ function App() {
     const opponentHpPercent = (opponentData.state.hp / 100) * 100
     const opponentMpPercent = (opponentData.state.mp / 5) * 100
 
+    const zoneBorderMap: Record<string, string> = {
+      '強攻のゾーン': 'border-red-500',
+      '集中のゾーン': 'border-emerald-500',
+      '乱舞のゾーン': 'border-orange-500',
+      '博打のゾーン': 'border-purple-500',
+      'none': 'border-black',
+    }
+    const myZoneBorder = zoneBorderMap[myData.state.activeZone.type] || 'border-black'
+
     return (
-      <div className={`min-h-screen bg-yellow-50 p-4 transition-transform ${isShaking ? 'animate-shake' : ''}`}>
+      <div className={`min-h-screen bg-yellow-50 p-4 transition-transform relative ${isShaking ? 'animate-shake' : ''}`}>
+        {/* ダメージ時の赤フラッシュ */}
+        {damageFlash && (
+          <div className="pointer-events-none absolute inset-0 bg-red-500/40 animate-flash" />
+        )}
+        {/* ゾーンバナー */}
+        {zoneBanner && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center animate-flash">
+            <div className="bg-black text-yellow-50 border-4 border-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] px-6 py-4 text-3xl md:text-4xl font-black tracking-wide">
+              {zoneBanner}
+            </div>
+          </div>
+        )}
+
         <div className="max-w-4xl mx-auto space-y-4">
           {/* 上部ステータス */}
           <div className="grid grid-cols-2 gap-4">
@@ -238,9 +282,14 @@ function App() {
             {/* 自分 */}
             <div className="space-y-2">
               <div className={`bg-white border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 transition-all ${
-                isMyTurn ? 'border-pink-500 animate-pulse' : 'border-black'
-              }`}>
-                <p className="font-black text-sm mb-2">YOU {isMyTurn && '⭐'}</p>
+                `${myZoneBorder} ${isMyTurn ? 'animate-pulse' : ''}`
+              } ${isShaking ? 'animate-shake' : ''}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-black text-sm">YOU {isMyTurn && '⭐'}</p>
+                  {healFlash && (
+                    <span className="text-green-600 font-black text-xs animate-flash">✨ HEAL</span>
+                  )}
+                </div>
                 <p className="font-black text-xl mb-3">{myData.username}</p>
                 <div className="space-y-2">
                   <div>
@@ -250,7 +299,7 @@ function App() {
                     </div>
                     <div className="h-4 border-2 border-black bg-gray-200">
                       <div 
-                        className="h-full bg-lime-400 transition-all duration-300"
+                        className={`h-full transition-all duration-300 ${healFlash ? 'animate-flash bg-white' : 'bg-lime-400'}`}
                         style={{ width: `${myHpPercent}%` }}
                       />
                     </div>
@@ -310,7 +359,7 @@ function App() {
                 disabled={mySocketId !== currentTurnId || isProcessing || myData.state.hp <= 0}
                 className={`border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-8 font-black text-2xl ${
                   mySocketId === currentTurnId && !isProcessing && myData.state.hp > 0
-                    ? 'bg-pink-500 hover:bg-pink-400 active:translate-x-1 active:translate-y-1 active:shadow-none'
+                    ? 'bg-pink-500 hover:bg-pink-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
                     : 'bg-gray-400 cursor-not-allowed'
                 }`}
               >
@@ -338,7 +387,7 @@ function App() {
                   disabled={mySocketId !== currentTurnId || isProcessing || myData.state.mp < 5 || myData.state.hp <= 0}
                   className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-4 font-black text-lg ${
                     mySocketId === currentTurnId && !isProcessing && myData.state.mp >= 5 && myData.state.hp > 0
-                      ? 'bg-purple-400 hover:bg-purple-300 active:translate-x-1 active:translate-y-1 active:shadow-none'
+                      ? 'bg-purple-400 hover:bg-purple-300 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
                       : 'bg-gray-400 cursor-not-allowed'
                   }`}
                 >
