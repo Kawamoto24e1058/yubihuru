@@ -73,38 +73,59 @@ function createPlayerState(): PlayerState {
 
 // Helper: weighted random pick according to zone rules
 function getRandomSkill(activeZone: PlayerState['activeZone']): Skill {
-  const weightedPool: Skill[] = [];
-
-  // 通常技リスト（ギガインパクトを除外）
-  const normalSkills = SKILLS.filter(skill => skill.id !== 13);
-
-  normalSkills.forEach((skill) => {
-    let weight = 1;
-
-    if (activeZone.type === '強攻のゾーン' && skill.power >= 100) {
-      weight *= 3;
-    }
-    if (activeZone.type === '集中のゾーン' && (skill.type === 'heal' || skill.type === 'buff')) {
-      weight *= 3;
-    }
-
-    for (let i = 0; i < weight; i++) {
-      weightedPool.push(skill);
-    }
-  });
-
-  // 博打のゾーン時：ギガインパクトを追加
+  // 博打のゾーン判定を最初に実行
   if (activeZone.type === '博打のゾーン') {
-    const gigaImpact = SKILLS.find(skill => skill.id === 13);
-    if (gigaImpact) {
-      // ギガインパクトを高い確率で選ばれるようにする（他の技と同程度の重み）
-      weightedPool.push(gigaImpact);
-      weightedPool.push(gigaImpact);
+    const random = Math.random();
+    const gigaImpact = SKILLS.find(skill => skill.id === 200); // ギガインパクト
+    const doNothing = SKILLS.find(skill => skill.id === 201); // 何もしない
+    
+    if (random < 0.5) {
+      // 50%の確率で超必殺技
+      console.log('🎰 博打判定：成功（ギガインパクト発動）');
+      return gigaImpact!;
+    } else {
+      // 50%の確率で何もしない
+      console.log('🎰 博打判定：失敗（運命に見放された）');
+      return doNothing!;
     }
   }
 
-  const randomIndex = Math.floor(Math.random() * weightedPool.length);
-  return weightedPool[randomIndex];
+  // 通常技リスト（ギガインパクトと何もしないを除外 - id 200, 201）
+  let availableSkills = SKILLS.filter(skill => skill.id < 200);
+
+  // ゾーン効果：条件に合う技のみに絞り込む
+  if (activeZone.type === '強攻のゾーン') {
+    // 威力50以上の技のみ
+    const powerSkills = availableSkills.filter(skill => skill.power >= 50);
+    if (powerSkills.length > 0) {
+      availableSkills = powerSkills;
+      console.log(`🔥 強攻のゾーン: 威力50以上の技のみ抽選 (${powerSkills.length}種類)`);
+    }
+  } else if (activeZone.type === '集中のゾーン') {
+    // 回復・最大HP増加・補助系のみ
+    const supportSkills = availableSkills.filter(skill => 
+      skill.type === 'heal' || 
+      skill.type === 'buff' ||
+      skill.effect === 'max_hp_boost' ||
+      skill.effect === 'max_hp_boost_with_heal' ||
+      skill.effect === 'max_hp_boost_with_damage'
+    );
+    if (supportSkills.length > 0) {
+      availableSkills = supportSkills;
+      console.log(`🎯 集中のゾーン: 回復・補助系のみ抽選 (${supportSkills.length}種類)`);
+    }
+  } else if (activeZone.type === '乱舞のゾーン') {
+    // 攻撃技のみ
+    const attackSkills = availableSkills.filter(skill => skill.type === 'attack');
+    if (attackSkills.length > 0) {
+      availableSkills = attackSkills;
+      console.log(`🌪️ 乱舞のゾーン: 攻撃技のみ抽選 (${attackSkills.length}種類)`);
+    }
+  }
+
+  // ランダムに1つ選択
+  const randomIndex = Math.floor(Math.random() * availableSkills.length);
+  return availableSkills[randomIndex];
 }
 
 
@@ -270,7 +291,13 @@ function applySkillEffect(
     }
 
     case 'special': {
-      logs.push(`${attacker.username}の${skill.name}！ ${skill.description}`);
+      // 「何もしない」技の特別処理
+      if (skill.id === 201) {
+        logs.push(`💫 ${attacker.username}は指を振った...が何も起こらなかった！`);
+        logs.push(`😱 運命に見放された...！`);
+      } else {
+        logs.push(`${attacker.username}の${skill.name}！ ${skill.description}`);
+      }
       break;
     }
   }
