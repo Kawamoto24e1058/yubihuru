@@ -41,10 +41,10 @@ export default function BattleScreen({
   const opponentActiveZone = opponentState.activeZone.type !== 'none' ? opponentState.activeZone : null;
 
   // Calculate HP/MP percentages
-  const myHpPercent = (myState.hp / 100) * 100;
-  const myMpPercent = (myState.mp / 100) * 100;
-  const opponentHpPercent = (opponentState.hp / 100) * 100;
-  const opponentMpPercent = (opponentState.mp / 100) * 100;
+  const myHpPercent = (myState.hp / myState.maxHp) * 100;
+  const myMpPercent = (myState.mp / 5) * 100;
+  const opponentHpPercent = (opponentState.hp / opponentState.maxHp) * 100;
+  const opponentMpPercent = (opponentState.mp / 5) * 100;
 
   // Zone colors and labels
   const getZoneColor = (type: string) => {
@@ -92,7 +92,7 @@ export default function BattleScreen({
               <div className="mb-2">
                 <div className="flex items-center justify-between text-xs mb-1">
                   <span>HP</span>
-                  <span>{opponentState.hp}/100</span>
+                  <span>{opponentState.hp}/{opponentState.maxHp}</span>
                 </div>
                 <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
                   <div
@@ -105,7 +105,7 @@ export default function BattleScreen({
               <div>
                 <div className="flex items-center justify-between text-xs mb-1">
                   <span>MP</span>
-                  <span>{opponentState.mp}/100</span>
+                  <span>{opponentState.mp}/5</span>
                 </div>
                 <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
                   <div
@@ -191,7 +191,7 @@ export default function BattleScreen({
               <div className="mb-2">
                 <div className="flex items-center justify-between text-xs mb-1">
                   <span>HP</span>
-                  <span>{myState.hp}/100</span>
+                  <span>{myState.hp}/{myState.maxHp}</span>
                 </div>
                 <div className="h-3 bg-gray-700 rounded-full overflow-hidden">
                   <div
@@ -204,7 +204,7 @@ export default function BattleScreen({
               <div>
                 <div className="flex items-center justify-between text-xs mb-1">
                   <span>MP</span>
-                  <span>{myState.mp}/100</span>
+                  <span>{myState.mp}/5</span>
                 </div>
                 <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
                   <div

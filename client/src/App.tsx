@@ -111,8 +111,25 @@ function App() {
         const prevHpOpponent = opponentData?.state.hp ?? opponent.state.hp
         const newHpOpponent = opponent.state.hp
 
+        // ギガインパクト発動時は特大の揺れ演出（3回連続）
+        if (data.message && data.message.includes('ギガインパクト')) {
+          setIsShaking(true)
+          setDamageFlash(true)
+          setTimeout(() => setIsShaking(false), 500)
+          setTimeout(() => {
+            setIsShaking(true)
+            setTimeout(() => setIsShaking(false), 500)
+          }, 600)
+          setTimeout(() => {
+            setIsShaking(true)
+            setTimeout(() => {
+              setIsShaking(false)
+              setDamageFlash(false)
+            }, 500)
+          }, 1200)
+        }
         // 連続攻撃時は2回の画面揺れ
-        if (data.isMultiHit) {
+        else if (data.isMultiHit) {
           setIsShaking(true)
           setTimeout(() => setIsShaking(false), 500)
           setTimeout(() => {
@@ -121,9 +138,10 @@ function App() {
           }, 600)
         }
 
-        // 被ダメージ判定（自分）
+        // 被ダメージ判定（自分）- ギガインパクトと連続攻撃を除く
         if (prevHp > newHp) {
-          if (!data.isMultiHit) {
+          const isGigaImpact = data.message && data.message.includes('ギガインパクト')
+          if (!data.isMultiHit && !isGigaImpact) {
             setIsShaking(true)
             setDamageFlash(true)
             setTimeout(() => setIsShaking(false), 500)
@@ -245,6 +263,14 @@ function App() {
 
   // ログ色決定関数
   const getLogColor = (log: string): string => {
+    // ギガインパクト（超必殺技）は特別な色
+    if (log.includes('ギガインパクト')) {
+      return 'text-red-600 font-black text-lg animate-pulse'
+    }
+    // 何もしない・運命に見放された
+    if (log.includes('何も起こらなかった') || log.includes('運命に見放された')) {
+      return 'text-gray-500 font-bold italic'
+    }
     if (log.includes('ダメージ') || log.includes('連続攻撃') || log.includes('反動') || log.includes('外れた')) {
       return 'text-red-600 font-bold'
     }
