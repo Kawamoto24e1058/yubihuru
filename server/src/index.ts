@@ -68,11 +68,12 @@ function createPlayerState(): PlayerState {
       poison: null,
       mpRegenBonus: null,
     },
+    isRiichi: false,
   };
 }
 
 // Helper: weighted random pick according to zone rules
-function getRandomSkill(activeZone: PlayerState['activeZone']): Skill {
+function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean = false): Skill {
   // 博打のゾーン判定を最初に実行
   if (activeZone.type === '博打のゾーン') {
     const random = Math.random();
@@ -92,6 +93,16 @@ function getRandomSkill(activeZone: PlayerState['activeZone']): Skill {
 
   // 通常技リスト（ギガインパクトと何もしないを除外 - id 200, 201）
   let availableSkills = SKILLS.filter(skill => skill.id < 200);
+
+  // 立直状態の場合、ロン/ツモを追加
+  if (isRiichi) {
+    const ron = SKILLS.find(skill => skill.id === 112); // ロン
+    const tsumo = SKILLS.find(skill => skill.id === 113); // ツモ
+    if (ron && tsumo) {
+      availableSkills = [...availableSkills, ron, tsumo];
+      console.log('🀄 立直状態：ロン/ツモが出現可能！');
+    }
+  }
 
   // ゾーン効果：条件に合う技のみに絞り込む
   if (activeZone.type === '強攻のゾーン') {
@@ -183,7 +194,14 @@ function applySkillEffect(
       let baseDamage = calculateDamage(skill.power);
       damage = applyDefense(baseDamage);
       defender.state.hp = Math.max(0, defender.state.hp - damage);
-      logs.push(`${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ与えた！`);
+      
+      // ネタ技の特別ログ
+      if (skill.id === 115) {
+        logs.push(`🥚 ${attacker.username}の${skill.name}！`);
+        logs.push(`🤖 全自動で卵を割る機械で攻撃... ${defender.username}に${damage}ダメージ！`);
+      } else {
+        logs.push(`${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ与えた！`);
+      }
 
       // ひっかく：10%で2回連続攻撃
       if (skill.effect === 'multi_hit' && skill.multiHitChance) {
@@ -249,7 +267,12 @@ function applySkillEffect(
     }
 
     case 'buff': {
-      if (skill.effect === 'mp_regen_boost') {
+      if (skill.effect === 'riichi') {
+        // 立直：isRiichiをtrueにする
+        attacker.state.isRiichi = true;
+        logs.push(`${attacker.username}の${skill.name}！`);
+        logs.push(`🀄 立直！ 一撃必殺の準備が整った...！`);
+      } else if (skill.effect === 'mp_regen_boost') {
         const amount = skill.mpRegenBonus ?? 1;
         const duration = skill.mpRegenDuration ?? 3;
         attacker.state.status.mpRegenBonus = { amount, turns: duration };
@@ -284,6 +307,14 @@ function applySkillEffect(
         attacker.state.hp = Math.min(attacker.state.maxHp, attacker.state.hp + healAmount);
         healing += healAmount;
         logs.push(`💪 ${attacker.username}の最大HPが${actualBoost}増加！ HPを${healAmount}回復！`);
+      } else if (skill.id === 116) {
+        // 強制土下座（ネタ技）
+        logs.push(`${attacker.username}の${skill.name}！`);
+        logs.push(`🙇‍♂️ 相手に土下座させようとしたが失敗した...`);
+      } else if (skill.id === 118) {
+        // 遺憾の意（ネタ技）
+        logs.push(`${attacker.username}の${skill.name}！`);
+        logs.push(`😐 遺憾の意を表明したが戦況は変わらない...`);
       } else {
         logs.push(`${attacker.username}の${skill.name}！ ${skill.description}`);
       }
@@ -291,11 +322,33 @@ function applySkillEffect(
     }
 
     case 'special': {
+      // 立直攻撃（ロン/ツモ）の処理
+      if (skill.effect === 'riichi_attack') {
+        damage = skill.power;
+        defender.state.hp = Math.max(0, defender.state.hp - damage);
+        logs.push(`🀄💥 ${attacker.username}の${skill.name}！！！`);
+        logs.push(`⚡ 立直からの一撃必殺！ ${defender.username}に${damage}ダメージ！！`);
+        // 立直状態を解除
+        attacker.state.isRiichi = false;
+        logs.push(`🀄 立直状態が解除された`);
+      }
       // 「何もしない」技の特別処理
-      if (skill.id === 201) {
+      else if (skill.id === 201) {
         logs.push(`💫 ${attacker.username}は指を振った...が何も起こらなかった！`);
         logs.push(`😱 運命に見放された...！`);
-      } else {
+      }
+      // ネタ技の処理
+      else if (skill.id === 114) {
+        logs.push(`🙇 ${attacker.username}は謝罪を見送った...`);
+        logs.push(`😐 特に何も起こらなかった`);
+      }
+      else if (skill.id === 117) {
+        logs.push(`⚡💨 ${attacker.username}は光の速さで謝罪した！`);
+        logs.push(`😅 しかし効果はほぼない... ${defender.username}に1ダメージ`);
+        damage = 1;
+        defender.state.hp = Math.max(0, defender.state.hp - damage);
+      }
+      else {
         logs.push(`${attacker.username}の${skill.name}！ ${skill.description}`);
       }
       break;
@@ -564,10 +617,13 @@ io.on('connection', (socket) => {
       }
     }
 
-    // Get random skill from SKILLS array with zone effects
-    const selectedSkill = getRandomSkill(attacker.state.activeZone);
+    // Get random skill from SKILLS array with zone effects and riichi state
+    const selectedSkill = getRandomSkill(attacker.state.activeZone, attacker.state.isRiichi);
     console.log(`🎲 Random skill selected: ${selectedSkill.name} (${selectedSkill.type})`);
     console.log(`   Current zone: ${attacker.state.activeZone.type} (${attacker.state.activeZone.remainingTurns} turns remaining)`);
+    if (attacker.state.isRiichi) {
+      console.log(`   🀄 立直状態: ${attacker.username}`);
+    }
 
     // ゾーン効果によるログメッセージ生成
     let zoneEffectMessage = '';

@@ -141,6 +141,22 @@ export const SKILLS: Skill[] = [
   { id: 110, name: 'てっぺき', type: 'buff', power: 0, description: '次の攻撃85%カット', effect: 'protect', protectRatio: 0.85 },
 
   // ============================================
+  // コンボ技：立直システム
+  // ============================================
+  { id: 111, name: '立直（リーチ）', type: 'buff', power: 0, description: '一撃必殺の準備！', effect: 'riichi' },
+  { id: 112, name: 'ロン', type: 'special', power: 300, description: '立直からの一撃必殺！相手の攻撃を逆手に取る', effect: 'riichi_attack' },
+  { id: 113, name: 'ツモ', type: 'special', power: 300, description: '立直からの一撃必殺！完璧な引きで決める', effect: 'riichi_attack' },
+
+  // ============================================
+  // ネタ技
+  // ============================================
+  { id: 114, name: '謝罪見送り', type: 'special', power: 0, description: '謝罪を見送ったが何も起こらなかった', effect: 'none' },
+  { id: 115, name: '全自動卵割り機', type: 'attack', power: 5, description: '卵を割る機械で攻撃...弱い', effect: 'none' },
+  { id: 116, name: '強制土下座', type: 'buff', power: 0, description: '相手に土下座させようとしたが失敗', effect: 'none' },
+  { id: 117, name: '超高速謝罪', type: 'special', power: 1, description: '光の速さで謝罪したが効果はほぼない', effect: 'none' },
+  { id: 118, name: '遺憾の意', type: 'buff', power: 0, description: '遺憾の意を表明したが戦況は変わらない', effect: 'none' },
+
+  // ============================================
   // 博打のゾーン限定技（通常リストには含めない）
   // ============================================
   { id: 200, name: 'ギガインパクト(超必殺)', type: 'special', power: 200, description: '威力200の超必殺技', effect: 'hit_rate', hitRate: 0.5 },

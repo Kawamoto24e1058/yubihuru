@@ -31,7 +31,7 @@ export interface Skill {
   type: 'attack' | 'heal' | 'buff' | 'special';
   power: number; // ダメージ量、回復量、またはバフの場合は0
   description: string;
-  effect?: 'none' | 'recoil' | 'lifesteal' | 'mp_regen_boost' | 'poison' | 'multi_hit' | 'self_damage' | 'drain' | 'charge' | 'protect' | 'hit_rate' | 'max_hp_boost' | 'max_hp_boost_with_heal' | 'max_hp_boost_with_damage';
+  effect?: 'none' | 'recoil' | 'lifesteal' | 'mp_regen_boost' | 'poison' | 'multi_hit' | 'self_damage' | 'drain' | 'charge' | 'protect' | 'hit_rate' | 'max_hp_boost' | 'max_hp_boost_with_heal' | 'max_hp_boost_with_damage' | 'riichi' | 'riichi_attack';
   recoilRatio?: number; // 自傷割合（例: 0.25なら25%）
   lifestealRatio?: number; // 与ダメージに対する回復割合
   mpRegenBonus?: number; // 追加MP回復量
@@ -94,6 +94,7 @@ export interface PlayerState {
       amount: number;
     } | null;
   };
+  isRiichi: boolean; // 立直状態（一撃必殺準備完了）
 }
 
 /**
