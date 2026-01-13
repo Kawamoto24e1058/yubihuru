@@ -63,7 +63,8 @@ export interface PlayerStateLegacy {
  * Player State interface (new battle system)
  */
 export interface PlayerState {
-  hp: number; // 初期値100
+  hp: number; // 初期値500
+  maxHp: number; // 初期値500、上限1000
   mp: number; // 初期値10
   activeZone: {
     type: 'attack' | 'heal' | 'chaos' | 'none';

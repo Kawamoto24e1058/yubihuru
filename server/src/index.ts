@@ -586,6 +586,18 @@ io.on('connection', (socket) => {
       messageParts.push(zoneEffectMessage);
     }
     messageParts.push(result.message);
+
+    // 強攻のゾーン：20%の確率で自傷ダメージ
+    if (attacker.state.activeZone.type === '強攻のゾーン') {
+      const selfDamageChance = Math.random();
+      if (selfDamageChance < 0.2) {
+        const selfDamage = Math.floor(result.damage * 0.2) || 10; // 与えたダメージの20%、または最低10
+        attacker.state.hp = Math.max(0, attacker.state.hp - selfDamage);
+        messageParts.push(`💢 強攻の反動！ ${attacker.username}は${selfDamage}ダメージを受けた！`);
+        console.log(`💢 強攻の反動: ${attacker.username} -${selfDamage} HP`);
+      }
+    }
+
     result.message = messageParts.join('\n');
 
     // Debug: log HP state right after damage/heal is applied
