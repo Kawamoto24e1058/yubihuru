@@ -29,6 +29,35 @@ export const SKILLS: Skill[] = [
     effect: 'none',
   },
 
+  // 新しい攻撃技
+  {
+    id: 8,
+    name: 'ひっかく(低威力/連続)',
+    type: 'attack',
+    power: 12,
+    description: '素早い引っかき。10%で2回連続攻撃',
+    effect: 'multi_hit',
+    multiHitChance: 0.1,
+  },
+  {
+    id: 9,
+    name: '捨て身タックル(高威力/自傷)',
+    type: 'attack',
+    power: 45,
+    description: '高威力だが、与えたダメージの25%を自分も受ける',
+    effect: 'self_damage',
+    selfDamageRatio: 0.25,
+  },
+  {
+    id: 10,
+    name: 'ドレイン(中威力/吸収)',
+    type: 'attack',
+    power: 22,
+    description: '与えたダメージの50%を回復',
+    effect: 'drain',
+    drainRatio: 0.5,
+  },
+
   // 回復技
   {
     id: 4,
@@ -66,7 +95,65 @@ export const SKILLS: Skill[] = [
     power: 0,
     description: '相手に継続的な毒ダメージを与える',
     effect: 'poison',
-    poisonDamage: 10,
+    poisonDamage: 5,
     poisonDuration: 3,
+  },
+  {
+    id: 11,
+    name: 'チャージ(次のターン攻撃力2倍)',
+    type: 'buff',
+    power: 0,
+    description: 'ターンを消費して、次のターンの攻撃力を2倍にする',
+    effect: 'charge',
+    chargeBonus: 2,
+  },
+  {
+    id: 12,
+    name: 'まもる(次の攻撃を80%カット)',
+    type: 'buff',
+    power: 0,
+    description: '次の相手の攻撃を80%軽減する',
+    effect: 'protect',
+    protectRatio: 0.8,
+  },
+
+  // 最大HP増加系
+  {
+    id: 14,
+    name: 'ビルドアップ(最大HP+50/回復50)',
+    type: 'buff',
+    power: 50,
+    description: '自分の最大HPを+50し、HPを50回復',
+    effect: 'max_hp_boost_with_heal',
+    maxHpBoost: 50,
+  },
+  {
+    id: 15,
+    name: 'ギガドレイン(攻撃30+最大HP+30)',
+    type: 'attack',
+    power: 30,
+    description: '相手に30ダメージを与え、自分の最大HPを+30し、HPも30回復',
+    effect: 'max_hp_boost_with_damage',
+    maxHpBoost: 30,
+  },
+  {
+    id: 16,
+    name: '命の源(最大HP+100)',
+    type: 'buff',
+    power: 0,
+    description: '自分の最大HPを+100する（回復はしない）',
+    effect: 'max_hp_boost',
+    maxHpBoost: 100,
+  },
+
+  // 博打のゾーン限定技（通常リストには含めない）
+  {
+    id: 13,
+    name: 'ギガインパクト(超必殺)',
+    type: 'special',
+    power: 200,
+    description: '威力200の超必殺技。命中率50%',
+    effect: 'hit_rate',
+    hitRate: 0.5,
   },
 ];

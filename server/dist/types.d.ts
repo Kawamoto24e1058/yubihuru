@@ -29,6 +29,20 @@ export interface Skill {
     type: 'attack' | 'heal' | 'buff' | 'special';
     power: number;
     description: string;
+    effect?: 'none' | 'recoil' | 'lifesteal' | 'mp_regen_boost' | 'poison' | 'multi_hit' | 'self_damage' | 'drain' | 'charge' | 'protect' | 'hit_rate' | 'max_hp_boost' | 'max_hp_boost_with_heal' | 'max_hp_boost_with_damage';
+    recoilRatio?: number;
+    lifestealRatio?: number;
+    mpRegenBonus?: number;
+    mpRegenDuration?: number;
+    poisonDamage?: number;
+    poisonDuration?: number;
+    hitRate?: number;
+    multiHitChance?: number;
+    selfDamageRatio?: number;
+    drainRatio?: number;
+    chargeBonus?: number;
+    protectRatio?: number;
+    maxHpBoost?: number;
 }
 /**
  * Zone System - boosts specific skill odds
@@ -59,10 +73,21 @@ export interface PlayerStateLegacy {
  */
 export interface PlayerState {
     hp: number;
+    maxHp: number;
     mp: number;
     activeZone: {
         type: '強攻のゾーン' | '集中のゾーン' | '乱舞のゾーン' | '博打のゾーン' | 'none';
         remainingTurns: number;
+    };
+    status: {
+        poison: {
+            turns: number;
+            damagePerTurn: number;
+        } | null;
+        mpRegenBonus: {
+            turns: number;
+            amount: number;
+        } | null;
     };
 }
 /**

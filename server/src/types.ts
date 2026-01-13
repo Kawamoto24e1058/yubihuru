@@ -31,13 +31,20 @@ export interface Skill {
   type: 'attack' | 'heal' | 'buff' | 'special';
   power: number; // ダメージ量、回復量、またはバフの場合は0
   description: string;
-  effect?: 'none' | 'recoil' | 'lifesteal' | 'mp_regen_boost' | 'poison';
+  effect?: 'none' | 'recoil' | 'lifesteal' | 'mp_regen_boost' | 'poison' | 'multi_hit' | 'self_damage' | 'drain' | 'charge' | 'protect' | 'hit_rate' | 'max_hp_boost' | 'max_hp_boost_with_heal' | 'max_hp_boost_with_damage';
   recoilRatio?: number; // 自傷割合（例: 0.25なら25%）
   lifestealRatio?: number; // 与ダメージに対する回復割合
   mpRegenBonus?: number; // 追加MP回復量
   mpRegenDuration?: number; // 追加MP回復の継続ターン
   poisonDamage?: number; // どくダメージ/ターン
   poisonDuration?: number; // どくの継続ターン
+  hitRate?: number; // 命中率（0-1, 例: 0.5なら50%）
+  multiHitChance?: number; // 追加攻撃確率（ひっかく用）
+  selfDamageRatio?: number; // 自分が受けるダメージ割合（捨て身タックル用）
+  drainRatio?: number; // ドレイン回復割合
+  chargeBonus?: number; // チャージ倍率
+  protectRatio?: number; // カット率
+  maxHpBoost?: number; // 最大HP増加量
 }
 
 /**
@@ -70,7 +77,8 @@ export interface PlayerStateLegacy {
  * Player State interface (new battle system)
  */
 export interface PlayerState {
-  hp: number; // 初期値100
+  hp: number; // 初期値500
+  maxHp: number; // 初期値500、上限1000
   mp: number; // 初期値0、上限5
   activeZone: {
     type: '強攻のゾーン' | '集中のゾーン' | '乱舞のゾーン' | '博打のゾーン' | 'none';

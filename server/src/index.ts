@@ -57,7 +57,8 @@ const activeGames = new Map<string, GameState>();
 // Helper function to create initial player state
 function createPlayerState(): PlayerState {
   return {
-    hp: 100,
+    hp: 500, // 初期HP 500
+    maxHp: 500, // 初期最大HP 500
     mp: 0, // 初期MP 0、上限5
     activeZone: {
       type: 'none',
@@ -74,7 +75,10 @@ function createPlayerState(): PlayerState {
 function getRandomSkill(activeZone: PlayerState['activeZone']): Skill {
   const weightedPool: Skill[] = [];
 
-  SKILLS.forEach((skill) => {
+  // 通常技リスト（ギガインパクトを除外）
+  const normalSkills = SKILLS.filter(skill => skill.id !== 13);
+
+  normalSkills.forEach((skill) => {
     let weight = 1;
 
     if (activeZone.type === '強攻のゾーン' && skill.power >= 100) {
@@ -89,6 +93,16 @@ function getRandomSkill(activeZone: PlayerState['activeZone']): Skill {
     }
   });
 
+  // 博打のゾーン時：ギガインパクトを追加
+  if (activeZone.type === '博打のゾーン') {
+    const gigaImpact = SKILLS.find(skill => skill.id === 13);
+    if (gigaImpact) {
+      // ギガインパクトを高い確率で選ばれるようにする（他の技と同程度の重み）
+      weightedPool.push(gigaImpact);
+      weightedPool.push(gigaImpact);
+    }
+  }
+
   const randomIndex = Math.floor(Math.random() * weightedPool.length);
   return weightedPool[randomIndex];
 }
@@ -99,10 +113,31 @@ function applySkillEffect(
   skill: Skill,
   attacker: GameState['player1'],
   defender: GameState['player2']
-): { damage: number; healing: number; message: string } {
+): { 
+  damage: number; 
+  healing: number; 
+  message: string;
+  isPoisonApplied?: boolean;
+  isMultiHit?: boolean;
+  isProtected?: boolean;
+  skillType?: string;
+} {
+  let isPoisonApplied = false;
+  let isMultiHit = false;
+  let isProtected = false;
   let damage = 0;
   let healing = 0;
   const logs: string[] = [];
+
+  // ダメージ乱数（0.9倍～1.1倍）
+  const damageVariance = () => {
+    return 0.9 + Math.random() * 0.2; // 0.9 <= x <= 1.1
+  };
+
+  // ダメージ計算（基本値に乱数を適用）
+  const calculateDamage = (base: number): number => {
+    return Math.floor(base * damageVariance());
+  };
 
   // ダメージ軽減（集中のゾーン）を計算する補助
   const applyDefense = (base: number) => {
@@ -114,21 +149,71 @@ function applySkillEffect(
 
   switch (skill.type) {
     case 'attack': {
-      damage = applyDefense(skill.power);
+      // 命中率チェック（ギガインパクト用）
+      if (skill.effect === 'hit_rate' && skill.hitRate) {
+        const hit = Math.random();
+        if (hit > skill.hitRate) {
+          logs.push(`${attacker.username}の${skill.name}！ しかし、外れた！`);
+          return { damage: 0, healing: 0, message: logs.join('\n'), skillType: 'attack' };
+        }
+      }
+
+      // 基本ダメージ計算
+      let baseDamage = calculateDamage(skill.power);
+      damage = applyDefense(baseDamage);
       defender.state.hp = Math.max(0, defender.state.hp - damage);
       logs.push(`${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ与えた！`);
 
-      if (skill.effect === 'lifesteal') {
-        const ratio = skill.lifestealRatio ?? 0.5;
-        const healAmount = Math.floor(damage * ratio);
-        attacker.state.hp = Math.min(100, attacker.state.hp + healAmount);
+      // ひっかく：10%で2回連続攻撃
+      if (skill.effect === 'multi_hit' && skill.multiHitChance) {
+        if (Math.random() < skill.multiHitChance) {
+          const secondDamage = applyDefense(calculateDamage(skill.power));
+          defender.state.hp = Math.max(0, defender.state.hp - secondDamage);
+          damage += secondDamage;
+          logs.push(`🔄 2回連続攻撃！ さらに${secondDamage}ダメージ！`);
+          isMultiHit = true;
+        }
+      }
+
+      // 捨て身タックル：自分も25%ダメージ受ける
+      if (skill.effect === 'self_damage' && skill.selfDamageRatio) {
+        const selfDamageAmount = Math.floor(baseDamage * skill.selfDamageRatio);
+        attacker.state.hp = Math.max(0, attacker.state.hp - selfDamageAmount);
+        logs.push(`⚠️ 反動で${selfDamageAmount}ダメージ！`);
+      }
+
+      // ドレイン：与ダメージの50%を回復
+      if (skill.effect === 'drain' && skill.drainRatio) {
+        const healAmount = Math.floor(damage * skill.drainRatio);
+        attacker.state.hp = Math.min(attacker.state.maxHp, attacker.state.hp + healAmount);
         healing += healAmount;
         logs.push(`🩸 ドレイン効果で${healAmount}回復！`);
       }
 
+      // ギガドレイン：与ダメージ + 最大HP増加 + 回復
+      if (skill.effect === 'max_hp_boost_with_damage' && skill.maxHpBoost) {
+        const boost = skill.maxHpBoost;
+        const oldMaxHp = attacker.state.maxHp;
+        attacker.state.maxHp = Math.min(1000, attacker.state.maxHp + boost);
+        const actualBoost = attacker.state.maxHp - oldMaxHp;
+        attacker.state.hp = Math.min(attacker.state.maxHp, attacker.state.hp + actualBoost);
+        healing += actualBoost;
+        logs.push(`💪 最大HPが${actualBoost}増加！ HPも${actualBoost}回復！`);
+      }
+
+      // ドレインパンチ（既存lifesteal）
+      if (skill.effect === 'lifesteal') {
+        const ratio = skill.lifestealRatio ?? 0.5;
+        const healAmount = Math.floor(damage * ratio);
+        attacker.state.hp = Math.min(attacker.state.maxHp, attacker.state.hp + healAmount);
+        healing += healAmount;
+        logs.push(`🩸 ドレイン効果で${healAmount}回復！`);
+      }
+
+      // 反動ダメージ
       if (skill.effect === 'recoil') {
         const ratio = skill.recoilRatio ?? 0.25;
-        const recoil = Math.floor(skill.power * ratio);
+        const recoil = Math.floor(baseDamage * ratio);
         attacker.state.hp = Math.max(0, attacker.state.hp - recoil);
         logs.push(`⚠️ 反動で${recoil}ダメージ！`);
       }
@@ -137,7 +222,7 @@ function applySkillEffect(
 
     case 'heal': {
       healing = skill.power;
-      attacker.state.hp = Math.min(100, attacker.state.hp + healing);
+      attacker.state.hp = Math.min(attacker.state.maxHp, attacker.state.hp + healing);
       logs.push(`${attacker.username}の${skill.name}！ HPを${healing}回復！`);
       break;
     }
@@ -149,10 +234,35 @@ function applySkillEffect(
         attacker.state.status.mpRegenBonus = { amount, turns: duration };
         logs.push(`${attacker.username}の${skill.name}！ しばらくMP回復量が+${amount}に！`);
       } else if (skill.effect === 'poison') {
-        const dmg = skill.poisonDamage ?? 10;
+        const dmg = skill.poisonDamage ?? 5;
         const duration = skill.poisonDuration ?? 3;
         defender.state.status.poison = { damagePerTurn: dmg, turns: duration };
         logs.push(`${attacker.username}の${skill.name}！ ${defender.username}をどく状態にした（${duration}ターン、毎ターン${dmg}ダメージ）！`);
+        isPoisonApplied = true;
+      } else if (skill.effect === 'charge') {
+        // チャージ：次のターンの攻撃力2倍（実装はゲームロジックで行う）
+        logs.push(`${attacker.username}の${skill.name}！ 次のターン攻撃力が2倍になる！`);
+      } else if (skill.effect === 'protect') {
+        // まもる：次の相手の攻撃を80%カット（実装はゲームロジックで行う）
+        logs.push(`${attacker.username}の${skill.name}！ 次の相手の攻撃を大きく軽減する！`);
+        isProtected = true;
+      } else if (skill.effect === 'max_hp_boost' && skill.maxHpBoost) {
+        // 命の源：最大HPのみ増加
+        const boost = skill.maxHpBoost;
+        const oldMaxHp = attacker.state.maxHp;
+        attacker.state.maxHp = Math.min(1000, attacker.state.maxHp + boost);
+        const actualBoost = attacker.state.maxHp - oldMaxHp;
+        logs.push(`💪 ${attacker.username}の最大HPが${actualBoost}増加！ (現在: ${attacker.state.maxHp}/1000)`);
+      } else if (skill.effect === 'max_hp_boost_with_heal' && skill.maxHpBoost) {
+        // ビルドアップ：最大HP増加 + 回復
+        const boost = skill.maxHpBoost;
+        const oldMaxHp = attacker.state.maxHp;
+        attacker.state.maxHp = Math.min(1000, attacker.state.maxHp + boost);
+        const actualBoost = attacker.state.maxHp - oldMaxHp;
+        const healAmount = skill.power;
+        attacker.state.hp = Math.min(attacker.state.maxHp, attacker.state.hp + healAmount);
+        healing += healAmount;
+        logs.push(`💪 ${attacker.username}の最大HPが${actualBoost}増加！ HPを${healAmount}回復！`);
       } else {
         logs.push(`${attacker.username}の${skill.name}！ ${skill.description}`);
       }
@@ -165,7 +275,15 @@ function applySkillEffect(
     }
   }
 
-  return { damage, healing, message: logs.join('\n') };
+  return { 
+    damage, 
+    healing, 
+    message: logs.join('\n'),
+    isPoisonApplied,
+    isMultiHit,
+    isProtected,
+    skillType: skill.type,
+  };
 }
 
 io.on('connection', (socket) => {
@@ -388,6 +506,13 @@ io.on('connection', (socket) => {
     const attacker = isPlayer1 ? currentGame.player1 : currentGame.player2;
     const defender = isPlayer1 ? currentGame.player2 : currentGame.player1;
 
+    // Safety: ensure opponent exists before proceeding
+    if (!defender || !defender.state) {
+      console.warn(`⚠️ Defender missing for socket ${socket.id}`);
+      socket.emit('error', { message: 'Opponent not found' });
+      return;
+    }
+
     // ターン開始時の状態異常処理（毒など）
     const preMessages: string[] = [];
     if (attacker.state.status.poison) {
@@ -436,6 +561,9 @@ io.on('connection', (socket) => {
     messageParts.push(result.message);
     result.message = messageParts.join('\n');
 
+    // Debug: log HP state right after damage/heal is applied
+    console.log(`🧪 HP after action -> ${attacker.username}: ${attacker.state.hp}, ${defender.username}: ${defender.state.hp}`);
+
     // MP回復計算（乱舞ゾーン中は0、瞑想バフで加算）
     let regenAmount = attacker.state.activeZone.type === '乱舞のゾーン' ? 0 : 1;
     if (attacker.state.status.mpRegenBonus) {
@@ -468,8 +596,8 @@ io.on('connection', (socket) => {
       }
     }
 
-    // Check for game over
-    if (defender.state.hp <= 0) {
+    // Check for game over (only while battle is active and after HP updates)
+    if (!currentGame.isGameOver && defender.state.hp <= 0) {
       currentGame.isGameOver = true;
       currentGame.winner = attacker.username;
 
@@ -486,7 +614,7 @@ io.on('connection', (socket) => {
     }
 
     // Check if attacker also died (from special moves like 自爆)
-    if (attacker.state.hp <= 0) {
+    if (!currentGame.isGameOver && attacker.state.hp <= 0) {
       currentGame.isGameOver = true;
       currentGame.winner = defender.username;
 
