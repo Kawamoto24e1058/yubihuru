@@ -12,6 +12,8 @@ function App() {
   const [opponentData, setOpponentData] = useState<PlayerData | null>(null)
   const [logs, setLogs] = useState<string[]>([])
   const [isMyTurn, setIsMyTurn] = useState(true)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [isShaking, setIsShaking] = useState(false)
 
   useEffect(() => {
     const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
@@ -48,12 +50,22 @@ function App() {
       if (data.gameState) {
         const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
         const opponent = data.gameState.player1.socketId === mySocketId ? data.gameState.player2 : data.gameState.player1
+        
+        // Check if we took damage (shake animation)
+        if (myData && me.state.hp < myData.state.hp) {
+          setIsShaking(true)
+          setTimeout(() => setIsShaking(false), 500)
+        }
+        
         setMyData(me)
         setOpponentData(opponent)
       }
       
-      // Turn management: enable turn after opponent's action
-      setIsMyTurn(true)
+      // Turn management: wait 2 seconds before enabling next action
+      setTimeout(() => {
+        setIsProcessing(false)
+        setIsMyTurn(true)
+      }, 2000)
     })
 
     newSocket.on('turn_update', (data: any) => {
@@ -92,16 +104,18 @@ function App() {
   }
 
   const handleUseSkill = () => {
-    if (socket && gameStarted && isMyTurn) {
+    if (socket && gameStarted && isMyTurn && !isProcessing) {
       socket.emit('action_use_skill')
-      setIsMyTurn(false) // Prevent double-click
+      setIsMyTurn(false)
+      setIsProcessing(true)
     }
   }
 
   const handleActivateZone = () => {
-    if (socket && gameStarted && myData && myData.state.mp >= 5 && isMyTurn) {
+    if (socket && gameStarted && myData && myData.state.mp >= 5 && isMyTurn && !isProcessing) {
       socket.emit('action_activate_zone', { zoneType: 'attack' })
-      setIsMyTurn(false) // Prevent double-click
+      setIsMyTurn(false)
+      setIsProcessing(true)
     }
   }
 
@@ -129,7 +143,7 @@ function App() {
     const opponentMpPercent = (opponentData.state.mp / 100) * 100
 
     return (
-      <div className="min-h-screen bg-yellow-50 p-4">
+      <div className={`min-h-screen bg-yellow-50 p-4 transition-transform ${isShaking ? 'animate-shake' : ''}`}>
         <div className="max-w-4xl mx-auto space-y-4">
           {/* 上部ステータス */}
           <div className="grid grid-cols-2 gap-4">
@@ -219,9 +233,14 @@ function App() {
           {/* 下部アクション */}
           <div className="space-y-4">
             {/* ターン表示 */}
-            {!isMyTurn && (
+            {!isMyTurn && !isProcessing && (
               <div className="bg-orange-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 text-center">
                 <p className="font-black text-xl animate-pulse">⏳ 相手のターンです...</p>
+              </div>
+            )}
+            {isProcessing && (
+              <div className="bg-blue-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 text-center">
+                <p className="font-black text-xl animate-pulse">⚡ 演出中...</p>
               </div>
             )}
 
@@ -229,28 +248,28 @@ function App() {
               {/* 指を振るボタン */}
               <button
                 onClick={handleUseSkill}
-                disabled={!isMyTurn}
+                disabled={!isMyTurn || isProcessing || myData.state.hp <= 0}
                 className={`border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-8 font-black text-2xl ${
-                  isMyTurn
+                  isMyTurn && !isProcessing && myData.state.hp > 0
                     ? 'bg-pink-500 hover:bg-pink-400 active:translate-x-1 active:translate-y-1 active:shadow-none'
                     : 'bg-gray-400 cursor-not-allowed'
                 }`}
               >
-                ✨ 指を振る
+                {isProcessing ? '⏳ WAITING...' : '✨ 指を振る'}
               </button>
 
               {/* ゾーン展開ボタン */}
               <button
                 onClick={handleActivateZone}
-                disabled={!isMyTurn || myData.state.mp < 5}
+                disabled={!isMyTurn || isProcessing || myData.state.mp < 5 || myData.state.hp <= 0}
                 className={`border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-8 font-black text-2xl ${
-                  isMyTurn && myData.state.mp >= 5
+                  isMyTurn && !isProcessing && myData.state.mp >= 5 && myData.state.hp > 0
                     ? 'bg-purple-400 hover:bg-purple-300 active:translate-x-1 active:translate-y-1 active:shadow-none'
                     : 'bg-gray-400 cursor-not-allowed'
                 }`}
               >
-                🌀 ゾーン展開
-                <span className="block text-sm">(MP 5)</span>
+                {isProcessing ? '⏳ WAITING...' : '🌀 ゾーン展開'}
+                {!isProcessing && <span className="block text-sm">(MP 5)</span>}
               </button>
             </div>
           </div>
