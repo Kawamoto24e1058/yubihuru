@@ -58,7 +58,7 @@ const activeGames = new Map<string, GameState>();
 function createPlayerState(): PlayerState {
   return {
     hp: 100,
-    mp: 10,
+    mp: 0, // 初期MP 0、上限5
     activeZone: {
       type: 'none',
       remainingTurns: 0,
@@ -66,38 +66,57 @@ function createPlayerState(): PlayerState {
   };
 }
 
-// Helper function to get random skill from SKILLS array with zone boost
+// Helper function to get random skill from SKILLS array with zone effects
 function getRandomSkill(activeZone: PlayerState['activeZone']): Skill {
-  // ゾーンによる排出率変更
-  if (activeZone.type === 'attack') {
-    // 攻撃技の排出率を3倍にする
+  const zoneType = activeZone.type;
+  
+  if (zoneType === '強攻のゾーン') {
+    // 高威力技（power >= 30）の排出率を大幅アップ
+    const powerfulSkills = SKILLS.filter(s => s.type === 'attack' && s.power >= 30);
+    const otherSkills = SKILLS.filter(s => !(s.type === 'attack' && s.power >= 30));
+    // 高威力技を5倍に
+    const weightedSkills = [
+      ...powerfulSkills, ...powerfulSkills, ...powerfulSkills, 
+      ...powerfulSkills, ...powerfulSkills, 
+      ...otherSkills
+    ];
+    return weightedSkills[Math.floor(Math.random() * weightedSkills.length)];
+  } else if (zoneType === '集中のゾーン') {
+    // 回復・補助技の排出率がアップ
+    const supportSkills = SKILLS.filter(s => s.type === 'heal' || s.type === 'buff');
+    const otherSkills = SKILLS.filter(s => s.type !== 'heal' && s.type !== 'buff');
+    // サポート技を3倍に
+    const weightedSkills = [...supportSkills, ...supportSkills, ...supportSkills, ...otherSkills];
+    return weightedSkills[Math.floor(Math.random() * weightedSkills.length)];
+  } else if (zoneType === '乱舞のゾーン') {
+    // 攻撃技が非常に出やすい
     const attackSkills = SKILLS.filter(s => s.type === 'attack');
     const otherSkills = SKILLS.filter(s => s.type !== 'attack');
-    
-    // 攻撃技を3回繰り返して配列に追加（3倍の確率）
-    const weightedSkills = [...attackSkills, ...attackSkills, ...attackSkills, ...otherSkills];
-    const randomIndex = Math.floor(Math.random() * weightedSkills.length);
-    return weightedSkills[randomIndex];
-  } else if (activeZone.type === 'heal') {
-    // 回復技の排出率を3倍にする
-    const healSkills = SKILLS.filter(s => s.type === 'heal');
-    const otherSkills = SKILLS.filter(s => s.type !== 'heal');
-    
-    // 回復技を3回繰り返して配列に追加（3倍の確率）
-    const weightedSkills = [...healSkills, ...healSkills, ...healSkills, ...otherSkills];
-    const randomIndex = Math.floor(Math.random() * weightedSkills.length);
-    return weightedSkills[randomIndex];
+    // 攻撃技を10倍に（非常に出やすい）
+    const weightedSkills = [
+      ...attackSkills, ...attackSkills, ...attackSkills, 
+      ...attackSkills, ...attackSkills, ...attackSkills,
+      ...attackSkills, ...attackSkills, ...attackSkills,
+      ...attackSkills,
+      ...otherSkills
+    ];
+    return weightedSkills[Math.floor(Math.random() * weightedSkills.length)];
+  } else if (zoneType === '博打のゾーン') {
+    // 超必殺技か何もしないのどちらか
+    const ultimateSkills = SKILLS.filter(s => s.power >= 40);
+    const nothingSkill = { id: 0, name: '何もしない', type: 'special' as const, power: 0, description: '何も起こらなかった' };
+    // 50%で超必殺技、50%で何もしない
+    if (Math.random() < 0.5) {
+      return ultimateSkills[Math.floor(Math.random() * ultimateSkills.length)];
+    } else {
+      return nothingSkill;
+    }
   } else {
-    // ゾーンなしまたはchaosの場合は通常の抽選
-    const randomIndex = Math.floor(Math.random() * SKILLS.length);
-    return SKILLS[randomIndex];
+    // ゾーンなしの場合は通常の抽選
+    return SKILLS[Math.floor(Math.random() * SKILLS.length)];
   }
 }
 
-// Helper function to generate random zone duration (2-5 turns)
-function getRandomZoneDuration(): number {
-  return Math.floor(Math.random() * 4) + 2; // 2から5の間のランダム整数
-}
 
 // Helper function to apply skill effect
 function applySkillEffect(
@@ -112,8 +131,16 @@ function applySkillEffect(
   switch (skill.type) {
     case 'attack':
       damage = skill.power;
+      
+      // 防御者が集中のゾーン中の場合、ダメージを軽減（75%のダメージになる）
+      if (defender.state.activeZone.type === '集中のゾーン') {
+        damage = Math.floor(damage * 0.75);
+        message = `${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！（集中のゾーンで軽減）`;
+      } else {
+        message = `${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！`;
+      }
+      
       defender.state.hp = Math.max(0, defender.state.hp - damage);
-      message = `${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！`;
       break;
 
     case 'heal':
@@ -129,7 +156,9 @@ function applySkillEffect(
 
     case 'special':
       // 特殊技は様々な効果を持つ
-      if (skill.name === '自爆') {
+      if (skill.name === '何もしない') {
+        message = `${attacker.username}は何もしなかった...`;
+      } else if (skill.name === '自爆') {
         damage = skill.power;
         const selfDamage = Math.floor(skill.power * 0.5);
         defender.state.hp = Math.max(0, defender.state.hp - damage);
@@ -137,8 +166,16 @@ function applySkillEffect(
         message = `${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！ 自分も${selfDamage}ダメージを受けた！`;
       } else if (skill.power > 0) {
         damage = skill.power;
+        
+        // 防御者が集中のゾーン中の場合、ダメージを軽減
+        if (defender.state.activeZone.type === '集中のゾーン') {
+          damage = Math.floor(damage * 0.75);
+          message = `${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！（集中のゾーンで軽減）`;
+        } else {
+          message = `${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！`;
+        }
+        
         defender.state.hp = Math.max(0, defender.state.hp - damage);
-        message = `${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！`;
       } else {
         message = `${attacker.username}の${skill.name}！ ${skill.description}`;
       }
@@ -248,7 +285,7 @@ io.on('connection', (socket) => {
   });
 
   // Handle action_activate_zone event
-  socket.on('action_activate_zone', (payload: { zoneType: 'attack' | 'heal' | 'chaos' }) => {
+  socket.on('action_activate_zone', (payload: { zoneType: '強攻のゾーン' | '集中のゾーン' | '乱舞のゾーン' | '博打のゾーン' }) => {
     console.log(`🌀 ${socket.id} activating zone: ${payload.zoneType}`);
 
     // Find the game this player is in
@@ -286,7 +323,7 @@ io.on('connection', (socket) => {
     // ゾーンアクティブ化のMPコスト
     const ZONE_MP_COST = 5;
 
-    // Check if player has enough MP
+    // Check if player has enough MP (MP上限5)
     if (player.state.mp < ZONE_MP_COST) {
       socket.emit('error', { message: `Insufficient MP. Need ${ZONE_MP_COST} MP to activate zone.` });
       console.log(`❌ ${player.username} has insufficient MP (${player.state.mp}/${ZONE_MP_COST})`);
@@ -296,14 +333,14 @@ io.on('connection', (socket) => {
     // Deduct MP cost
     player.state.mp -= ZONE_MP_COST;
 
-    // Set zone with random duration (2-5 turns)
-    const duration = getRandomZoneDuration();
+    // Set zone with random duration (1-3 turns)
+    const duration = Math.floor(Math.random() * 3) + 1; // 1から3の間のランダム整数
     player.state.activeZone = {
       type: payload.zoneType,
       remainingTurns: duration,
     };
 
-    console.log(`✨ ${player.username} activated ${payload.zoneType} zone for ${duration} turns`);
+    console.log(`✨ ${player.username} activated ${payload.zoneType} for ${duration} turns`);
     console.log(`   MP: ${player.state.mp + ZONE_MP_COST} -> ${player.state.mp}`);
 
     // ターンを交代
@@ -368,17 +405,37 @@ io.on('connection', (socket) => {
     const attacker = isPlayer1 ? currentGame.player1 : currentGame.player2;
     const defender = isPlayer1 ? currentGame.player2 : currentGame.player1;
 
-    // Get random skill from SKILLS array with zone boost
+    // Get random skill from SKILLS array with zone effects
     const selectedSkill = getRandomSkill(attacker.state.activeZone);
     console.log(`🎲 Random skill selected: ${selectedSkill.name} (${selectedSkill.type})`);
     console.log(`   Current zone: ${attacker.state.activeZone.type} (${attacker.state.activeZone.remainingTurns} turns remaining)`);
 
     // Apply skill effect
-    const result = applySkillEffect(selectedSkill, attacker, defender);
+    let result = applySkillEffect(selectedSkill, attacker, defender);
 
-    // Recover MP at turn end (1 MP recovery)
-    attacker.state.mp = Math.min(100, attacker.state.mp + 1);
-    console.log(`💧 ${attacker.username} MP recovered: ${attacker.state.mp}`);
+    // ゾーン効果の適用
+    if (attacker.state.activeZone.type === '強攻のゾーン') {
+      // 20%の確率で反動ダメージ
+      if (Math.random() < 0.2) {
+        const recoilDamage = Math.floor(selectedSkill.power * 0.5); // 技の威力の50%
+        attacker.state.hp = Math.max(0, attacker.state.hp - recoilDamage);
+        console.log(`⚠️ ${attacker.username} took ${recoilDamage} recoil damage from 強攻のゾーン!`);
+        result.message += `\n反動ダメージ！${recoilDamage}ダメージを受けた！`;
+      }
+    } else if (attacker.state.activeZone.type === '集中のゾーン') {
+      // 受けるダメージを少し軽減する（既に効果が出ている）
+      // ここではログのみ
+      console.log(`🛡️ ${attacker.username} is in 集中のゾーン, damage reduction applied`);
+    } else if (attacker.state.activeZone.type === '乱舞のゾーン') {
+      // MP回復が止まる（後で処理）
+      console.log(`🌪️ ${attacker.username} is in 乱舞のゾーン, MP recovery stopped`);
+    }
+
+    // Recover MP at turn end (1 MP recovery) - ただし乱舞のゾーン中は回復しない、上限5
+    if (attacker.state.activeZone.type !== '乱舞のゾーン') {
+      attacker.state.mp = Math.min(5, attacker.state.mp + 1);
+    }
+    console.log(`💧 ${attacker.username} MP: ${attacker.state.mp} (max 5)`);
 
     // ターン経過処理：ゾーンの残りターン数を減らす
     if (attacker.state.activeZone.remainingTurns > 0) {

@@ -14,6 +14,7 @@ function App() {
   const [currentTurnId, setCurrentTurnId] = useState<string>('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [isShaking, setIsShaking] = useState(false)
+  const [selectedZoneType, setSelectedZoneType] = useState<'強攻のゾーン' | '集中のゾーン' | '乱舞のゾーン' | '博打のゾーン'>('強攻のゾーン')
 
   useEffect(() => {
     const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
@@ -119,7 +120,7 @@ function App() {
   const handleActivateZone = () => {
     const mySocketId = socket?.id || ''
     if (socket && gameStarted && myData && myData.state.mp >= 5 && mySocketId === currentTurnId && !isProcessing) {
-      socket.emit('action_activate_zone', { zoneType: 'attack' })
+      socket.emit('action_activate_zone', { zoneType: selectedZoneType })
       setIsProcessing(true)
     }
   }
@@ -145,9 +146,9 @@ function App() {
     const mySocketId = socket?.id || ''
     const isMyTurn = mySocketId === currentTurnId
     const myHpPercent = (myData.state.hp / 100) * 100
-    const myMpPercent = (myData.state.mp / 100) * 100
+    const myMpPercent = (myData.state.mp / 5) * 100
     const opponentHpPercent = (opponentData.state.hp / 100) * 100
-    const opponentMpPercent = (opponentData.state.mp / 100) * 100
+    const opponentMpPercent = (opponentData.state.mp / 5) * 100
 
     return (
       <div className={`min-h-screen bg-yellow-50 p-4 transition-transform ${isShaking ? 'animate-shake' : ''}`}>
@@ -265,19 +266,35 @@ function App() {
                 {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : '✨ 指を振る'}
               </button>
 
-              {/* ゾーン展開ボタン */}
-              <button
-                onClick={handleActivateZone}
-                disabled={mySocketId !== currentTurnId || isProcessing || myData.state.mp < 5 || myData.state.hp <= 0}
-                className={`border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-8 font-black text-2xl ${
-                  mySocketId === currentTurnId && !isProcessing && myData.state.mp >= 5 && myData.state.hp > 0
-                    ? 'bg-purple-400 hover:bg-purple-300 active:translate-x-1 active:translate-y-1 active:shadow-none'
-                    : 'bg-gray-400 cursor-not-allowed'
-                }`}
-              >
-                {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : '🌀 ゾーン展開'}
-                {mySocketId === currentTurnId && !isProcessing && <span className="block text-sm">(MP 5)</span>}
-              </button>
+              {/* ゾーン展開エリア */}
+              <div className="space-y-2">
+                {/* ゾーン選択ドロップダウン */}
+                <select
+                  value={selectedZoneType}
+                  onChange={(e) => setSelectedZoneType(e.target.value as any)}
+                  disabled={mySocketId !== currentTurnId || isProcessing}
+                  className="w-full px-3 py-2 border-2 border-black font-bold text-sm bg-white"
+                >
+                  <option value="強攻のゾーン">🔥 強攻</option>
+                  <option value="集中のゾーン">🎯 集中</option>
+                  <option value="乱舞のゾーン">🌪️ 乱舞</option>
+                  <option value="博打のゾーン">🎰 博打</option>
+                </select>
+
+                {/* ゾーン展開ボタン */}
+                <button
+                  onClick={handleActivateZone}
+                  disabled={mySocketId !== currentTurnId || isProcessing || myData.state.mp < 5 || myData.state.hp <= 0}
+                  className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-4 font-black text-lg ${
+                    mySocketId === currentTurnId && !isProcessing && myData.state.mp >= 5 && myData.state.hp > 0
+                      ? 'bg-purple-400 hover:bg-purple-300 active:translate-x-1 active:translate-y-1 active:shadow-none'
+                      : 'bg-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : '🌀 展開'}
+                  {mySocketId === currentTurnId && !isProcessing && <span className="block text-xs">(MP 5)</span>}
+                </button>
+              </div>
             </div>
           </div>
         </div>

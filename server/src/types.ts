@@ -64,9 +64,9 @@ export interface PlayerStateLegacy {
  */
 export interface PlayerState {
   hp: number; // 初期値100
-  mp: number; // 初期値10
+  mp: number; // 初期値0、上限5
   activeZone: {
-    type: 'attack' | 'heal' | 'chaos' | 'none';
+    type: '強攻のゾーン' | '集中のゾーン' | '乱舞のゾーン' | '博打のゾーン' | 'none';
     remainingTurns: number;
   };
 }

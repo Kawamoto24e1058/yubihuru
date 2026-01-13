@@ -61,7 +61,7 @@ export interface PlayerState {
     hp: number;
     mp: number;
     activeZone: {
-        type: 'attack' | 'heal' | 'chaos' | 'none';
+        type: '強攻のゾーン' | '集中のゾーン' | '乱舞のゾーン' | '博打のゾーン' | 'none';
         remainingTurns: number;
     };
 }
