@@ -42,6 +42,8 @@ function App() {
   const [damageFlash, setDamageFlash] = useState(false)
   const [healFlash, setHealFlash] = useState(false)
   const [zoneBanner, setZoneBanner] = useState<string | null>(null)
+  const [isGameOver, setIsGameOver] = useState(false)
+  const [winner, setWinner] = useState<string | null>(null)
 
   useEffect(() => {
     const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
@@ -59,6 +61,14 @@ function App() {
       console.log('Game started!', data)
       setIsWaiting(false)
       setGameStarted(true)
+      
+      // ゲーム状態をリセット
+      setIsGameOver(false)
+      setWinner(null)
+      setDamageFlash(false)
+      setHealFlash(false)
+      setZoneBanner(null)
+      setLogs([])
       
       const mySocketId = newSocket.id || ''
       const me = data.player1.socketId === mySocketId ? data.player1 : data.player2
@@ -138,6 +148,10 @@ function App() {
     })
 
     newSocket.on('game_over', (data: any) => {
+      // サーバーから勝敗が確定したときだけ表示
+      console.log('Game over:', data)
+      setIsGameOver(true)
+      setWinner(data.winner)
       setLogs(prev => [`🏆 ${data.winner} の勝利！`, ...prev])
     })
 
@@ -203,6 +217,49 @@ function App() {
             OPPONENT...
           </h2>
           <p className="text-center font-bold">プレイヤー名: {name}</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ゲーム終了画面（サーバーからの確定情報を使用）
+  if (isGameOver && winner) {
+    const isWinner = myData?.username === winner
+    
+    return (
+      <div className="min-h-screen bg-yellow-50 flex items-center justify-center p-4">
+        <div className={`bg-white border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-12 max-w-md w-full text-center ${
+          isWinner ? 'border-yellow-400 bg-yellow-100' : 'border-gray-400 bg-gray-100'
+        }`}>
+          {isWinner ? (
+            <>
+              <h2 className="text-6xl mb-4">🎉</h2>
+              <h1 className="text-5xl font-black text-yellow-600 mb-4">YOU WIN!</h1>
+              <p className="font-bold text-xl mb-8">{winner} の勝利！</p>
+            </>
+          ) : (
+            <>
+              <h2 className="text-6xl mb-4">💔</h2>
+              <h1 className="text-4xl font-black text-gray-600 mb-4">YOU LOSE</h1>
+              <p className="font-bold text-lg mb-8">{winner} に負けました</p>
+            </>
+          )}
+          <button
+            onClick={() => {
+              setGameStarted(false)
+              setIsGameOver(false)
+              setWinner(null)
+              setMyData(null)
+              setOpponentData(null)
+              setLogs([])
+              setCurrentTurnId('')
+              setIsProcessing(false)
+              setName('')
+            }}
+            className="w-full py-4 bg-blue-500 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-400 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black text-lg"
+          >
+            🏠 メインメニューへ
+          </button>
         </div>
       </div>
     )
@@ -356,9 +413,9 @@ function App() {
               {/* 指を振るボタン */}
               <button
                 onClick={handleUseSkill}
-                disabled={mySocketId !== currentTurnId || isProcessing || myData.state.hp <= 0}
+                disabled={mySocketId !== currentTurnId || isProcessing}
                 className={`border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-8 font-black text-2xl ${
-                  mySocketId === currentTurnId && !isProcessing && myData.state.hp > 0
+                  mySocketId === currentTurnId && !isProcessing
                     ? 'bg-pink-500 hover:bg-pink-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
                     : 'bg-gray-400 cursor-not-allowed'
                 }`}
@@ -384,9 +441,9 @@ function App() {
                 {/* ゾーン展開ボタン */}
                 <button
                   onClick={handleActivateZone}
-                  disabled={mySocketId !== currentTurnId || isProcessing || myData.state.mp < 5 || myData.state.hp <= 0}
+                  disabled={mySocketId !== currentTurnId || isProcessing || myData.state.mp < 5}
                   className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-4 font-black text-lg ${
-                    mySocketId === currentTurnId && !isProcessing && myData.state.mp >= 5 && myData.state.hp > 0
+                    mySocketId === currentTurnId && !isProcessing && myData.state.mp >= 5
                       ? 'bg-purple-400 hover:bg-purple-300 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
                       : 'bg-gray-400 cursor-not-allowed'
                   }`}
