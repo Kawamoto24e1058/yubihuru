@@ -159,8 +159,12 @@ function App() {
 
     return (
       <div className="bg-yellow-300 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-3 -rotate-1">
-        <p className="font-black text-sm mb-1">{zone.emoji} {zoneType}</p>
-        <p className="font-bold text-xs mb-2">{zone.effect}</p>
+        <div className="flex items-center gap-2 mb-1">
+          <p className="font-black text-sm">{zone.emoji} {zoneType}</p>
+          <span className="bg-white border-2 border-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] px-2 py-1 text-[10px] font-bold leading-tight">
+            {zone.effect}
+          </span>
+        </div>
         <p className="text-xs whitespace-pre-wrap leading-tight">{zone.details}</p>
       </div>
     )
