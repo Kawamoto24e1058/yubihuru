@@ -8,22 +8,22 @@ const ZONE_DESCRIPTIONS = {
   '強攻のゾーン': {
     emoji: '🔥',
     effect: '高威力・自傷アリ',
-    details: '高威力技が出やすい\n20%の確率で反動ダメージ',
+    details: '威力50以上の技のみ出現\n20%の確率で反動ダメージ',
   },
   '集中のゾーン': {
     emoji: '🎯',
-    effect: '回復・防御UP',
-    details: '回復・補助技が出やすい\n受ダメージを25%軽減',
+    effect: '回復・補助のみ',
+    details: '回復・最大HP増加・補助技のみ出現\n安全に成長できる',
   },
   '乱舞のゾーン': {
     emoji: '🌪️',
-    effect: '攻撃頻発・MP停止',
-    details: '攻撃技が非常に出やすい\nMP回復が停止',
+    effect: '攻撃のみ・MP停止',
+    details: '攻撃技のみ出現\nMP回復が完全に停止',
   },
   '博打のゾーン': {
     emoji: '🎰',
     effect: '超必殺or無効',
-    details: '50%で超必殺技\n50%で何もしない',
+    details: '50%で威力200のギガインパクト\n50%で何もしない',
   },
 }
 
@@ -48,6 +48,7 @@ function App() {
   const [shieldEffect, setShieldEffect] = useState(false)
   const [myMaxHpExpand, setMyMaxHpExpand] = useState(false)
   const [opponentMaxHpExpand, setOpponentMaxHpExpand] = useState(false)
+  const [showZoneTooltip, setShowZoneTooltip] = useState(false)
 
   // HP減少時のshakeアニメーション
   useEffect(() => {
@@ -544,7 +545,23 @@ function App() {
               </button>
 
               {/* ゾーン展開エリア */}
-              <div className="space-y-2">
+              <div className="space-y-3">
+                {/* 現在のゾーン効果表示 */}
+                {myData.state.activeZone.type !== 'none' && (
+                  <div className="bg-yellow-300 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-3">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-2xl">{ZONE_DESCRIPTIONS[myData.state.activeZone.type].emoji}</span>
+                      <div>
+                        <p className="font-black text-sm">{myData.state.activeZone.type}</p>
+                        <p className="text-xs font-bold text-red-600">残り {myData.state.activeZone.remainingTurns} ターン</p>
+                      </div>
+                    </div>
+                    <p className="text-xs font-bold whitespace-pre-wrap leading-tight">
+                      {ZONE_DESCRIPTIONS[myData.state.activeZone.type].details}
+                    </p>
+                  </div>
+                )}
+
                 {/* ゾーン選択ドロップダウン */}
                 <select
                   value={selectedZoneType}
@@ -552,25 +569,52 @@ function App() {
                   disabled={mySocketId !== currentTurnId || isProcessing}
                   className="w-full px-3 py-2 border-2 border-black font-bold text-sm bg-white"
                 >
-                  <option value="強攻のゾーン">🔥 強攻</option>
-                  <option value="集中のゾーン">🎯 集中</option>
-                  <option value="乱舞のゾーン">🌪️ 乱舞</option>
-                  <option value="博打のゾーン">🎰 博打</option>
+                  <option value="強攻のゾーン">🔥 強攻のゾーン</option>
+                  <option value="集中のゾーン">🎯 集中のゾーン</option>
+                  <option value="乱舞のゾーン">🌪️ 乱舞のゾーン</option>
+                  <option value="博打のゾーン">🎰 博打のゾーン</option>
                 </select>
 
-                {/* ゾーン展開ボタン */}
-                <button
-                  onClick={handleActivateZone}
-                  disabled={mySocketId !== currentTurnId || isProcessing || myData.state.mp < 5}
-                  className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-4 font-black text-lg ${
-                    mySocketId === currentTurnId && !isProcessing && myData.state.mp >= 5
-                      ? 'bg-purple-400 hover:bg-purple-300 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
-                      : 'bg-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : '🌀 展開'}
-                  {mySocketId === currentTurnId && !isProcessing && <span className="block text-xs">(MP 5)</span>}
-                </button>
+                {/* ゾーン展開ボタン（ツールチップ付き） */}
+                <div className="relative">
+                  <button
+                    onClick={handleActivateZone}
+                    onMouseEnter={() => setShowZoneTooltip(true)}
+                    onMouseLeave={() => setShowZoneTooltip(false)}
+                    disabled={mySocketId !== currentTurnId || isProcessing || myData.state.mp < 5}
+                    className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-4 font-black text-lg ${
+                      mySocketId === currentTurnId && !isProcessing && myData.state.mp >= 5
+                        ? 'bg-purple-400 hover:bg-purple-300 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
+                        : 'bg-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : '🌀 ゾーン展開'}
+                    {mySocketId === currentTurnId && !isProcessing && <span className="block text-xs">(MP 5消費)</span>}
+                  </button>
+
+                  {/* ツールチップ：全ゾーン説明 */}
+                  {showZoneTooltip && (
+                    <div className="absolute bottom-full left-0 right-0 mb-2 z-50">
+                      <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 space-y-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-2xl">❗</span>
+                          <p className="font-black text-sm">ゾーン効果一覧</p>
+                        </div>
+                        {Object.entries(ZONE_DESCRIPTIONS).map(([zoneName, zone]) => (
+                          <div key={zoneName} className="border-2 border-black p-2 bg-yellow-50">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-lg">{zone.emoji}</span>
+                              <p className="font-black text-xs">{zoneName}</p>
+                            </div>
+                            <p className="text-xs font-bold text-gray-700 whitespace-pre-wrap leading-tight">
+                              {zone.details}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
