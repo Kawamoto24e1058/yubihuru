@@ -11,6 +11,7 @@ function App() {
   const [myData, setMyData] = useState<PlayerData | null>(null)
   const [opponentData, setOpponentData] = useState<PlayerData | null>(null)
   const [logs, setLogs] = useState<string[]>([])
+  const [isMyTurn, setIsMyTurn] = useState(true)
 
   useEffect(() => {
     const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
@@ -50,6 +51,14 @@ function App() {
         setMyData(me)
         setOpponentData(opponent)
       }
+      
+      // Turn management: enable turn after opponent's action
+      setIsMyTurn(true)
+    })
+
+    newSocket.on('turn_update', (data: any) => {
+      const mySocketId = newSocket.id || ''
+      setIsMyTurn(data.currentTurn === mySocketId)
     })
 
     newSocket.on('zone_activated', (data: any) => {
@@ -83,14 +92,16 @@ function App() {
   }
 
   const handleUseSkill = () => {
-    if (socket && gameStarted) {
+    if (socket && gameStarted && isMyTurn) {
       socket.emit('action_use_skill')
+      setIsMyTurn(false) // Prevent double-click
     }
   }
 
   const handleActivateZone = () => {
-    if (socket && gameStarted && myData && myData.state.mp >= 5) {
+    if (socket && gameStarted && myData && myData.state.mp >= 5 && isMyTurn) {
       socket.emit('action_activate_zone', { zoneType: 'attack' })
+      setIsMyTurn(false) // Prevent double-click
     }
   }
 
@@ -155,8 +166,10 @@ function App() {
             </div>
 
             {/* 自分 */}
-            <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4">
-              <p className="font-black text-sm mb-2">YOU</p>
+            <div className={`bg-white border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 transition-all ${
+              isMyTurn ? 'border-pink-500 animate-pulse' : 'border-black'
+            }`}>
+              <p className="font-black text-sm mb-2">YOU {isMyTurn && '⭐'}</p>
               <p className="font-black text-xl mb-3">{myData.username}</p>
               <div className="space-y-2">
                 <div>
@@ -204,28 +217,42 @@ function App() {
           </div>
 
           {/* 下部アクション */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* 指を振るボタン */}
-            <button
-              onClick={handleUseSkill}
-              className="bg-pink-500 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-pink-400 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all py-8 font-black text-2xl"
-            >
-              ✨ 指を振る
-            </button>
+          <div className="space-y-4">
+            {/* ターン表示 */}
+            {!isMyTurn && (
+              <div className="bg-orange-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 text-center">
+                <p className="font-black text-xl animate-pulse">⏳ 相手のターンです...</p>
+              </div>
+            )}
 
-            {/* ゾーン展開ボタン */}
-            <button
-              onClick={handleActivateZone}
-              disabled={myData.state.mp < 5}
-              className={`border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none transition-all py-8 font-black text-2xl ${
-                myData.state.mp >= 5
-                  ? 'bg-purple-400 hover:bg-purple-300'
-                  : 'bg-gray-300 cursor-not-allowed'
-              }`}
-            >
-              🌀 ゾーン展開
-              <span className="block text-sm">(MP 5)</span>
-            </button>
+            <div className="grid grid-cols-2 gap-4">
+              {/* 指を振るボタン */}
+              <button
+                onClick={handleUseSkill}
+                disabled={!isMyTurn}
+                className={`border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-8 font-black text-2xl ${
+                  isMyTurn
+                    ? 'bg-pink-500 hover:bg-pink-400 active:translate-x-1 active:translate-y-1 active:shadow-none'
+                    : 'bg-gray-400 cursor-not-allowed'
+                }`}
+              >
+                ✨ 指を振る
+              </button>
+
+              {/* ゾーン展開ボタン */}
+              <button
+                onClick={handleActivateZone}
+                disabled={!isMyTurn || myData.state.mp < 5}
+                className={`border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-8 font-black text-2xl ${
+                  isMyTurn && myData.state.mp >= 5
+                    ? 'bg-purple-400 hover:bg-purple-300 active:translate-x-1 active:translate-y-1 active:shadow-none'
+                    : 'bg-gray-400 cursor-not-allowed'
+                }`}
+              >
+                🌀 ゾーン展開
+                <span className="block text-sm">(MP 5)</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
