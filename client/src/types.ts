@@ -65,11 +65,21 @@ export interface PlayerStateLegacy {
  * Player State interface (new battle system)
  */
 export interface PlayerState {
-  hp: number; // 初期値100
+  hp: number; // 初期値200
   mp: number; // 初期値0、上限5
   activeZone: {
     type: '強攻のゾーン' | '集中のゾーン' | '乱舞のゾーン' | '博打のゾーン' | 'none';
     remainingTurns: number;
+  };
+  status: {
+    poison: {
+      turns: number;
+      damagePerTurn: number;
+    } | null;
+    mpRegenBonus: {
+      turns: number;
+      amount: number;
+    } | null;
   };
 }
 

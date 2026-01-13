@@ -44,6 +44,8 @@ function App() {
   const [zoneBanner, setZoneBanner] = useState<string | null>(null)
   const [isGameOver, setIsGameOver] = useState(false)
   const [winner, setWinner] = useState<string | null>(null)
+  const [poisonFlash, setPoisonFlash] = useState(false)
+  const [shieldEffect, setShieldEffect] = useState(false)
 
   useEffect(() => {
     const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
@@ -68,6 +70,8 @@ function App() {
       setDamageFlash(false)
       setHealFlash(false)
       setZoneBanner(null)
+      setPoisonFlash(false)
+      setShieldEffect(false)
       setLogs([])
       
       const mySocketId = newSocket.id || ''
@@ -96,18 +100,47 @@ function App() {
         const prevHpOpponent = opponentData?.state.hp ?? opponent.state.hp
         const newHpOpponent = opponent.state.hp
 
+        // 連続攻撃時は2回の画面揺れ
+        if (data.isMultiHit) {
+          setIsShaking(true)
+          setTimeout(() => setIsShaking(false), 500)
+          setTimeout(() => {
+            setIsShaking(true)
+            setTimeout(() => setIsShaking(false), 500)
+          }, 600)
+        }
+
         // 被ダメージ判定（自分）
         if (prevHp > newHp) {
-          setIsShaking(true)
-          setDamageFlash(true)
-          setTimeout(() => setIsShaking(false), 500)
-          setTimeout(() => setDamageFlash(false), 500)
+          if (!data.isMultiHit) {
+            setIsShaking(true)
+            setDamageFlash(true)
+            setTimeout(() => setIsShaking(false), 500)
+            setTimeout(() => setDamageFlash(false), 500)
+          }
         }
 
         // 回復判定（自分）
         if (newHp > prevHp) {
           setHealFlash(true)
           setTimeout(() => setHealFlash(false), 500)
+        }
+
+        // 毒ダメージ判定（自分が毒状態で、HPが減少）
+        if (me.state.status.poison && prevHp > newHp && !data.isMultiHit && (prevHp - newHp) < 10) {
+          setPoisonFlash(true)
+          setTimeout(() => setPoisonFlash(false), 400)
+        }
+
+        // 毒が新しく付与された
+        if (data.isPoisonApplied && opponent.state.status.poison) {
+          setLogs(prev => [`☠️ 毒が付与されました！`, ...prev].slice(0, 10))
+        }
+
+        // まもるが発動
+        if (data.isProtected) {
+          setShieldEffect(true)
+          setTimeout(() => setShieldEffect(false), 600)
         }
 
         // 相手が被ダメージを受けても画面揺らさない（演出過多防止）
@@ -185,7 +218,23 @@ function App() {
     }
   }
 
-  // ゾーン表示用のコンポーネント
+  // ログ色決定関数
+  const getLogColor = (log: string): string => {
+    if (log.includes('ダメージ') || log.includes('連続攻撃') || log.includes('反動') || log.includes('外れた')) {
+      return 'text-red-600 font-bold'
+    }
+    if (log.includes('回復') || log.includes('ドレイン') || log.includes('HEAL')) {
+      return 'text-green-600 font-bold'
+    }
+    if (log.includes('毒') || log.includes('状態') || log.includes('ゾーン') || log.includes('効果')) {
+      return 'text-yellow-600 font-bold'
+    }
+    if (log.includes('勝利') || log.includes('勝敗')) {
+      return 'text-purple-600 font-black'
+    }
+    return 'text-gray-700'
+  }
+
   const renderZoneDisplay = (zoneType: string, isActive: boolean) => {
     if (zoneType === 'none' || !isActive) return null
     
@@ -269,9 +318,9 @@ function App() {
   if (gameStarted && myData && opponentData) {
     const mySocketId = socket?.id || ''
     const isMyTurn = mySocketId === currentTurnId
-    const myHpPercent = (myData.state.hp / 100) * 100
+    const myHpPercent = (myData.state.hp / 200) * 100
     const myMpPercent = (myData.state.mp / 5) * 100
-    const opponentHpPercent = (opponentData.state.hp / 100) * 100
+    const opponentHpPercent = (opponentData.state.hp / 200) * 100
     const opponentMpPercent = (opponentData.state.mp / 5) * 100
 
     const zoneBorderMap: Record<string, string> = {
@@ -289,12 +338,22 @@ function App() {
         {damageFlash && (
           <div className="pointer-events-none absolute inset-0 bg-red-500/40 animate-flash" />
         )}
+        {/* 毒ダメージ時の紫フラッシュ */}
+        {poisonFlash && (
+          <div className="pointer-events-none absolute inset-0 bg-purple-500/40 animate-poison-flash" />
+        )}
         {/* ゾーンバナー */}
         {zoneBanner && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center animate-flash">
             <div className="bg-black text-yellow-50 border-4 border-white shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] px-6 py-4 text-3xl md:text-4xl font-black tracking-wide">
               {zoneBanner}
             </div>
+          </div>
+        )}
+        {/* シールドエフェクト */}
+        {shieldEffect && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="w-96 h-96 border-4 border-cyan-400 rounded-full animate-shield-pulse" style={{ borderStyle: 'dashed' }} />
           </div>
         )}
 
@@ -304,13 +363,18 @@ function App() {
             {/* 相手 */}
             <div className="space-y-2">
               <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4">
-                <p className="font-black text-sm mb-2">OPPONENT</p>
+                <div className="flex items-center gap-2 mb-2">
+                  <p className="font-black text-sm">OPPONENT</p>
+                  {opponentData.state.status.poison && (
+                    <span className="bg-purple-600 text-white text-xs font-black px-2 py-1 rounded">☠️ 毒</span>
+                  )}
+                </div>
                 <p className="font-black text-xl mb-3">{opponentData.username}</p>
                 <div className="space-y-2">
                   <div>
                     <div className="flex justify-between text-xs font-bold mb-1">
                       <span>HP</span>
-                      <span>{opponentData.state.hp}/100</span>
+                      <span>{opponentData.state.hp}/200</span>
                     </div>
                     <div className="h-4 border-2 border-black bg-gray-200">
                       <div 
@@ -342,7 +406,12 @@ function App() {
                 `${myZoneBorder} ${isMyTurn ? 'animate-pulse' : ''}`
               } ${isShaking ? 'animate-shake' : ''}`}>
                 <div className="flex items-center justify-between mb-2">
-                  <p className="font-black text-sm">YOU {isMyTurn && '⭐'}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-black text-sm">YOU {isMyTurn && '⭐'}</p>
+                    {myData.state.status.poison && (
+                      <span className="bg-purple-600 text-white text-xs font-black px-2 py-1 rounded">☠️ 毒</span>
+                    )}
+                  </div>
                   {healFlash && (
                     <span className="text-green-600 font-black text-xs animate-flash">✨ HEAL</span>
                   )}
@@ -352,7 +421,7 @@ function App() {
                   <div>
                     <div className="flex justify-between text-xs font-bold mb-1">
                       <span>HP</span>
-                      <span>{myData.state.hp}/100</span>
+                      <span>{myData.state.hp}/200</span>
                     </div>
                     <div className="h-4 border-2 border-black bg-gray-200">
                       <div 
@@ -387,7 +456,7 @@ function App() {
                 <p className="text-gray-400 font-bold">待機中...</p>
               ) : (
                 logs.map((log, index) => (
-                  <div key={index} className="font-bold text-sm py-1 border-b-2 border-gray-200">
+                  <div key={index} className={`font-bold text-sm py-1 border-b-2 border-gray-200 ${getLogColor(log)}`}>
                     {log}
                   </div>
                 ))
