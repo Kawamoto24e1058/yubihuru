@@ -49,6 +49,26 @@ function App() {
   const [myMaxHpExpand, setMyMaxHpExpand] = useState(false)
   const [opponentMaxHpExpand, setOpponentMaxHpExpand] = useState(false)
   const [showZoneTooltip, setShowZoneTooltip] = useState(false)
+  
+  // バースト・ルーレット演出用
+  const [isRoulette, setIsRoulette] = useState(false)
+  const [rouletteFlash, setRouletteFlash] = useState(0) // 0: yellow, 1: pink, 2: cyan
+  const [showImpact, setShowImpact] = useState(false)
+  const [impactText, setImpactText] = useState('')
+  const [impactRotation, setImpactRotation] = useState(0)
+  const [screenShake, setScreenShake] = useState(false)
+  const [particles, setParticles] = useState<Array<{id: number, x: number, y: number}>>([])
+
+  // ルーレットフラッシュ：0.05秒ごとに色を切り替え
+  useEffect(() => {
+    if (!isRoulette) return
+    
+    const interval = setInterval(() => {
+      setRouletteFlash(prev => (prev + 1) % 3)
+    }, 50) // 0.05秒
+    
+    return () => clearInterval(interval)
+  }, [isRoulette])
 
   // HP減少時のshakeアニメーション
   useEffect(() => {
@@ -102,6 +122,36 @@ function App() {
       console.log('Battle update:', data)
       setLogs(prev => [data.message, ...prev].slice(0, 10))
       
+      // ルーレット演出停止 + 決定演出（常に実行、isRouletteのstale closure回避）
+      setIsRoulette(prev => {
+        if (prev) {
+          // 擬音をランダムに選ぶ
+          const impactTexts = [
+            'ドグシャァッ！',
+            'ズギュゥゥン！',
+            'バァァァン！',
+            'ドゴォォッ！',
+            'ズバババッ！',
+            'ガキィィン！',
+            'ドカァァッ！'
+          ]
+          const randomText = impactTexts[Math.floor(Math.random() * impactTexts.length)]
+          const randomRotation = Math.random() * 8 - 4 // -4deg ~ 4deg
+          
+          setImpactText(randomText)
+          setImpactRotation(randomRotation)
+          setShowImpact(true)
+          setScreenShake(true)
+          
+          // 決定演出の終了
+          setTimeout(() => {
+            setShowImpact(false)
+            setScreenShake(false)
+          }, 800)
+        }
+        return false
+      })
+      
       const mySocketId = newSocket.id || ''
       if (data.gameState) {
         const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
@@ -147,6 +197,19 @@ function App() {
             setDamageFlash(true)
             setTimeout(() => setIsShaking(false), 500)
             setTimeout(() => setDamageFlash(false), 500)
+            
+            // パーティクル生成（5個）
+            const newParticles = Array.from({ length: 5 }, (_, i) => ({
+              id: Date.now() + i,
+              x: Math.random() * 100 - 50, // -50px ~ 50px
+              y: Math.random() * 100 - 50
+            }))
+            setParticles(prev => [...prev, ...newParticles])
+            
+            // 1秒後にパーティクル削除
+            setTimeout(() => {
+              setParticles(prev => prev.filter(p => !newParticles.find(np => np.id === p.id)))
+            }, 1000)
           }
         }
 
@@ -251,6 +314,10 @@ function App() {
     if (socket && gameStarted && mySocketId === currentTurnId && !isProcessing) {
       socket.emit('action_use_skill')
       setIsProcessing(true)
+      
+      // ルーレット演出開始
+      setIsRoulette(true)
+      setRouletteFlash(0)
     }
   }
 
@@ -264,12 +331,16 @@ function App() {
 
   // ログ色決定関数
   const getLogColor = (log: string): string => {
+    // 立直・ロン・ツモ（一撃必殺）
+    if (log.includes('立直') || log.includes('ロン') || log.includes('ツモ') || log.includes('一撃必殺')) {
+      return 'text-red-600 font-black text-lg animate-pulse'
+    }
     // ギガインパクト（超必殺技）は特別な色
     if (log.includes('ギガインパクト')) {
       return 'text-red-600 font-black text-lg animate-pulse'
     }
-    // 何もしない・運命に見放された
-    if (log.includes('何も起こらなかった') || log.includes('運命に見放された')) {
+    // ネタ技・何もしない・運命に見放された
+    if (log.includes('何も起こらなかった') || log.includes('運命に見放された') || log.includes('謝罪') || log.includes('土下座') || log.includes('遺憾')) {
       return 'text-gray-500 font-bold italic'
     }
     if (log.includes('ダメージ') || log.includes('連続攻撃') || log.includes('反動') || log.includes('外れた')) {
@@ -385,7 +456,30 @@ function App() {
     const myZoneBorder = zoneBorderMap[myData.state.activeZone.type] || 'border-black'
 
     return (
-      <div className={`min-h-screen bg-yellow-50 p-4 transition-transform relative ${isShaking ? 'animate-shake' : ''}`}>
+      <div className={`min-h-screen bg-yellow-50 p-4 transition-transform relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''}`}>
+        {/* ルーレットフラッシュ（背景） */}
+        {isRoulette && (
+          <div className={`pointer-events-none absolute inset-0 transition-all duration-50 ${
+            rouletteFlash === 0 ? 'bg-yellow-400/60' :
+            rouletteFlash === 1 ? 'bg-pink-400/60' :
+            'bg-cyan-400/60'
+          }`} />
+        )}
+        {/* 擬音オーバーレイ */}
+        {showImpact && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-50">
+            <p 
+              className="text-[120px] font-black text-white tracking-tighter leading-none select-none"
+              style={{
+                transform: `rotate(${impactRotation}deg)`,
+                textShadow: '8px 8px 0px #000, -2px -2px 0px #000, 2px -2px 0px #000, -2px 2px 0px #000',
+                WebkitTextStroke: '4px black'
+              }}
+            >
+              {impactText}
+            </p>
+          </div>
+        )}
         {/* ダメージ時の赤フラッシュ */}
         {damageFlash && (
           <div className="pointer-events-none absolute inset-0 bg-red-500/40 animate-flash" />
@@ -420,6 +514,9 @@ function App() {
                   {opponentData.state.status.poison && (
                     <span className="bg-purple-600 text-white text-xs font-black px-2 py-1 rounded">☠️ 毒</span>
                   )}
+                  {opponentData.state.isRiichi && (
+                    <span className="bg-red-600 text-white text-xs font-black px-2 py-1 rounded animate-pulse">🀄 立直</span>
+                  )}
                 </div>
                 <p className="font-black text-xl mb-3">{opponentData.username}</p>
                 <div className="space-y-2">
@@ -453,7 +550,19 @@ function App() {
             </div>
 
             {/* 自分 */}
-            <div className="space-y-2">
+            <div className="space-y-2 relative">
+              {/* パーティクルエフェクト */}
+              {particles.map(particle => (
+                <div
+                  key={particle.id}
+                  className="absolute w-2 h-2 bg-red-600 rounded-full animate-ping pointer-events-none"
+                  style={{
+                    left: `50%`,
+                    top: `30%`,
+                    transform: `translate(${particle.x}px, ${particle.y}px)`
+                  }}
+                />
+              ))}
               <div className={`bg-white border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 transition-all ${
                 `${myZoneBorder} ${isMyTurn ? 'animate-pulse' : ''}`
               } ${isShaking ? 'animate-shake' : ''}`}>
@@ -462,6 +571,9 @@ function App() {
                     <p className="font-black text-sm">YOU {isMyTurn && '⭐'}</p>
                     {myData.state.status.poison && (
                       <span className="bg-purple-600 text-white text-xs font-black px-2 py-1 rounded">☠️ 毒</span>
+                    )}
+                    {myData.state.isRiichi && (
+                      <span className="bg-red-600 text-white text-xs font-black px-2 py-1 rounded animate-pulse">🀄 立直</span>
                     )}
                   </div>
                   {healFlash && (

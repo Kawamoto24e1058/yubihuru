@@ -29,7 +29,7 @@ export interface Skill {
     type: 'attack' | 'heal' | 'buff' | 'special';
     power: number;
     description: string;
-    effect?: 'none' | 'recoil' | 'lifesteal' | 'mp_regen_boost' | 'poison' | 'multi_hit' | 'self_damage' | 'drain' | 'charge' | 'protect' | 'hit_rate' | 'max_hp_boost' | 'max_hp_boost_with_heal' | 'max_hp_boost_with_damage';
+    effect?: 'none' | 'recoil' | 'lifesteal' | 'mp_regen_boost' | 'poison' | 'multi_hit' | 'self_damage' | 'drain' | 'charge' | 'protect' | 'hit_rate' | 'max_hp_boost' | 'max_hp_boost_with_heal' | 'max_hp_boost_with_damage' | 'riichi' | 'riichi_attack';
     recoilRatio?: number;
     lifestealRatio?: number;
     mpRegenBonus?: number;
@@ -89,6 +89,7 @@ export interface PlayerState {
             amount: number;
         } | null;
     };
+    isRiichi: boolean;
 }
 /**
  * Game State interface

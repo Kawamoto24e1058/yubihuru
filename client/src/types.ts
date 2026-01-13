@@ -82,6 +82,7 @@ export interface PlayerState {
       amount: number;
     } | null;
   };
+  isRiichi: boolean; // 立直状態（一撃必殺準備完了）
 }
 
 /**
