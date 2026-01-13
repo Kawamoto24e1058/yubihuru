@@ -46,6 +46,7 @@ interface GameState {
     state: PlayerState;
   };
   currentTurn: number;
+  currentTurnPlayerId: string; // 現在のターンのプレイヤーID
   isGameOver: boolean;
   winner: string | null;
 }
@@ -201,6 +202,7 @@ io.on('connection', (socket) => {
             state: player2State,
           },
           currentTurn: 0,
+          currentTurnPlayerId: player1.socketId, // player1が最初のターン
           isGameOver: false,
           winner: null,
         };
@@ -225,9 +227,16 @@ io.on('connection', (socket) => {
 
         io.to(roomId).emit('game_start', gameData);
         
+        // 最初のターンを通知
+        io.to(roomId).emit('turn_change', {
+          currentTurnPlayerId: gameState.currentTurnPlayerId,
+          currentTurnPlayerName: player1.username,
+        });
+        
         console.log(`🚀 Game started in room ${roomId}`);
         console.log(`   Player 1 HP: ${player1State.hp}, MP: ${player1State.mp}`);
         console.log(`   Player 2 HP: ${player2State.hp}, MP: ${player2State.mp}`);
+        console.log(`   First turn: ${player1.username} (${player1.socketId})`);
       }
     } else {
       // Notify player they're in waiting room
@@ -263,6 +272,13 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // ターンチェック：自分のターンかどうか
+    if (currentGame.currentTurnPlayerId !== socket.id) {
+      console.log(`❌ ${socket.id} tried to activate zone on opponent's turn`);
+      socket.emit('error', { message: 'Not your turn!' });
+      return;
+    }
+
     // Determine which player is activating the zone
     const isPlayer1 = currentGame.player1.socketId === socket.id;
     const player = isPlayer1 ? currentGame.player1 : currentGame.player2;
@@ -290,6 +306,12 @@ io.on('connection', (socket) => {
     console.log(`✨ ${player.username} activated ${payload.zoneType} zone for ${duration} turns`);
     console.log(`   MP: ${player.state.mp + ZONE_MP_COST} -> ${player.state.mp}`);
 
+    // ターンを交代
+    const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId 
+      ? currentGame.player2 
+      : currentGame.player1;
+    currentGame.currentTurnPlayerId = nextPlayer.socketId;
+
     // Send zone_activated event to both players
     io.to(currentRoomId).emit('zone_activated', {
       username: player.username,
@@ -299,6 +321,14 @@ io.on('connection', (socket) => {
       remainingTurns: duration,
       playerState: player.state,
     });
+
+    // ターン変更を通知
+    io.to(currentRoomId).emit('turn_change', {
+      currentTurnPlayerId: currentGame.currentTurnPlayerId,
+      currentTurnPlayerName: nextPlayer.username,
+    });
+
+    console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.socketId})`);
   });
 
   // Handle action_use_skill event
@@ -323,6 +353,13 @@ io.on('connection', (socket) => {
 
     if (currentGame.isGameOver) {
       socket.emit('error', { message: 'Game is already over' });
+      return;
+    }
+
+    // ターンチェック：自分のターンかどうか
+    if (currentGame.currentTurnPlayerId !== socket.id) {
+      console.log(`❌ ${socket.id} tried to use skill on opponent's turn`);
+      socket.emit('error', { message: 'Not your turn!' });
       return;
     }
 
@@ -397,6 +434,12 @@ io.on('connection', (socket) => {
     // Increment turn counter
     currentGame.currentTurn++;
 
+    // ターンを交代
+    const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId 
+      ? currentGame.player2 
+      : currentGame.player1;
+    currentGame.currentTurnPlayerId = nextPlayer.socketId;
+
     // Send battle_update event to both players
     const battleUpdate = {
       turn: currentGame.currentTurn,
@@ -419,9 +462,16 @@ io.on('connection', (socket) => {
 
     io.to(currentRoomId).emit('battle_update', battleUpdate);
 
+    // ターン変更を通知
+    io.to(currentRoomId).emit('turn_change', {
+      currentTurnPlayerId: currentGame.currentTurnPlayerId,
+      currentTurnPlayerName: nextPlayer.username,
+    });
+
     console.log(`📊 Turn ${currentGame.currentTurn}:`);
     console.log(`   ${attacker.username}: HP ${attacker.state.hp}, MP ${attacker.state.mp}`);
     console.log(`   ${defender.username}: HP ${defender.state.hp}, MP ${defender.state.mp}`);
+    console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.socketId})`);
   });
 
   socket.on('disconnect', () => {

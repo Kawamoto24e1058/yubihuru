@@ -11,7 +11,7 @@ function App() {
   const [myData, setMyData] = useState<PlayerData | null>(null)
   const [opponentData, setOpponentData] = useState<PlayerData | null>(null)
   const [logs, setLogs] = useState<string[]>([])
-  const [isMyTurn, setIsMyTurn] = useState(true)
+  const [currentTurnId, setCurrentTurnId] = useState<string>('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [isShaking, setIsShaking] = useState(false)
 
@@ -35,6 +35,9 @@ function App() {
       const mySocketId = newSocket.id || ''
       const me = data.player1.socketId === mySocketId ? data.player1 : data.player2
       const opponent = data.player1.socketId === mySocketId ? data.player2 : data.player1
+      
+      // サーバーがプレイヤー1から始める
+      setCurrentTurnId(data.player1.socketId)
       
       setMyData(me)
       setOpponentData(opponent)
@@ -64,13 +67,15 @@ function App() {
       // Turn management: wait 2 seconds before enabling next action
       setTimeout(() => {
         setIsProcessing(false)
-        setIsMyTurn(true)
       }, 2000)
     })
 
-    newSocket.on('turn_update', (data: any) => {
-      const mySocketId = newSocket.id || ''
-      setIsMyTurn(data.currentTurn === mySocketId)
+    newSocket.on('turn_change', (data: any) => {
+      setCurrentTurnId(data.currentTurnPlayerId)
+      setIsProcessing(false)
+      
+      console.log(`🔄 Turn changed to: ${data.currentTurnPlayerName} (ID: ${data.currentTurnPlayerId})`)
+      setLogs(prev => [`🔄 ${data.currentTurnPlayerName}のターン`, ...prev].slice(0, 10))
     })
 
     newSocket.on('zone_activated', (data: any) => {
@@ -104,17 +109,17 @@ function App() {
   }
 
   const handleUseSkill = () => {
-    if (socket && gameStarted && isMyTurn && !isProcessing) {
+    const mySocketId = socket?.id || ''
+    if (socket && gameStarted && mySocketId === currentTurnId && !isProcessing) {
       socket.emit('action_use_skill')
-      setIsMyTurn(false)
       setIsProcessing(true)
     }
   }
 
   const handleActivateZone = () => {
-    if (socket && gameStarted && myData && myData.state.mp >= 5 && isMyTurn && !isProcessing) {
+    const mySocketId = socket?.id || ''
+    if (socket && gameStarted && myData && myData.state.mp >= 5 && mySocketId === currentTurnId && !isProcessing) {
       socket.emit('action_activate_zone', { zoneType: 'attack' })
-      setIsMyTurn(false)
       setIsProcessing(true)
     }
   }
@@ -137,6 +142,8 @@ function App() {
 
   // バトル画面
   if (gameStarted && myData && opponentData) {
+    const mySocketId = socket?.id || ''
+    const isMyTurn = mySocketId === currentTurnId
     const myHpPercent = (myData.state.hp / 100) * 100
     const myMpPercent = (myData.state.mp / 100) * 100
     const opponentHpPercent = (opponentData.state.hp / 100) * 100
@@ -233,12 +240,12 @@ function App() {
           {/* 下部アクション */}
           <div className="space-y-4">
             {/* ターン表示 */}
-            {!isMyTurn && !isProcessing && (
+            {!isMyTurn && (
               <div className="bg-orange-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 text-center">
-                <p className="font-black text-xl animate-pulse">⏳ 相手のターンです...</p>
+                <p className="font-black text-xl animate-pulse">⏳ 相手の行動を待っています...</p>
               </div>
             )}
-            {isProcessing && (
+            {isProcessing && isMyTurn && (
               <div className="bg-blue-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 text-center">
                 <p className="font-black text-xl animate-pulse">⚡ 演出中...</p>
               </div>
@@ -248,28 +255,28 @@ function App() {
               {/* 指を振るボタン */}
               <button
                 onClick={handleUseSkill}
-                disabled={!isMyTurn || isProcessing || myData.state.hp <= 0}
+                disabled={mySocketId !== currentTurnId || isProcessing || myData.state.hp <= 0}
                 className={`border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-8 font-black text-2xl ${
-                  isMyTurn && !isProcessing && myData.state.hp > 0
+                  mySocketId === currentTurnId && !isProcessing && myData.state.hp > 0
                     ? 'bg-pink-500 hover:bg-pink-400 active:translate-x-1 active:translate-y-1 active:shadow-none'
                     : 'bg-gray-400 cursor-not-allowed'
                 }`}
               >
-                {isProcessing ? '⏳ WAITING...' : '✨ 指を振る'}
+                {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : '✨ 指を振る'}
               </button>
 
               {/* ゾーン展開ボタン */}
               <button
                 onClick={handleActivateZone}
-                disabled={!isMyTurn || isProcessing || myData.state.mp < 5 || myData.state.hp <= 0}
+                disabled={mySocketId !== currentTurnId || isProcessing || myData.state.mp < 5 || myData.state.hp <= 0}
                 className={`border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-8 font-black text-2xl ${
-                  isMyTurn && !isProcessing && myData.state.mp >= 5 && myData.state.hp > 0
+                  mySocketId === currentTurnId && !isProcessing && myData.state.mp >= 5 && myData.state.hp > 0
                     ? 'bg-purple-400 hover:bg-purple-300 active:translate-x-1 active:translate-y-1 active:shadow-none'
                     : 'bg-gray-400 cursor-not-allowed'
                 }`}
               >
-                {isProcessing ? '⏳ WAITING...' : '🌀 ゾーン展開'}
-                {!isProcessing && <span className="block text-sm">(MP 5)</span>}
+                {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : '🌀 ゾーン展開'}
+                {mySocketId === currentTurnId && !isProcessing && <span className="block text-sm">(MP 5)</span>}
               </button>
             </div>
           </div>
