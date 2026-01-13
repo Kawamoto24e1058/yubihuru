@@ -50,58 +50,63 @@ function App() {
   const [opponentMaxHpExpand, setOpponentMaxHpExpand] = useState(false)
   const [showZoneTooltip, setShowZoneTooltip] = useState(false)
   
-  // バースト・ルーレット演出用
-  const [isRoulette, setIsRoulette] = useState(false)
-  const [rouletteFlash, setRouletteFlash] = useState(0) // 0: yellow, 1: pink, 2: cyan
+  // 技名表示用
   const [showImpact, setShowImpact] = useState(false)
   const [impactText, setImpactText] = useState('')
-  const [impactRotation, setImpactRotation] = useState(0)
   const [screenShake, setScreenShake] = useState(false)
-  const [particles, setParticles] = useState<Array<{id: number, x: number, y: number}>>([])
-  const [rouletteTexts, setRouletteTexts] = useState<string[]>([]) // ルーレット中に表示する技名リスト
-  const [rouletteIndex, setRouletteIndex] = useState(0) // 現在表示している技のインデックス
+  const [isUltraSkill, setIsUltraSkill] = useState(false) // 虹色演出用
 
-  // ルーレット進捗：高速スタート→段階的にスローダウン→停止
+  // 嫌がらせ演出用
+  const [opponentInkEffect, setOpponentInkEffect] = useState(false)
+  const [opponentShakeEffect, setOpponentShakeEffect] = useState(false)
+  const [inkSplashes, setInkSplashes] = useState<Array<{id: number, x: number, y: number, size: number}>>([])
+  const [specialVictoryText, setSpecialVictoryText] = useState<string | null>(null) // 'BAN' or '役満'
+
+  // フィニッシュ・インパクト演出用
+  const [finishImpact, setFinishImpact] = useState(false)
+  const [showFinishText, setShowFinishText] = useState(false)
+  const [hpParticles, setHpParticles] = useState<Array<{id: number, x: number, y: number}>>([])
+  const [victoryResult, setVictoryResult] = useState<'WINNER' | 'LOSER' | null>(null)
+
+  // 麻雀役システム用
+  const [doraSkill, setDoraSkill] = useState<string>('') // ドラ表示用
+  const [yakumanFreeze, setYakumanFreeze] = useState(false) // 役満フリーズ演出
+  const [isDoraTurn, setIsDoraTurn] = useState(false) // ドラが該当した時の金縁表示
+
+  // 相手のactiveEffectを監視
   useEffect(() => {
-    if (!isRoulette || rouletteTexts.length === 0) return
+    if (!opponentData?.state.activeEffect) return
     
-    let currentSpeed = 100 // 100ms: 高速
-    let timeElapsed = 0
-    let interval: ReturnType<typeof setTimeout> | null = null
-    
-    const updateRoulette = () => {
-      timeElapsed += currentSpeed
+    if (opponentData.state.activeEffect === 'ink') {
+      setOpponentInkEffect(true)
+      // ランダムなインクのしぶき生成（5〜10個）
+      const splashCount = Math.floor(Math.random() * 6) + 5
+      const newSplashes = Array.from({ length: splashCount }, (_, i) => ({
+        id: Date.now() + i,
+        x: Math.random() * 100, // 0-100%
+        y: Math.random() * 100,
+        size: Math.random() * 300 + 150 // 150-450px
+      }))
+      setInkSplashes(newSplashes)
       
-      // 時間経過によってスピードを調整
-      if (timeElapsed < 600) {
-        // 最初の0.6秒：高速（100ms）
-        currentSpeed = 100
-      } else if (timeElapsed < 1200) {
-        // 0.6〜1.2秒：中速（200ms）
-        currentSpeed = 200
-      } else if (timeElapsed < 1600) {
-        // 1.2〜1.6秒：低速（400ms）
-        currentSpeed = 400
-      } else {
-        // 1.6秒以降：停止
-        if (interval) clearInterval(interval)
-        return
-      }
+      // 効果期間終了時に消す
+      const duration = (opponentData.state.activeEffectTurns ?? 3) * 2000 + 1000
+      const timer = setTimeout(() => {
+        setOpponentInkEffect(false)
+        setInkSplashes([])
+      }, duration)
+      return () => clearTimeout(timer)
+    } else if (opponentData.state.activeEffect === 'shake') {
+      setOpponentShakeEffect(true)
       
-      setRouletteIndex(prev => (prev + 1) % rouletteTexts.length)
-      
-      // 次のインターバルをスケジュール
-      if (interval) clearInterval(interval)
-      interval = setTimeout(updateRoulette, currentSpeed)
+      // 効果期間終了時に消す
+      const duration = (opponentData.state.activeEffectTurns ?? 2) * 2000 + 1000
+      const timer = setTimeout(() => {
+        setOpponentShakeEffect(false)
+      }, duration)
+      return () => clearTimeout(timer)
     }
-    
-    // 最初のシャッフルを開始
-    interval = setTimeout(updateRoulette, currentSpeed)
-    
-    return () => {
-      if (interval) clearInterval(interval)
-    }
-  }, [isRoulette, rouletteTexts])
+  }, [opponentData?.state.activeEffect, opponentData?.state.activeEffectTurns])
 
   // HP減少時のshakeアニメーション
   useEffect(() => {
@@ -139,6 +144,13 @@ function App() {
       setShieldEffect(false)
       setLogs([])
       
+      // ドラをランダム選択（麻雀システム）
+      const allSkillNames = ['パンチ', 'キック', 'ヒール', '火炎弾', '氷結魔法', 'ポイズン', 'シールド', 
+        'MP吸収', 'HP吸収', 'ギガ・インパクト', '等価交換', '借金取り', '指が折れる', '飯テロ',
+        '断幺九', '清一色', '国士無双', '九蓮宝燈']
+      const randomDora = allSkillNames[Math.floor(Math.random() * allSkillNames.length)]
+      setDoraSkill(randomDora)
+      
       const mySocketId = newSocket.id || ''
       const me = data.player1.socketId === mySocketId ? data.player1 : data.player2
       const opponent = data.player1.socketId === mySocketId ? data.player2 : data.player1
@@ -155,51 +167,66 @@ function App() {
       console.log('Battle update:', data)
       setLogs(prev => [data.message, ...prev].slice(0, 10))
       
-      // ルーレット演出停止 + 決定演出（常に実行、isRouletteのstale closure回避）
-      setIsRoulette(prev => {
-        if (prev) {
-          // 技名を表示
-          const skillName = data.skillName || '技'
-          
-          setImpactText(skillName)
-          setImpactRotation(0)
-          setShowImpact(true)
-          
-          // パワー150以上で超必殺演出
-          if (data.skillPower && data.skillPower >= 150) {
-            setScreenShake(true)
-            // 白黒反転フラッシュ（グローバルフィルター追加）
-            const filterOverlay = document.createElement('div')
-            filterOverlay.style.cssText = `
-              position: fixed;
-              inset: 0;
-              background: white;
-              opacity: 0;
-              pointer-events: none;
-              z-index: 9999;
-              animation: inverseFlash 0.2s ease-out;
-            `
-            document.body.appendChild(filterOverlay)
-            setTimeout(() => filterOverlay.remove(), 200)
-            
-            // 虹色発光背景
-            setRouletteFlash(0) // ここで虹色を有効化
-            setTimeout(() => {
-              setScreenShake(false)
-            }, 200)
-            // 0.5秒表示維持してからダメージ処理に移行
-            setTimeout(() => {
-              setShowImpact(false)
-            }, 1700) // 1200msから1700msに延長（0.5秒追加）
-          } else {
-            // 通常技は0.5秒表示維持してから消える
-            setTimeout(() => {
-              setShowImpact(false)
-            }, 1300) // 800msから1300msに延長（0.5秒追加）
-          }
-        }
-        return false
-      })
+      // 役満フリーズ演出（国士無双・九蓮宝燈）
+      if (data.skillEffect === 'yakuman-freeze') {
+        setYakumanFreeze(true)
+        setTimeout(() => {
+          setYakumanFreeze(false)
+        }, 3000) // 3秒間のフリーズ
+      }
+      
+      // 特殊勝利を検知（出禁 or 数え役満）
+      if (data.message && data.message.includes('出禁')) {
+        setSpecialVictoryText('BAN')
+      } else if (data.message && data.message.includes('役満')) {
+        setSpecialVictoryText('役満')
+      }
+      
+      // 技名を即座に表示
+      const skillName = data.skillName || '技'
+      setImpactText(skillName)
+      setShowImpact(true)
+      
+      // ドラ該当時は金縁表示
+      if (doraSkill && skillName === doraSkill) {
+        setIsDoraTurn(true)
+        setTimeout(() => setIsDoraTurn(false), 1200)
+      }
+      
+      // パワー150以上で超必殺演出（虹色）
+      if (data.skillPower && data.skillPower >= 150) {
+        setIsUltraSkill(true)
+        setScreenShake(true)
+        
+        // 白黒反転フラッシュ
+        const filterOverlay = document.createElement('div')
+        filterOverlay.style.cssText = `
+          position: fixed;
+          inset: 0;
+          background: white;
+          opacity: 0;
+          pointer-events: none;
+          z-index: 9999;
+          animation: inverseFlash 0.2s ease-out;
+        `
+        document.body.appendChild(filterOverlay)
+        setTimeout(() => filterOverlay.remove(), 200)
+        
+        setTimeout(() => {
+          setScreenShake(false)
+        }, 200)
+        
+        // 1.2秒表示後に消える
+        setTimeout(() => {
+          setShowImpact(false)
+          setIsUltraSkill(false)
+        }, 1200)
+      } else {
+        // 通常技は0.8秒表示
+        setTimeout(() => {
+          setShowImpact(false)
+        }, 800)
+      }
       
       const mySocketId = newSocket.id || ''
       if (data.gameState) {
@@ -210,6 +237,37 @@ function App() {
         const newHp = me.state.hp
         const prevHpOpponent = opponentData?.state.hp ?? opponent.state.hp
         const newHpOpponent = opponent.state.hp
+
+        // 【フィニッシュ・インパクト】相手HP=0を検知
+        if (newHpOpponent <= 0 && prevHpOpponent > 0) {
+          // 1.5秒の溜め演出開始
+          setFinishImpact(true)
+          
+          // 0.5秒後に「ドゴォォォォン！！」表示
+          setTimeout(() => {
+            setShowFinishText(true)
+          }, 500)
+          
+          // 1.0秒後にHPバー粉砕パーティクル生成
+          setTimeout(() => {
+            const particles = Array.from({ length: 20 }, (_, i) => ({
+              id: i,
+              x: Math.random() * 100,
+              y: Math.random() * 100
+            }))
+            setHpParticles(particles)
+          }, 1000)
+          
+          // 1.5秒後に演出終了→HP反映→勝敗判定
+          setTimeout(() => {
+            setFinishImpact(false)
+            setShowFinishText(false)
+            setHpParticles([])
+            // 実際のHP反映はここでサーバーから来るgame_overを待つ
+          }, 1500)
+          
+          return // HP反映を遅延させるため、ここでreturn
+        }
 
         // ギガインパクト発動時は特大の揺れ演出（3回連続）
         if (data.message && data.message.includes('ギガインパクト')) {
@@ -246,19 +304,6 @@ function App() {
             setDamageFlash(true)
             setTimeout(() => setIsShaking(false), 500)
             setTimeout(() => setDamageFlash(false), 500)
-            
-            // パーティクル生成（5個）
-            const newParticles = Array.from({ length: 5 }, (_, i) => ({
-              id: Date.now() + i,
-              x: Math.random() * 100 - 50, // -50px ~ 50px
-              y: Math.random() * 100 - 50
-            }))
-            setParticles(prev => [...prev, ...newParticles])
-            
-            // 1秒後にパーティクル削除
-            setTimeout(() => {
-              setParticles(prev => prev.filter(p => !newParticles.find(np => np.id === p.id)))
-            }, 1000)
           }
         }
 
@@ -341,7 +386,19 @@ function App() {
       console.log('Game over:', data)
       setIsGameOver(true)
       setWinner(data.winner)
-      setLogs(prev => [`🏆 ${data.winner} の勝利！`, ...prev])
+      setLogs(prev => [`🏆 ${data.winner} の勝利！`, ...prev])      
+      // 勝敗結果を表示（2秒遅延で巨大テキスト表示）
+      setTimeout(() => {
+        const mySocketId = newSocket.id || ''
+        const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
+        setVictoryResult(me.username === data.winner ? 'WINNER' : 'LOSER')
+      }, 2000)      
+      // 勝敗結果を表示（2秒遅延で巨大テキスト表示）
+      setTimeout(() => {
+        const mySocketId = newSocket.id || ''
+        const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
+        setVictoryResult(me.username === data.winner ? 'WINNER' : 'LOSER')
+      }, 2000)
     })
 
     setSocket(newSocket)
@@ -363,28 +420,6 @@ function App() {
     if (socket && gameStarted && mySocketId === currentTurnId && !isProcessing) {
       socket.emit('action_use_skill')
       setIsProcessing(true)
-      
-      // ルーレット演出開始
-      // ダミーのスキル名リスト（実際にはサーバーからランダムに選ばれた技が決定されるまで回す）
-      const dummySkills = [
-        '通常攻撃',
-        '高速斬撃',
-        'ハンマー落とし',
-        'ファイアボール',
-        '氷結呪法',
-        '稲妻撃ち',
-        'スペシャルサンダー',
-        'グレートハンマー',
-        'インファーノ',
-        '超冷凍',
-        'ギガインパクト',
-        'ドラゴンロア'
-      ]
-      
-      setRouletteTexts(dummySkills)
-      setRouletteIndex(0)
-      setIsRoulette(true)
-      setRouletteFlash(0)
     }
   }
 
@@ -446,7 +481,8 @@ function App() {
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
               backgroundClip: 'text',
-              fontWeight: 'bold'
+              WebkitTextStroke: '3px black',
+              fontWeight: 900
             }}>
               {skillName}
             </span>
@@ -556,53 +592,139 @@ function App() {
     const myZoneBorder = zoneBorderMap[myData.state.activeZone.type] || 'border-black'
 
     return (
-      <div className={`min-h-screen bg-yellow-50 p-4 transition-transform relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''}`}>
-        {/* ルーレットフラッシュ（背景） */}
-        {isRoulette && (
-          <div className={`pointer-events-none absolute inset-0 transition-all duration-50 ${
-            rouletteFlash === 0 ? 'bg-yellow-400/60' :
-            rouletteFlash === 1 ? 'bg-pink-400/60' :
-            'bg-cyan-400/60'
-          }`} />
+      <div className={`min-h-screen bg-yellow-50 p-4 transition-transform relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${opponentShakeEffect ? 'animate-window-shake' : ''} ${finishImpact ? 'filter grayscale animate-slow-motion' : ''}`}>
+        {/* フィニッシュ・インパクト演出 */}
+        {finishImpact && (
+          <div className="pointer-events-none absolute inset-0 z-[60] flex items-center justify-center">
+            {showFinishText && (
+              <p 
+                className="text-[180px] font-black select-none animate-finish-impact"
+                style={{
+                  WebkitTextStroke: '4px black',
+                  fontWeight: 900,
+                  color: '#FF0000',
+                  textShadow: '0 0 40px rgba(255, 0, 0, 0.8)'
+                }}
+              >
+                ドゴォォォォン！！
+              </p>
+            )}
+          </div>
         )}
-        {/* ルーレット中のシャッフル表示 */}
-        {isRoulette && rouletteTexts.length > 0 && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-40">
+        
+        {/* HPバー粉砕パーティクル */}
+        {hpParticles.length > 0 && (
+          <div className="pointer-events-none absolute inset-0 z-[55]">
+            {hpParticles.map(particle => (
+              <div
+                key={particle.id}
+                className="absolute w-4 h-4 bg-red-500 rounded-sm animate-particle-explode"
+                style={{
+                  left: `${particle.x}%`,
+                  top: `${particle.y}%`,
+                  animationDelay: `${Math.random() * 0.2}s`
+                }}
+              />
+            ))}
+          </div>
+        )}
+        
+        {/* 勝敗結果表示 */}
+        {victoryResult && (
+          <div className="pointer-events-none absolute inset-0 z-[70] flex items-center justify-center bg-black/30">
             <p 
-              className="text-[180px] font-black text-yellow-300 tracking-tighter leading-none select-none"
+              className="text-[250px] font-black select-none animate-victory-slam scale-150"
               style={{
-                textShadow: 
-                  '-3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000, 3px 3px 0 #000, ' +
-                  '-2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000',
+                WebkitTextStroke: '6px black',
+                fontWeight: 900,
+                color: victoryResult === 'WINNER' ? '#FFD700' : '#888888'
               }}
             >
-              {rouletteTexts[rouletteIndex]}
+              {victoryResult}
             </p>
           </div>
         )}
-        {/* 決定時のインパクト表示 */}
-        {showImpact && !isRoulette && (
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-50">
-            {/* 衝撃波リング */}
-            <div 
-              className="absolute border-4 border-white rounded-full animate-impact-wave"
+        
+        {/* 役満フリーズ演出 */}
+        {yakumanFreeze && (
+          <div className="pointer-events-none absolute inset-0 z-[80] flex items-center justify-center bg-black/60">
+            <p 
+              className="text-[300px] font-black select-none animate-yakuman-pulse"
               style={{
-                left: '50%',
-                top: '50%',
-                transform: 'translate(-50%, -50%)',
-                boxShadow: '0 0 30px rgba(255, 255, 255, 0.8)'
+                WebkitTextStroke: '6px black',
+                fontWeight: 900,
+                color: '#FFD700'
               }}
-            />
+            >
+              役満
+            </p>
+          </div>
+        )}
+        
+        {/* ドラ表示（右上） */}
+        {doraSkill && gameStarted && !isGameOver && (
+          <div className="absolute top-4 right-4 z-30">
+            <p 
+              className={`text-2xl font-black ${isDoraTurn ? 'animate-dora-glow' : ''}`}
+              style={{
+                WebkitTextStroke: isDoraTurn ? '3px gold' : '3px black',
+                fontWeight: 900,
+                color: isDoraTurn ? '#FFD700' : '#FFFFFF'
+              }}
+            >
+              ドラ：{doraSkill}
+            </p>
+          </div>
+        )}
+        
+        {/* 相手のインクこぼし演出 */}
+        {opponentInkEffect && (
+          <div className="pointer-events-none absolute inset-0 z-40">
+            {inkSplashes.map(splash => (
+              <div
+                key={splash.id}
+                className="absolute rounded-full opacity-80 mix-blend-multiply"
+                style={{
+                  left: `${splash.x}%`,
+                  top: `${splash.y}%`,
+                  width: `${splash.size}px`,
+                  height: `${splash.size}px`,
+                  backgroundColor: '#000',
+                  filter: 'blur(30px)',
+                  transform: 'translate(-50%, -50%)',
+                  animation: 'ink-fade 2s ease-out forwards'
+                }}
+              />
+            ))}
+          </div>
+        )}
+        
+        {/* 特殊勝利の演出 */}
+        {specialVictoryText && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-50 animate-pulse">
+            <p 
+              className="text-[200px] font-black select-none"
+              style={{
+                color: specialVictoryText === 'BAN' ? '#FF0000' : '#FFD700',
+                WebkitTextStroke: '3px black',
+                fontWeight: 900,
+                animation: 'victory-bounce 0.5s ease-out'
+              }}
+            >
+              {specialVictoryText}
+            </p>
+          </div>
+        )}
+        
+        {/* 技名表示 */}
+        {showImpact && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-50">
             {/* 技名テキスト */}
             <p 
-              className="text-[120px] font-black text-white tracking-tighter leading-none select-none relative"
+              className={`text-[120px] font-black tracking-tighter leading-none select-none ${isUltraSkill ? 'animate-rainbow-glow' : 'text-white'}`}
               style={{
-                transform: `rotate(${impactRotation}deg)`,
-                textShadow: 
-                  '-3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000, 3px 3px 0 #000, ' +
-                  '-2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000',
-                WebkitTextStroke: '4px black',
-                filter: 'drop-shadow(0 0 20px #ffff00) drop-shadow(0 0 40px #ff00ff)'
+                WebkitTextStroke: '3px black',
+                fontWeight: 900
               }}
             >
               {impactText}
@@ -680,18 +802,6 @@ function App() {
 
             {/* 自分 */}
             <div className="space-y-2 relative">
-              {/* パーティクルエフェクト */}
-              {particles.map(particle => (
-                <div
-                  key={particle.id}
-                  className="absolute w-2 h-2 bg-red-600 rounded-full animate-ping pointer-events-none"
-                  style={{
-                    left: `50%`,
-                    top: `30%`,
-                    transform: `translate(${particle.x}px, ${particle.y}px)`
-                  }}
-                />
-              ))}
               <div className={`bg-white border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 transition-all ${
                 `${myZoneBorder} ${isMyTurn ? 'animate-pulse' : ''}`
               } ${isShaking ? 'animate-shake' : ''}`}>

@@ -146,6 +146,30 @@ export const SKILLS = [
     { id: 117, name: '超高速謝罪', type: 'special', power: 1, description: '光の速さで謝罪したが効果はほぼない', effect: 'none' },
     { id: 118, name: '遺憾の意', type: 'buff', power: 0, description: '遺憾の意を表明したが戦況は変わらない', effect: 'none' },
     // ============================================
+    // 【逆転の目】起死回生
+    // ============================================
+    { id: 119, name: '起死回生', type: 'attack', power: 0, description: 'HPが減っているほど威力UP（最大HP - 現在HP）* 0.5', effect: 'comeback', dynamicPower: true },
+    // ============================================
+    // 【特殊勝利】出禁・メタ要素
+    // ============================================
+    { id: 120, name: '出禁', type: 'special', power: 9999, description: '相手を強制的に場外へ！超レア技（0.5%）', effect: 'instant_win' },
+    { id: 121, name: 'インクこぼし', type: 'special', power: 0, description: '相手の画面を暗くする（3ターン）', effect: 'ink_effect' },
+    { id: 122, name: 'ウィンドウ・シェイク', type: 'special', power: 0, description: 'ウィンドウを揺らす（2ターン）', effect: 'shake_effect' },
+    // ============================================
+    // 追加仕様：等価交換・借金取り・指が折れる・飯テロ
+    // ============================================
+    { id: 123, name: '等価交換', type: 'special', power: 0, description: '禁忌の術！体力が入れ替わる', effect: 'hp_swap' },
+    { id: 124, name: '借金取り', type: 'special', power: 0, description: '相手のMPを取り立てる（-2/自分+2）', effect: 'mp_steal_2' },
+    { id: 125, name: '指が折れる', type: 'special', power: 0, description: '3ターン行動不能', effect: 'broken_finger' },
+    { id: 126, name: '飯テロ', type: 'special', power: 0, description: '飯テロ演出を発動', effect: 'food_terror' },
+    // ============================================
+    // 麻雀役必殺技システム
+    // ============================================
+    { id: 127, name: '断幺九（タンヤオ）', type: 'attack', power: 40, description: '中張牌のみで構成された役', effect: 'none' },
+    { id: 128, name: '清一色（チンイツ）', type: 'attack', power: 120, description: '一色のみで構成された役満級の大技', effect: 'none' },
+    { id: 129, name: '国士無双', type: 'special', power: 400, description: '13種の幺九牌を揃えた役満', effect: 'yakuman' },
+    { id: 130, name: '九蓮宝燈', type: 'special', power: 999, description: '幻の役満！一撃必殺', effect: 'chuuren' },
+    // ============================================
     // 博打のゾーン限定技（通常リストには含めない）
     // ============================================
     { id: 200, name: 'ギガインパクト(超必殺)', type: 'special', power: 200, description: '威力200の超必殺技', effect: 'hit_rate', hitRate: 0.5 },

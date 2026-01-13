@@ -83,6 +83,9 @@ export interface PlayerState {
     } | null;
   };
   isRiichi: boolean; // 立直状態（一撃必殺準備完了）
+  activeEffect?: 'ink' | 'shake' | 'none'; // メタ要素：インクこぼし、ウィンドウシェイク
+  activeEffectTurns?: number; // アクティブ効果の残りターン数
+  riichiBombCount?: number; // 数え役満カウント用
 }
 
 /**

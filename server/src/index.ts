@@ -69,26 +69,74 @@ function createPlayerState(): PlayerState {
       mpRegenBonus: null,
     },
     isRiichi: false,
+    activeEffect: 'none',
+    activeEffectTurns: 0,
+    riichiBombCount: 0,
+    isBroken: false,
+    brokenTurns: 0,
   };
 }
 
 // Helper: weighted random pick according to zone rules
-function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean = false): Skill {
+function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean = false, attackerHp: number = 500, maxHp: number = 500): Skill {
   // 博打のゾーン判定を最初に実行
   if (activeZone.type === '博打のゾーン') {
     const random = Math.random();
     const gigaImpact = SKILLS.find(skill => skill.id === 200); // ギガインパクト
     const doNothing = SKILLS.find(skill => skill.id === 201); // 何もしない
     
-    if (random < 0.5) {
-      // 50%の確率で超必殺技
-      console.log('🎰 博打判定：成功（ギガインパクト発動）');
+    if (random < 0.3) {
+      // 30%の確率でギガインパクト
+      console.log('🎰 博打判定：成功（ギガインパクト発動 / 30%）');
       return gigaImpact!;
     } else {
-      // 50%の確率で何もしない
-      console.log('🎰 博打判定：失敗（運命に見放された）');
+      // 70%の確率でスカ（何も起きない）
+      console.log('🎰 博打判定：失敗（スカ / 70%：何も起きない）');
       return doNothing!;
     }
+  }
+
+  // 【逆転の目】HP25%以下で起死回生の出現率UP
+  const currentHpPercent = attackerHp / maxHp;
+  if (currentHpPercent <= 0.25) {
+    const comebackChance = Math.random();
+    if (comebackChance < 0.4) { // 40%の確率で起死回生
+      const comeback = SKILLS.find(skill => skill.id === 119);
+      console.log('🔄 HP危機的！起死回生が出現！');
+      return comeback!;
+    }
+  }
+
+  // 【特殊勝利】出禁の超レア抽選（0.5%）
+  const rareLuck = Math.random();
+  if (rareLuck < 0.005) { // 0.5%
+    const kinshi = SKILLS.find(skill => skill.id === 120);
+    console.log('⛔ 出禁が発動！相手を場外へ！');
+    return kinshi!;
+  }
+
+  // 【麻雀役満】九蓮宝燈の超超超レア抽選（0.1%）
+  const chuurenLuck = Math.random();
+  if (chuurenLuck < 0.001) { // 0.1%
+    const chuuren = SKILLS.find(skill => skill.id === 130);
+    console.log('🀄✨ 幻の役満！九蓮宝燈が出現！');
+    return chuuren!;
+  }
+
+  // 【麻雀役満】国士無双のレア抽選（1%）
+  const kokushiLuck = Math.random();
+  if (kokushiLuck < 0.01) { // 1%
+    const kokushi = SKILLS.find(skill => skill.id === 129);
+    console.log('🀄 役満！国士無双が出現！');
+    return kokushi!;
+  }
+
+  // 【麻雀役】清一色の低確率抽選（3%）
+  const chinItsuLuck = Math.random();
+  if (chinItsuLuck < 0.03) { // 3%
+    const chinItsu = SKILLS.find(skill => skill.id === 128);
+    console.log('🀄 清一色が出現！');
+    return chinItsu!;
   }
 
   // 通常技リスト（ギガインパクトと何もしないを除外 - id 200, 201）
@@ -153,6 +201,7 @@ function applySkillEffect(
   isMultiHit?: boolean;
   isProtected?: boolean;
   skillType?: string;
+  skillEffect?: string;
 } {
   let isPoisonApplied = false;
   let isMultiHit = false;
@@ -160,6 +209,7 @@ function applySkillEffect(
   let damage = 0;
   let healing = 0;
   const logs: string[] = [];
+  let resultSkillEffect: string | undefined;
 
   // ダメージ乱数（0.9倍～1.1倍）
   const damageVariance = () => {
@@ -322,8 +372,84 @@ function applySkillEffect(
     }
 
     case 'special': {
+      // 【逆転の目】起死回生
+      if (skill.effect === 'comeback') {
+        // 威力 = (最大HP - 現在HP) * 0.5
+        const hpDeficit = attacker.state.maxHp - attacker.state.hp;
+        damage = Math.floor(hpDeficit * 0.5);
+        defender.state.hp = Math.max(0, defender.state.hp - damage);
+        logs.push(`🔄 ${attacker.username}の${skill.name}！！！`);
+        logs.push(`💫 絶望から蘇る... ${defender.username}に${damage}ダメージ！`);
+      }
+      // 【特殊勝利】出禁 - 即座に勝利判定
+      else if (skill.effect === 'instant_win') {
+        logs.push(`⛔ ${attacker.username}の${skill.name}！！！！！`);
+        logs.push(`🚪 相手を強制的に場外へ！`);
+        logs.push(`🏆 ${attacker.username}の勝利！`);
+        defender.state.hp = 0; // 強制的にHP0にして勝利判定
+      }
+      // 【メタ要素】インクこぼし
+      else if (skill.effect === 'ink_effect') {
+        defender.state.activeEffect = 'ink';
+        defender.state.activeEffectTurns = 3;
+        logs.push(`🖤 ${attacker.username}の${skill.name}！`);
+        logs.push(`🌑 ${defender.username}の画面がインク塗れに！（3ターン継続）`);
+      }
+      // 【メタ要素】ウィンドウ・シェイク
+      else if (skill.effect === 'shake_effect') {
+        defender.state.activeEffect = 'shake';
+        defender.state.activeEffectTurns = 2;
+        logs.push(`📳 ${attacker.username}の${skill.name}！`);
+        logs.push(`💫 ${defender.username}のウィンドウが揺れる！（2ターン継続）`);
+      }
+      // 【禁術】等価交換：HPを入れ替える
+      else if (skill.effect === 'hp_swap') {
+        const aHp = attacker.state.hp;
+        const dHp = defender.state.hp;
+        attacker.state.hp = dHp;
+        defender.state.hp = aHp;
+        logs.push(`🧪 ${attacker.username}の${skill.name}！`);
+        logs.push(`⚠️ 禁忌の術！お互いの体力が入れ替わった！`);
+      }
+      // 【MP取り立て】借金取り：相手MP-2/自分+2（下限0/上限5）
+      else if (skill.effect === 'mp_steal_2') {
+        const stolen = Math.min(2, defender.state.mp);
+        defender.state.mp = Math.max(0, defender.state.mp - 2);
+        attacker.state.mp = Math.min(5, attacker.state.mp + 2);
+        logs.push(`💰 ${attacker.username}の${skill.name}！`);
+        logs.push(`🧾 ${defender.username}からMP${stolen}を取り立てた！`);
+      }
+      // 【状態付与】指が折れる：3ターン行動不能
+      else if (skill.effect === 'broken_finger') {
+        attacker.state.isBroken = true;
+        attacker.state.brokenTurns = 3;
+        logs.push(`🦴 ${attacker.username}の${skill.name}！指が折れてしまった！`);
+        logs.push(`⏱️ 3ターンの間、行動不能になる！`);
+      }
+      // 【演出】飯テロ：クライアントへ skillEffect を通知
+      else if (skill.effect === 'food_terror') {
+        logs.push(`🍱 ${attacker.username}の${skill.name}！`);
+        logs.push(`🤤 飯テロ発動！`);
+        resultSkillEffect = 'food-terror';
+      }
+      // 【麻雀役満】九蓮宝燈：一撃必殺
+      else if (skill.effect === 'chuuren') {
+        logs.push(`🀄✨ ${attacker.username}の${skill.name}！！！！！`);
+        logs.push(`🌟 幻の役満！九蓮宝燈！！！`);
+        logs.push(`🏆 一撃必殺！${attacker.username}の勝利！`);
+        defender.state.hp = 0; // 強制的にHP0
+        resultSkillEffect = 'yakuman-freeze';
+      }
+      // 【麻雀役満】国士無双：高威力攻撃
+      else if (skill.effect === 'yakuman') {
+        damage = skill.power;
+        defender.state.hp = Math.max(0, defender.state.hp - damage);
+        logs.push(`🀄💥 ${attacker.username}の${skill.name}！！！！`);
+        logs.push(`⚡ 役満炸裂！ ${defender.username}に${damage}ダメージ！！`);
+        resultSkillEffect = 'yakuman-freeze';
+      }
       // 立直攻撃（ロン/ツモ）の処理
-      if (skill.effect === 'riichi_attack') {
+      else if (skill.effect === 'riichi_attack') {
         damage = skill.power;
         defender.state.hp = Math.max(0, defender.state.hp - damage);
         logs.push(`🀄💥 ${attacker.username}の${skill.name}！！！`);
@@ -334,8 +460,8 @@ function applySkillEffect(
       }
       // 「何もしない」技の特別処理
       else if (skill.id === 201) {
-        logs.push(`💫 ${attacker.username}は指を振った...が何も起こらなかった！`);
-        logs.push(`😱 運命に見放された...！`);
+        // 博打ゾーンのスカ（何も起きない）時の明確なログ
+        logs.push(`💫 運が悪すぎる！何も起きなかった！`);
       }
       // ネタ技の処理
       else if (skill.id === 114) {
@@ -363,6 +489,7 @@ function applySkillEffect(
     isMultiHit,
     isProtected,
     skillType: skill.type,
+    skillEffect: resultSkillEffect,
   };
 }
 
@@ -617,12 +744,130 @@ io.on('connection', (socket) => {
       }
     }
 
+    // 【指が折れる】行動不能チェック（威力0としてターン消費）
+    if (attacker.state.isBroken && attacker.state.brokenTurns && attacker.state.brokenTurns > 0) {
+      const messageParts: string[] = [];
+      messageParts.push(`🦴 ${attacker.username}は指が折れている！このターンは行動不能！`);
+
+      // 行動不能ターンを進める
+      attacker.state.brokenTurns--;
+      if (attacker.state.brokenTurns === 0) {
+        attacker.state.isBroken = false;
+        messageParts.push(`🦴 ${attacker.username}の指が回復した！`);
+      }
+
+      // MP回復（乱舞ゾーン中は0、ボーナス適用）
+      let regenAmount = attacker.state.activeZone.type === '乱舞のゾーン' ? 0 : 1;
+      if (attacker.state.status.mpRegenBonus) {
+        regenAmount += attacker.state.status.mpRegenBonus.amount;
+        attacker.state.status.mpRegenBonus.turns -= 1;
+        if (attacker.state.status.mpRegenBonus.turns <= 0) {
+          attacker.state.status.mpRegenBonus = null;
+        }
+      }
+      if (regenAmount > 0) {
+        attacker.state.mp = Math.min(5, attacker.state.mp + regenAmount);
+      }
+
+      // ゾーン残りターンを進める（ターンは経過する）
+      if (attacker.state.activeZone.remainingTurns > 0) {
+        attacker.state.activeZone.remainingTurns--;
+        if (attacker.state.activeZone.remainingTurns === 0) {
+          attacker.state.activeZone.type = 'none';
+          io.to(currentRoomId).emit('zone_expired', {
+            username: attacker.username,
+            socketId: attacker.socketId,
+          });
+        }
+      }
+
+      // メタ演出の残りターンも進める
+      if (attacker.state.activeEffectTurns && attacker.state.activeEffectTurns > 0) {
+        attacker.state.activeEffectTurns--;
+        if (attacker.state.activeEffectTurns === 0) attacker.state.activeEffect = 'none';
+      }
+      if (defender.state.activeEffectTurns && defender.state.activeEffectTurns > 0) {
+        defender.state.activeEffectTurns--;
+        if (defender.state.activeEffectTurns === 0) defender.state.activeEffect = 'none';
+      }
+
+      // ターンカウントと交代
+      currentGame.currentTurn++;
+      const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId 
+        ? currentGame.player2 
+        : currentGame.player1;
+      currentGame.currentTurnPlayerId = nextPlayer.socketId;
+
+      // 行動不能の battle_update を送信
+      const battleUpdate = {
+        turn: currentGame.currentTurn,
+        attacker: { username: attacker.username, socketId: attacker.socketId, state: attacker.state },
+        defender: { username: defender.username, socketId: defender.socketId, state: defender.state },
+        skillName: '行動不能',
+        skillPower: 0,
+        damage: 0,
+        healing: 0,
+        message: messageParts.join('\n'),
+        gameState: currentGame,
+      };
+      io.to(currentRoomId).emit('battle_update', battleUpdate);
+
+      io.to(currentRoomId).emit('turn_change', {
+        currentTurnPlayerId: currentGame.currentTurnPlayerId,
+        currentTurnPlayerName: nextPlayer.username,
+      });
+
+      return;
+    }
+
     // Get random skill from SKILLS array with zone effects and riichi state
-    const selectedSkill = getRandomSkill(attacker.state.activeZone, attacker.state.isRiichi);
+    const selectedSkill = getRandomSkill(attacker.state.activeZone, attacker.state.isRiichi, attacker.state.hp, attacker.state.maxHp);
     console.log(`🎲 Random skill selected: ${selectedSkill.name} (${selectedSkill.type})`);
     console.log(`   Current zone: ${attacker.state.activeZone.type} (${attacker.state.activeZone.remainingTurns} turns remaining)`);
     if (attacker.state.isRiichi) {
       console.log(`   🀄 立直状態: ${attacker.username}`);
+    }
+
+    // 【特殊勝利】数え役満：立直状態でパンチ系技を3回連続成功
+    const punchSkills = ['パンチ', 'ストレート', 'ジャブ', 'アッパーカット', 'フック', 'ボディブロー', 'ダッシュパンチ'];
+    const isPunch = punchSkills.includes(selectedSkill.name);
+    
+    if (attacker.state.isRiichi && isPunch) {
+      if (!attacker.state.riichiBombCount) {
+        attacker.state.riichiBombCount = 0;
+      }
+      attacker.state.riichiBombCount++;
+      console.log(`🀄 パンチ連続カウント: ${attacker.state.riichiBombCount}/3`);
+      
+      if (attacker.state.riichiBombCount >= 3) {
+        // 数え役満成立！即勝利
+        currentGame.isGameOver = true;
+        currentGame.winner = attacker.username;
+        
+        console.log(`🏆 数え役満成立！${attacker.username}の勝利！`);
+        
+        io.to(currentRoomId).emit('battle_update', {
+          turn: currentGame.currentTurn,
+          skillName: selectedSkill.name,
+          skillPower: selectedSkill.power,
+          message: `🀄💥 ${attacker.username}は立直からのパンチ技を3回連続！\n\n🏆 数え役満成立！${attacker.username}の勝利！`,
+          gameState: currentGame,
+        });
+        
+        io.to(currentRoomId).emit('game_over', {
+          winner: attacker.username,
+          gameState: currentGame,
+        });
+        
+        activeGames.delete(currentRoomId);
+        return;
+      }
+    } else {
+      // パンチ以外の技が出たらカウントリセット
+      if (attacker.state.riichiBombCount && attacker.state.riichiBombCount > 0) {
+        console.log(`🀄 パンチ連続カウント: リセット`);
+        attacker.state.riichiBombCount = 0;
+      }
     }
 
     // ゾーン効果によるログメッセージ生成
@@ -691,6 +936,31 @@ io.on('connection', (socket) => {
       }
     }
 
+    // Send battle_update event to both players
+    const battleUpdate = {
+      turn: currentGame.currentTurn,
+      attacker: {
+        username: attacker.username,
+        socketId: attacker.socketId,
+        state: attacker.state,
+      },
+      defender: {
+        username: defender.username,
+        socketId: defender.socketId,
+        state: defender.state,
+      },
+      skill: selectedSkill,
+      skillName: selectedSkill.name,
+      skillPower: selectedSkill.power,
+      damage: result.damage,
+      healing: result.healing,
+      message: result.message,
+      skillEffect: result.skillEffect,
+      gameState: currentGame,
+    };
+
+    io.to(currentRoomId).emit('battle_update', battleUpdate);
+
     // Check for game over (only while battle is active and after HP updates)
     if (!currentGame.isGameOver && defender.state.hp <= 0) {
       currentGame.isGameOver = true;
@@ -733,29 +1003,19 @@ io.on('connection', (socket) => {
       : currentGame.player1;
     currentGame.currentTurnPlayerId = nextPlayer.socketId;
 
-    // Send battle_update event to both players
-    const battleUpdate = {
-      turn: currentGame.currentTurn,
-      attacker: {
-        username: attacker.username,
-        socketId: attacker.socketId,
-        state: attacker.state,
-      },
-      defender: {
-        username: defender.username,
-        socketId: defender.socketId,
-        state: defender.state,
-      },
-      skill: selectedSkill,
-      skillName: selectedSkill.name,
-      skillPower: selectedSkill.power,
-      damage: result.damage,
-      healing: result.healing,
-      message: result.message,
-      gameState: currentGame,
-    };
-
-    io.to(currentRoomId).emit('battle_update', battleUpdate);
+    // 【メタ要素】activeEffectの期間を減らす
+    if (attacker.state.activeEffectTurns && attacker.state.activeEffectTurns > 0) {
+      attacker.state.activeEffectTurns--;
+      if (attacker.state.activeEffectTurns === 0) {
+        attacker.state.activeEffect = 'none';
+      }
+    }
+    if (defender.state.activeEffectTurns && defender.state.activeEffectTurns > 0) {
+      defender.state.activeEffectTurns--;
+      if (defender.state.activeEffectTurns === 0) {
+        defender.state.activeEffect = 'none';
+      }
+    }
 
     // ターン変更を通知
     io.to(currentRoomId).emit('turn_change', {

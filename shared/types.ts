@@ -70,6 +70,14 @@ export interface PlayerState {
     type: 'attack' | 'heal' | 'chaos' | 'none';
     remainingTurns: number;
   };
+  status: {
+    poison: number | null; // 毒のターン数
+    mpRegenBonus: number | null; // MP回復ボーナス
+  };
+  isRiichi: boolean; // 立直状態
+  activeEffect?: 'ink' | 'shake' | 'none'; // メタ要素
+  activeEffectTurns?: number; // 効果の残りターン数
+  riichiBombCount?: number; // 立直時の連続パンチカウント
 }
 
 /**

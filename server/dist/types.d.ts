@@ -29,13 +29,14 @@ export interface Skill {
     type: 'attack' | 'heal' | 'buff' | 'special';
     power: number;
     description: string;
-    effect?: 'none' | 'recoil' | 'lifesteal' | 'mp_regen_boost' | 'poison' | 'multi_hit' | 'self_damage' | 'drain' | 'charge' | 'protect' | 'hit_rate' | 'max_hp_boost' | 'max_hp_boost_with_heal' | 'max_hp_boost_with_damage' | 'riichi' | 'riichi_attack';
+    effect?: 'none' | 'recoil' | 'lifesteal' | 'mp_regen_boost' | 'poison' | 'multi_hit' | 'self_damage' | 'drain' | 'charge' | 'protect' | 'hit_rate' | 'max_hp_boost' | 'max_hp_boost_with_heal' | 'max_hp_boost_with_damage' | 'riichi' | 'riichi_attack' | 'comeback' | 'instant_win' | 'ink_effect' | 'shake_effect' | 'hp_swap' | 'mp_steal_2' | 'broken_finger' | 'food_terror' | 'yakuman' | 'chuuren';
     recoilRatio?: number;
     lifestealRatio?: number;
     mpRegenBonus?: number;
     mpRegenDuration?: number;
     poisonDamage?: number;
     poisonDuration?: number;
+    dynamicPower?: boolean;
     hitRate?: number;
     multiHitChance?: number;
     selfDamageRatio?: number;
@@ -90,6 +91,11 @@ export interface PlayerState {
         } | null;
     };
     isRiichi: boolean;
+    activeEffect?: 'ink' | 'shake' | 'none';
+    activeEffectTurns?: number;
+    riichiBombCount?: number;
+    isBroken?: boolean;
+    brokenTurns?: number;
 }
 /**
  * Game State interface

@@ -31,13 +31,14 @@ export interface Skill {
   type: 'attack' | 'heal' | 'buff' | 'special';
   power: number; // ダメージ量、回復量、またはバフの場合は0
   description: string;
-  effect?: 'none' | 'recoil' | 'lifesteal' | 'mp_regen_boost' | 'poison' | 'multi_hit' | 'self_damage' | 'drain' | 'charge' | 'protect' | 'hit_rate' | 'max_hp_boost' | 'max_hp_boost_with_heal' | 'max_hp_boost_with_damage' | 'riichi' | 'riichi_attack';
+  effect?: 'none' | 'recoil' | 'lifesteal' | 'mp_regen_boost' | 'poison' | 'multi_hit' | 'self_damage' | 'drain' | 'charge' | 'protect' | 'hit_rate' | 'max_hp_boost' | 'max_hp_boost_with_heal' | 'max_hp_boost_with_damage' | 'riichi' | 'riichi_attack' | 'comeback' | 'instant_win' | 'ink_effect' | 'shake_effect' | 'hp_swap' | 'mp_steal_2' | 'broken_finger' | 'food_terror' | 'yakuman' | 'chuuren';
   recoilRatio?: number; // 自傷割合（例: 0.25なら25%）
   lifestealRatio?: number; // 与ダメージに対する回復割合
   mpRegenBonus?: number; // 追加MP回復量
   mpRegenDuration?: number; // 追加MP回復の継続ターン
   poisonDamage?: number; // どくダメージ/ターン
   poisonDuration?: number; // どくの継続ターン
+  dynamicPower?: boolean; // 動的ダメージ計算フラグ
   hitRate?: number; // 命中率（0-1, 例: 0.5なら50%）
   multiHitChance?: number; // 追加攻撃確率（ひっかく用）
   selfDamageRatio?: number; // 自分が受けるダメージ割合（捨て身タックル用）
@@ -95,6 +96,11 @@ export interface PlayerState {
     } | null;
   };
   isRiichi: boolean; // 立直状態（一撃必殺準備完了）
+  activeEffect?: 'ink' | 'shake' | 'none'; // メタ要素
+  activeEffectTurns?: number; // 効果の残りターン数
+  riichiBombCount?: number; // 立直時の連続パンチカウント
+  isBroken?: boolean; // 指が折れている状態
+  brokenTurns?: number; // 行動不能の残りターン数
 }
 
 /**

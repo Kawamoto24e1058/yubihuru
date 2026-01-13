@@ -5,6 +5,7 @@
   "main": "types.ts",
   "types": "types.ts",
   "scripts": {
+    "build": "echo 'Shared types package - no build needed'",
     "test": "echo \"No tests yet\""
   },
   "keywords": ["types", "shared"],
