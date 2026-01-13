@@ -49,6 +49,15 @@ function App() {
   const [myMaxHpExpand, setMyMaxHpExpand] = useState(false)
   const [opponentMaxHpExpand, setOpponentMaxHpExpand] = useState(false)
 
+  // HP減少時のshakeアニメーション
+  useEffect(() => {
+    if (myData && myData.state.hp > 0) {
+      setIsShaking(true)
+      const timer = setTimeout(() => setIsShaking(false), 500)
+      return () => clearTimeout(timer)
+    }
+  }, [myData?.state.hp])
+
   useEffect(() => {
     const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
     const newSocket = io(socketUrl)
@@ -338,10 +347,6 @@ function App() {
     const myMpPercent = (myData.state.mp / 5) * 100
     const opponentHpPercent = (opponentData.state.hp / opponentData.state.maxHp) * 100
     const opponentMpPercent = (opponentData.state.mp / 5) * 100
-    
-    // HPバーの幅を最大HP（1000）に対する比率で計算
-    const myBarWidth = (myData.state.maxHp / 1000) * 100
-    const opponentBarWidth = (opponentData.state.maxHp / 1000) * 100
 
     const zoneBorderMap: Record<string, string> = {
       '強攻のゾーン': 'border-red-500',
@@ -396,9 +401,9 @@ function App() {
                       <span>HP</span>
                       <span>{opponentData.state.hp}/{opponentData.state.maxHp}</span>
                     </div>
-                    <div className={`h-4 border-2 border-black bg-gray-200 transition-all duration-300 ${opponentMaxHpExpand ? 'animate-expand-bar' : ''}`} style={{ width: `${opponentBarWidth}%` }}>
+                    <div className={`h-4 border-2 border-black bg-gray-200 ${opponentMaxHpExpand ? 'animate-expand-bar' : ''}`}>
                       <div 
-                        className="h-full bg-lime-400 transition-all duration-300"
+                        className="h-full bg-lime-400 transition-all duration-500"
                         style={{ width: `${opponentHpPercent}%` }}
                       />
                     </div>
@@ -443,9 +448,9 @@ function App() {
                       <span>HP</span>
                       <span>{myData.state.hp}/{myData.state.maxHp}</span>
                     </div>
-                    <div className={`h-4 border-2 border-black bg-gray-200 transition-all duration-300 ${myMaxHpExpand ? 'animate-expand-bar' : ''}`} style={{ width: `${myBarWidth}%` }}>
+                    <div className={`h-4 border-2 border-black bg-gray-200 ${myMaxHpExpand ? 'animate-expand-bar' : ''}`}>
                       <div 
-                        className={`h-full transition-all duration-300 ${healFlash ? 'animate-flash bg-white' : 'bg-lime-400'}`}
+                        className={`h-full transition-all duration-500 ${healFlash ? 'animate-flash bg-white' : 'bg-lime-400'}`}
                         style={{ width: `${myHpPercent}%` }}
                       />
                     </div>
