@@ -410,8 +410,29 @@ io.on('connection', (socket) => {
     console.log(`🎲 Random skill selected: ${selectedSkill.name} (${selectedSkill.type})`);
     console.log(`   Current zone: ${attacker.state.activeZone.type} (${attacker.state.activeZone.remainingTurns} turns remaining)`);
 
+    // ゾーン効果によるログメッセージ生成
+    let zoneEffectMessage = '';
+    if (attacker.state.activeZone.type !== 'none') {
+      if (attacker.state.activeZone.type === '強攻のゾーン') {
+        zoneEffectMessage = `💥 ゾーン効果: 高威力技が出現！`;
+      } else if (attacker.state.activeZone.type === '集中のゾーン') {
+        zoneEffectMessage = `🎯 ゾーン効果: 支援技が出現！`;
+      } else if (attacker.state.activeZone.type === '乱舞のゾーン') {
+        zoneEffectMessage = `🌪️ ゾーン効果: 攻撃技が激増！`;
+      } else if (attacker.state.activeZone.type === '博打のゾーン') {
+        if (selectedSkill.power >= 40) {
+          zoneEffectMessage = `🎰 ゾーン効果: 超必殺技が出現！`;
+        } else if (selectedSkill.power === 0 && selectedSkill.name === '何もしない') {
+          zoneEffectMessage = `🎰 ゾーン効果: 何もしなかった...`;
+        }
+      }
+    }
+
     // Apply skill effect
     let result = applySkillEffect(selectedSkill, attacker, defender);
+    if (zoneEffectMessage) {
+      result.message = zoneEffectMessage + '\n' + result.message;
+    }
 
     // ゾーン効果の適用
     if (attacker.state.activeZone.type === '強攻のゾーン') {

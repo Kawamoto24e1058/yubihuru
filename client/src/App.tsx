@@ -3,6 +3,30 @@ import { io, Socket } from 'socket.io-client'
 import './App.css'
 import type { GameStartData, PlayerData } from './types'
 
+// ゾーン効果の説明データ
+const ZONE_DESCRIPTIONS = {
+  '強攻のゾーン': {
+    emoji: '🔥',
+    effect: '高威力・自傷アリ',
+    details: '高威力技が出やすい\n20%の確率で反動ダメージ',
+  },
+  '集中のゾーン': {
+    emoji: '🎯',
+    effect: '回復・防御UP',
+    details: '回復・補助技が出やすい\n受ダメージを25%軽減',
+  },
+  '乱舞のゾーン': {
+    emoji: '🌪️',
+    effect: '攻撃頻発・MP停止',
+    details: '攻撃技が非常に出やすい\nMP回復が停止',
+  },
+  '博打のゾーン': {
+    emoji: '🎰',
+    effect: '超必殺or無効',
+    details: '50%で超必殺技\n50%で何もしない',
+  },
+}
+
 function App() {
   const [socket, setSocket] = useState<Socket | null>(null)
   const [name, setName] = useState('')
@@ -125,6 +149,23 @@ function App() {
     }
   }
 
+  // ゾーン表示用のコンポーネント
+  const renderZoneDisplay = (zoneType: string, isActive: boolean) => {
+    if (zoneType === 'none' || !isActive) return null
+    
+    const zoneKey = zoneType as keyof typeof ZONE_DESCRIPTIONS
+    const zone = ZONE_DESCRIPTIONS[zoneKey]
+    if (!zone) return null
+
+    return (
+      <div className="bg-yellow-300 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-3 -rotate-1">
+        <p className="font-black text-sm mb-1">{zone.emoji} {zoneType}</p>
+        <p className="font-bold text-xs mb-2">{zone.effect}</p>
+        <p className="text-xs whitespace-pre-wrap leading-tight">{zone.details}</p>
+      </div>
+    )
+  }
+
   // ローディング画面
   if (isWaiting && !gameStarted) {
     return (
@@ -156,69 +197,75 @@ function App() {
           {/* 上部ステータス */}
           <div className="grid grid-cols-2 gap-4">
             {/* 相手 */}
-            <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4">
-              <p className="font-black text-sm mb-2">OPPONENT</p>
-              <p className="font-black text-xl mb-3">{opponentData.username}</p>
-              <div className="space-y-2">
-                <div>
-                  <div className="flex justify-between text-xs font-bold mb-1">
-                    <span>HP</span>
-                    <span>{opponentData.state.hp}/100</span>
+            <div className="space-y-2">
+              <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4">
+                <p className="font-black text-sm mb-2">OPPONENT</p>
+                <p className="font-black text-xl mb-3">{opponentData.username}</p>
+                <div className="space-y-2">
+                  <div>
+                    <div className="flex justify-between text-xs font-bold mb-1">
+                      <span>HP</span>
+                      <span>{opponentData.state.hp}/100</span>
+                    </div>
+                    <div className="h-4 border-2 border-black bg-gray-200">
+                      <div 
+                        className="h-full bg-lime-400 transition-all duration-300"
+                        style={{ width: `${opponentHpPercent}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-4 border-2 border-black bg-gray-200">
-                    <div 
-                      className="h-full bg-lime-400 transition-all duration-300"
-                      style={{ width: `${opponentHpPercent}%` }}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-xs font-bold mb-1">
-                    <span>MP</span>
-                    <span>{opponentData.state.mp}/100</span>
-                  </div>
-                  <div className="h-3 border-2 border-black bg-gray-200">
-                    <div 
-                      className="h-full bg-cyan-400 transition-all duration-300"
-                      style={{ width: `${opponentMpPercent}%` }}
-                    />
+                  <div>
+                    <div className="flex justify-between text-xs font-bold mb-1">
+                      <span>MP</span>
+                      <span>{opponentData.state.mp}/5</span>
+                    </div>
+                    <div className="h-3 border-2 border-black bg-gray-200">
+                      <div 
+                        className="h-full bg-cyan-400 transition-all duration-300"
+                        style={{ width: `${opponentMpPercent}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
+              {renderZoneDisplay(opponentData.state.activeZone.type, true)}
             </div>
 
             {/* 自分 */}
-            <div className={`bg-white border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 transition-all ${
-              isMyTurn ? 'border-pink-500 animate-pulse' : 'border-black'
-            }`}>
-              <p className="font-black text-sm mb-2">YOU {isMyTurn && '⭐'}</p>
-              <p className="font-black text-xl mb-3">{myData.username}</p>
-              <div className="space-y-2">
-                <div>
-                  <div className="flex justify-between text-xs font-bold mb-1">
-                    <span>HP</span>
-                    <span>{myData.state.hp}/100</span>
+            <div className="space-y-2">
+              <div className={`bg-white border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 transition-all ${
+                isMyTurn ? 'border-pink-500 animate-pulse' : 'border-black'
+              }`}>
+                <p className="font-black text-sm mb-2">YOU {isMyTurn && '⭐'}</p>
+                <p className="font-black text-xl mb-3">{myData.username}</p>
+                <div className="space-y-2">
+                  <div>
+                    <div className="flex justify-between text-xs font-bold mb-1">
+                      <span>HP</span>
+                      <span>{myData.state.hp}/100</span>
+                    </div>
+                    <div className="h-4 border-2 border-black bg-gray-200">
+                      <div 
+                        className="h-full bg-lime-400 transition-all duration-300"
+                        style={{ width: `${myHpPercent}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-4 border-2 border-black bg-gray-200">
-                    <div 
-                      className="h-full bg-lime-400 transition-all duration-300"
-                      style={{ width: `${myHpPercent}%` }}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex justify-between text-xs font-bold mb-1">
-                    <span>MP</span>
-                    <span>{myData.state.mp}/100</span>
-                  </div>
-                  <div className="h-3 border-2 border-black bg-gray-200">
-                    <div 
-                      className="h-full bg-cyan-400 transition-all duration-300"
-                      style={{ width: `${myMpPercent}%` }}
-                    />
+                  <div>
+                    <div className="flex justify-between text-xs font-bold mb-1">
+                      <span>MP</span>
+                      <span>{myData.state.mp}/5</span>
+                    </div>
+                    <div className="h-3 border-2 border-black bg-gray-200">
+                      <div 
+                        className="h-full bg-cyan-400 transition-all duration-300"
+                        style={{ width: `${myMpPercent}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
+              {renderZoneDisplay(myData.state.activeZone.type, true)}
             </div>
           </div>
 
