@@ -63,9 +63,7 @@ function App() {
   const [specialVictoryText, setSpecialVictoryText] = useState<string | null>(null) // 'BAN' or '役満'
 
   // フィニッシュ・インパクト演出用
-  const [finishImpact, setFinishImpact] = useState(false)
   const [showFinishText, setShowFinishText] = useState(false)
-  const [hpParticles, setHpParticles] = useState<Array<{id: number, x: number, y: number}>>([])
   const [victoryResult, setVictoryResult] = useState<'WINNER' | 'LOSER' | null>(null)
 
   // 麻雀役システム用
@@ -73,10 +71,15 @@ function App() {
   const [yakumanFreeze, setYakumanFreeze] = useState(false) // 役満フリーズ演出
   const [isDoraTurn, setIsDoraTurn] = useState(false) // ドラが該当した時の金縁表示
 
+  // ラストアタック・インパクト用
+  const [lastAttackGrayscale, setLastAttackGrayscale] = useState(false) // グレースケール
+  const [lastAttackFlash, setLastAttackFlash] = useState(false) // 画面フラッシュ
+  const [shouldApplyFinalDamage, setShouldApplyFinalDamage] = useState(false) // HP最終反映フラグ
+
   // 相手のactiveEffectを監視
   useEffect(() => {
     if (!opponentData?.state.activeEffect) return
-    
+
     if (opponentData.state.activeEffect === 'ink') {
       setOpponentInkEffect(true)
       // ランダムなインクのしぶき生成（5〜10個）
@@ -240,30 +243,26 @@ function App() {
 
         // 【フィニッシュ・インパクト】相手HP=0を検知
         if (newHpOpponent <= 0 && prevHpOpponent > 0) {
-          // 1.5秒の溜め演出開始
-          setFinishImpact(true)
+          console.log('🎬 ラストアタック・インパクト開始！');
           
-          // 0.5秒後に「ドゴォォォォン！！」表示
-          setTimeout(() => {
-            setShowFinishText(true)
-          }, 500)
+          // Phase 1: スローモーション演出（グレースケール + 画面フラッシュ）を即座に開始
+          setLastAttackGrayscale(true)
+          setLastAttackFlash(true)
           
-          // 1.0秒後にHPバー粉砕パーティクル生成
+          // Phase 2: 1.5秒後にドカン音と共にHPを最終反映
           setTimeout(() => {
-            const particles = Array.from({ length: 20 }, (_, i) => ({
-              id: i,
-              x: Math.random() * 100,
-              y: Math.random() * 100
-            }))
-            setHpParticles(particles)
-          }, 1000)
-          
-          // 1.5秒後に演出終了→HP反映→勝敗判定
-          setTimeout(() => {
-            setFinishImpact(false)
-            setShowFinishText(false)
-            setHpParticles([])
-            // 実際のHP反映はここでサーバーから来るgame_overを待つ
+            console.log('🎬 1.5秒経過 - ドカン！HP最終反映');
+            setShouldApplyFinalDamage(true)
+            setShowFinishText(true) // ドカン音表示
+            
+            // Phase 3: 1.0秒後にWINNER表示
+            setTimeout(() => {
+              console.log('🎬 WINNER表示');
+              setVictoryResult('WINNER')
+              
+              // Phase 4: グレースケール解除（WINNER表示は続ける）
+              setLastAttackGrayscale(false)
+            }, 1000)
           }, 1500)
           
           return // HP反映を遅延させるため、ここでreturn
@@ -349,8 +348,17 @@ function App() {
           // optional: could add subtle effect later
         }
         
-        setMyData(me)
-        setOpponentData(opponent)
+        // ラストアタック演出中は相手HPの更新を遅延
+        if (shouldApplyFinalDamage) {
+          setMyData(me)
+          setOpponentData(opponent)
+          setShouldApplyFinalDamage(false)
+        } else if (newHpOpponent > 0 || prevHpOpponent <= 0) {
+          // 相手がまだ生きているか、既に死んでいる場合は通常更新
+          setMyData(me)
+          setOpponentData(opponent)
+        }
+        // newHpOpponent <= 0 && prevHpOpponent > 0 かつ shouldApplyFinalDamage === false の場合はスキップ（演出中）
       }
       
       // Turn management: wait 2 seconds before enabling next action
@@ -386,19 +394,16 @@ function App() {
       console.log('Game over:', data)
       setIsGameOver(true)
       setWinner(data.winner)
-      setLogs(prev => [`🏆 ${data.winner} の勝利！`, ...prev])      
-      // 勝敗結果を表示（2秒遅延で巨大テキスト表示）
-      setTimeout(() => {
-        const mySocketId = newSocket.id || ''
-        const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
-        setVictoryResult(me.username === data.winner ? 'WINNER' : 'LOSER')
-      }, 2000)      
-      // 勝敗結果を表示（2秒遅延で巨大テキスト表示）
-      setTimeout(() => {
-        const mySocketId = newSocket.id || ''
-        const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
-        setVictoryResult(me.username === data.winner ? 'WINNER' : 'LOSER')
-      }, 2000)
+      setLogs(prev => [`🏆 ${data.winner} の勝利！`, ...prev])
+      
+      // 勝敗結果を表示
+      const mySocketId = newSocket.id || ''
+      const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
+      setVictoryResult(me.username === data.winner ? 'WINNER' : 'LOSER')
+      
+      // グレースケール解除
+      setLastAttackGrayscale(false)
+      setLastAttackFlash(false)
     })
 
     setSocket(newSocket)
@@ -592,40 +597,25 @@ function App() {
     const myZoneBorder = zoneBorderMap[myData.state.activeZone.type] || 'border-black'
 
     return (
-      <div className={`min-h-screen bg-yellow-50 p-4 transition-transform relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${opponentShakeEffect ? 'animate-window-shake' : ''} ${finishImpact ? 'filter grayscale animate-slow-motion' : ''}`}>
-        {/* フィニッシュ・インパクト演出 */}
-        {finishImpact && (
-          <div className="pointer-events-none absolute inset-0 z-[60] flex items-center justify-center">
-            {showFinishText && (
-              <p 
-                className="text-[180px] font-black select-none animate-finish-impact"
-                style={{
-                  WebkitTextStroke: '4px black',
-                  fontWeight: 900,
-                  color: '#FF0000',
-                  textShadow: '0 0 40px rgba(255, 0, 0, 0.8)'
-                }}
-              >
-                ドゴォォォォン！！
-              </p>
-            )}
-          </div>
+      <div className={`min-h-screen bg-yellow-50 p-4 transition-all relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${opponentShakeEffect ? 'animate-window-shake' : ''} ${lastAttackGrayscale ? 'filter grayscale' : ''}`}>
+        {/* ラストアタック：グレースケール + 画面フラッシュ */}
+        {lastAttackFlash && (
+          <div className="pointer-events-none absolute inset-0 z-[90] bg-white opacity-0 animate-last-attack-flash" />
         )}
         
-        {/* HPバー粉砕パーティクル */}
-        {hpParticles.length > 0 && (
-          <div className="pointer-events-none absolute inset-0 z-[55]">
-            {hpParticles.map(particle => (
-              <div
-                key={particle.id}
-                className="absolute w-4 h-4 bg-red-500 rounded-sm animate-particle-explode"
-                style={{
-                  left: `${particle.x}%`,
-                  top: `${particle.y}%`,
-                  animationDelay: `${Math.random() * 0.2}s`
-                }}
-              />
-            ))}
+        {/* フィニッシュ・インパクト演出 */}
+        {showFinishText && (
+          <div className="pointer-events-none absolute inset-0 z-[60] flex items-center justify-center">
+            <p 
+              className="text-[180px] font-black select-none animate-finish-impact"
+              style={{
+                WebkitTextStroke: '4px black',
+                fontWeight: 900,
+                color: '#FF0000'
+              }}
+            >
+              ドゴォォォォン！！
+            </p>
           </div>
         )}
         
@@ -721,7 +711,7 @@ function App() {
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-50">
             {/* 技名テキスト */}
             <p 
-              className={`text-[120px] font-black tracking-tighter leading-none select-none ${isUltraSkill ? 'animate-rainbow-glow' : 'text-white'}`}
+              className={`text-[8vw] font-black tracking-tighter leading-none select-none ${isUltraSkill ? 'animate-rainbow-glow' : 'text-white'}`}
               style={{
                 WebkitTextStroke: '3px black',
                 fontWeight: 900
@@ -754,14 +744,14 @@ function App() {
           </div>
         )}
 
-        <div className="max-w-4xl mx-auto space-y-4">
-          {/* 上部ステータス */}
-          <div className="grid grid-cols-2 gap-4">
-            {/* 相手 */}
+        <div className="w-full mx-auto space-y-2 md:space-y-4 flex flex-col md:flex-row gap-2 md:gap-4 pb-40 md:pb-0">
+          {/* 相手側（スマホ時は上部、PC時は左） */}
+          <div className="w-full md:w-1/3 order-1">
+            {/* 相手ステータス */}
             <div className="space-y-2">
-              <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4">
+              <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-3 md:p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <p className="font-black text-sm">OPPONENT</p>
+                  <p className="font-black text-xs md:text-sm">OPPONENT</p>
                   {opponentData.state.status.poison && (
                     <span className="bg-purple-600 text-white text-xs font-black px-2 py-1 rounded">☠️ 毒</span>
                   )}
@@ -769,14 +759,14 @@ function App() {
                     <span className="bg-red-600 text-white text-xs font-black px-2 py-1 rounded animate-pulse">🀄 立直</span>
                   )}
                 </div>
-                <p className="font-black text-xl mb-3">{opponentData.username}</p>
+                <p className="font-black text-lg md:text-xl mb-2 md:mb-3">{opponentData.username}</p>
                 <div className="space-y-2">
                   <div>
                     <div className="flex justify-between text-xs font-bold mb-1">
                       <span>HP</span>
                       <span>{opponentData.state.hp}/{opponentData.state.maxHp}</span>
                     </div>
-                    <div className={`h-4 border-2 border-black bg-gray-200 ${opponentMaxHpExpand ? 'animate-expand-bar' : ''}`}>
+                    <div className={`h-3 md:h-4 border-2 border-black bg-gray-200 ${opponentMaxHpExpand ? 'animate-expand-bar' : ''}`}>
                       <div 
                         className="h-full bg-lime-400 transition-all duration-500"
                         style={{ width: `${opponentHpPercent}%` }}
@@ -788,7 +778,7 @@ function App() {
                       <span>MP</span>
                       <span>{opponentData.state.mp}/5</span>
                     </div>
-                    <div className="h-3 border-2 border-black bg-gray-200">
+                    <div className="h-2 md:h-3 border-2 border-black bg-gray-200">
                       <div 
                         className="h-full bg-cyan-400 transition-all duration-300"
                         style={{ width: `${opponentMpPercent}%` }}
@@ -799,15 +789,37 @@ function App() {
               </div>
               {renderZoneDisplay(opponentData.state.activeZone.type, true)}
             </div>
+          </div>
 
-            {/* 自分 */}
+          {/* 中央（ログ + 技名） */}
+          <div className="w-full md:w-1/3 order-3 md:order-2 flex flex-col gap-2 md:gap-4">
+            {/* ログ */}
+            <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-3 md:p-6 flex-1 md:flex-none md:h-auto">
+              <h3 className="font-black text-sm md:text-xl mb-2 md:mb-4 border-b-4 border-black pb-1 md:pb-2">BATTLE LOG</h3>
+              <div className="space-y-1 md:space-y-2 max-h-32 md:max-h-48 overflow-y-auto">
+                {logs.length === 0 ? (
+                  <p className="text-gray-400 font-bold text-xs md:text-sm">待機中...</p>
+                ) : (
+                  logs.map((log, index) => (
+                    <div key={index} className={`font-bold text-xs md:text-sm py-1 border-b-2 border-gray-200 ${getLogColor(log)}`}>
+                      {renderLogWithRainbow(log)}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 自分側（スマホ時は下部（固定前）、PC時は右） */}
+          <div className="w-full md:w-1/3 order-2 md:order-3">
+            {/* 自分ステータス */}
             <div className="space-y-2 relative">
-              <div className={`bg-white border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 transition-all ${
+              <div className={`bg-white border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-3 md:p-4 transition-all ${
                 `${myZoneBorder} ${isMyTurn ? 'animate-pulse' : ''}`
               } ${isShaking ? 'animate-shake' : ''}`}>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <p className="font-black text-sm">YOU {isMyTurn && '⭐'}</p>
+                    <p className="font-black text-xs md:text-sm">YOU {isMyTurn && '⭐'}</p>
                     {myData.state.status.poison && (
                       <span className="bg-purple-600 text-white text-xs font-black px-2 py-1 rounded">☠️ 毒</span>
                     )}
@@ -819,14 +831,14 @@ function App() {
                     <span className="text-green-600 font-black text-xs animate-flash">✨ HEAL</span>
                   )}
                 </div>
-                <p className="font-black text-xl mb-3">{myData.username}</p>
+                <p className="font-black text-lg md:text-xl mb-2 md:mb-3">{myData.username}</p>
                 <div className="space-y-2">
                   <div>
                     <div className="flex justify-between text-xs font-bold mb-1">
                       <span>HP</span>
                       <span>{myData.state.hp}/{myData.state.maxHp}</span>
                     </div>
-                    <div className={`h-4 border-2 border-black bg-gray-200 ${myMaxHpExpand ? 'animate-expand-bar' : ''}`}>
+                    <div className={`h-3 md:h-4 border-2 border-black bg-gray-200 ${myMaxHpExpand ? 'animate-expand-bar' : ''}`}>
                       <div 
                         className={`h-full transition-all duration-500 ${healFlash ? 'animate-flash bg-white' : 'bg-lime-400'}`}
                         style={{ width: `${myHpPercent}%` }}
@@ -838,7 +850,7 @@ function App() {
                       <span>MP</span>
                       <span>{myData.state.mp}/5</span>
                     </div>
-                    <div className="h-3 border-2 border-black bg-gray-200">
+                    <div className="h-2 md:h-3 border-2 border-black bg-gray-200">
                       <div 
                         className="h-full bg-cyan-400 transition-all duration-300"
                         style={{ width: `${myMpPercent}%` }}
@@ -851,24 +863,79 @@ function App() {
             </div>
           </div>
 
-          {/* 中央ログ */}
-          <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-6">
-            <h3 className="font-black text-xl mb-4 border-b-4 border-black pb-2">BATTLE LOG</h3>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {logs.length === 0 ? (
-                <p className="text-gray-400 font-bold">待機中...</p>
-              ) : (
-                logs.map((log, index) => (
-                  <div key={index} className={`font-bold text-sm py-1 border-b-2 border-gray-200 ${getLogColor(log)}`}>
-                    {renderLogWithRainbow(log)}
+          {/* スマホ時のボタンエリア（下部固定） */}
+          <div className="order-5 md:hidden fixed bottom-0 left-0 right-0 p-4 bg-yellow-50 border-t-4 border-black space-y-3 max-h-[35vh] overflow-y-auto">
+            {/* ターン表示 */}
+            {!isMyTurn && (
+              <div className="bg-orange-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-2 text-center">
+                <p className="font-black text-sm animate-pulse">⏳ 相手の行動を待っています...</p>
+              </div>
+            )}
+            {isProcessing && isMyTurn && (
+              <div className="bg-blue-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-2 text-center">
+                <p className="font-black text-sm animate-pulse">⚡ 演出中...</p>
+              </div>
+            )}
+
+            {/* 指を振るボタン */}
+            <button
+              onClick={handleUseSkill}
+              disabled={mySocketId !== currentTurnId || isProcessing}
+              className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-6 font-black text-lg ${
+                mySocketId === currentTurnId && !isProcessing
+                  ? 'bg-pink-500 hover:bg-pink-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
+                  : 'bg-gray-400 cursor-not-allowed'
+              }`}
+            >
+              {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : '✨ 指を振る'}
+            </button>
+
+            {/* 現在のゾーン効果表示 */}
+            {myData.state.activeZone.type !== 'none' && (
+              <div className="bg-yellow-300 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xl">{ZONE_DESCRIPTIONS[myData.state.activeZone.type].emoji}</span>
+                  <div>
+                    <p className="font-black text-xs">{myData.state.activeZone.type}</p>
+                    <p className="text-xs font-bold text-red-600">残り {myData.state.activeZone.remainingTurns} ターン</p>
                   </div>
-                ))
-              )}
-            </div>
+                </div>
+                <p className="text-xs font-bold whitespace-pre-wrap leading-tight">
+                  {ZONE_DESCRIPTIONS[myData.state.activeZone.type].details}
+                </p>
+              </div>
+            )}
+
+            {/* ゾーン選択ドロップダウン */}
+            <select
+              value={selectedZoneType}
+              onChange={(e) => setSelectedZoneType(e.target.value as any)}
+              disabled={mySocketId !== currentTurnId || isProcessing}
+              className="w-full px-2 py-2 border-2 border-black font-bold text-xs bg-white"
+            >
+              <option value="強攻のゾーン">🔥 強攻のゾーン</option>
+              <option value="集中のゾーン">🎯 集中のゾーン</option>
+              <option value="乱舞のゾーン">🌪️ 乱舞のゾーン</option>
+              <option value="博打のゾーン">🎰 博打のゾーン</option>
+            </select>
+
+            {/* ゾーン展開ボタン */}
+            <button
+              onClick={handleActivateZone}
+              disabled={mySocketId !== currentTurnId || isProcessing || myData.state.mp < 5}
+              className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-3 font-black text-sm ${
+                mySocketId === currentTurnId && !isProcessing && myData.state.mp >= 5
+                  ? 'bg-purple-400 hover:bg-purple-300 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
+                  : 'bg-gray-400 cursor-not-allowed'
+              }`}
+            >
+              {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : '🌀 ゾーン展開'}
+              {mySocketId === currentTurnId && !isProcessing && <span className="block text-xs">(MP 5消費)</span>}
+            </button>
           </div>
 
-          {/* 下部アクション */}
-          <div className="space-y-4">
+          {/* PC版：下部アクション */}
+          <div className="hidden md:block space-y-4">
             {/* ターン表示 */}
             {!isMyTurn && (
               <div className="bg-orange-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 text-center">
@@ -881,6 +948,7 @@ function App() {
               </div>
             )}
 
+            {/* PC版：2列グリッド */}
             <div className="grid grid-cols-2 gap-4">
               {/* 指を振るボタン */}
               <button

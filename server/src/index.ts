@@ -962,19 +962,25 @@ io.on('connection', (socket) => {
     io.to(currentRoomId).emit('battle_update', battleUpdate);
 
     // Check for game over (only while battle is active and after HP updates)
+    // 2秒間のディレイを設けて、クライアント側の演出が完了するのを待つ
     if (!currentGame.isGameOver && defender.state.hp <= 0) {
       currentGame.isGameOver = true;
       currentGame.winner = attacker.username;
 
-      console.log(`🏆 Game Over! ${attacker.username} wins!`);
+      console.log(`🏆 Game Over! ${attacker.username} wins! (waiting 2s for client演出)`);
 
-      io.to(currentRoomId).emit('game_over', {
-        winner: attacker.username,
-        gameState: currentGame,
-      });
+      // 2秒待機してから最終的な勝利イベントを送信
+      const roomIdForTimeout = currentRoomId;
+      setTimeout(() => {
+        io.to(roomIdForTimeout).emit('game_over', {
+          winner: attacker.username,
+          gameState: currentGame,
+        });
 
-      // Remove game from active games
-      activeGames.delete(currentRoomId);
+        // Remove game from active games
+        activeGames.delete(roomIdForTimeout);
+      }, 2000);
+
       return;
     }
 
@@ -983,14 +989,19 @@ io.on('connection', (socket) => {
       currentGame.isGameOver = true;
       currentGame.winner = defender.username;
 
-      console.log(`🏆 Game Over! ${defender.username} wins!`);
+      console.log(`🏆 Game Over! ${defender.username} wins! (waiting 2s for client演出)`);
 
-      io.to(currentRoomId).emit('game_over', {
-        winner: defender.username,
-        gameState: currentGame,
-      });
+      // 2秒待機してから最終的な勝利イベントを送信
+      const roomIdForTimeout = currentRoomId;
+      setTimeout(() => {
+        io.to(roomIdForTimeout).emit('game_over', {
+          winner: defender.username,
+          gameState: currentGame,
+        });
 
-      activeGames.delete(currentRoomId);
+        activeGames.delete(roomIdForTimeout);
+      }, 2000);
+
       return;
     }
 

@@ -225,3 +225,19 @@
   .animate-dora-glow {
     animation: dora-glow 0.5s ease-in-out 3;
   }
+  /* ラストアタック・フラッシュ（画面全体が白くフラッシュ） */
+  @keyframes last-attack-flash {
+    0% { 
+      opacity: 0;
+    }
+    30% { 
+      opacity: 1;
+    }
+    100% { 
+      opacity: 0;
+    }
+  }
+
+  .animate-last-attack-flash {
+    animation: last-attack-flash 1.5s ease-out forwards;
+  }
