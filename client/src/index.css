@@ -3,9 +3,17 @@
 @tailwind utilities;
 
 @layer base {
-  /* すべての太字テキストに影をつける */
+  /* ネオブルータリズムらしい太い黒縁アウトライン */
   .font-black, .font-bold {
-    text-shadow: 3px 3px 0px rgba(0, 0, 0, 0.2);
+    text-shadow: 
+      -2px -2px 0 #000, 
+      2px -2px 0 #000, 
+      -2px 2px 0 #000, 
+      2px 2px 0 #000,
+      -1px 0 0 #000,
+      1px 0 0 #000,
+      0 -1px 0 #000,
+      0 1px 0 #000;
   }
 }
 
@@ -92,6 +100,17 @@
 
   .animate-impact-wave {
     animation: impactWave 0.5s ease-out forwards;
+  }
+
+  /* ルーレットシャッフルアニメーション：高速→スローダウン */
+  @keyframes rouletteShuffle {
+    0% { transform: translateY(-30px); opacity: 1; }
+    40% { transform: translateY(0); opacity: 1; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+
+  .animate-roulette-shuffle {
+    animation: rouletteShuffle 0.1s ease-out forwards;
   }
 }
   @keyframes expand-bar {

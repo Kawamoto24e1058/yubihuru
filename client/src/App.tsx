@@ -58,17 +58,50 @@ function App() {
   const [impactRotation, setImpactRotation] = useState(0)
   const [screenShake, setScreenShake] = useState(false)
   const [particles, setParticles] = useState<Array<{id: number, x: number, y: number}>>([])
+  const [rouletteTexts, setRouletteTexts] = useState<string[]>([]) // ルーレット中に表示する技名リスト
+  const [rouletteIndex, setRouletteIndex] = useState(0) // 現在表示している技のインデックス
 
-  // ルーレットフラッシュ：0.05秒ごとに色を切り替え
+  // ルーレット進捗：高速スタート→段階的にスローダウン→停止
   useEffect(() => {
-    if (!isRoulette) return
+    if (!isRoulette || rouletteTexts.length === 0) return
     
-    const interval = setInterval(() => {
-      setRouletteFlash(prev => (prev + 1) % 3)
-    }, 50) // 0.05秒
+    let currentSpeed = 100 // 100ms: 高速
+    let timeElapsed = 0
+    let interval: ReturnType<typeof setTimeout> | null = null
     
-    return () => clearInterval(interval)
-  }, [isRoulette])
+    const updateRoulette = () => {
+      timeElapsed += currentSpeed
+      
+      // 時間経過によってスピードを調整
+      if (timeElapsed < 600) {
+        // 最初の0.6秒：高速（100ms）
+        currentSpeed = 100
+      } else if (timeElapsed < 1200) {
+        // 0.6〜1.2秒：中速（200ms）
+        currentSpeed = 200
+      } else if (timeElapsed < 1600) {
+        // 1.2〜1.6秒：低速（400ms）
+        currentSpeed = 400
+      } else {
+        // 1.6秒以降：停止
+        if (interval) clearInterval(interval)
+        return
+      }
+      
+      setRouletteIndex(prev => (prev + 1) % rouletteTexts.length)
+      
+      // 次のインターバルをスケジュール
+      if (interval) clearInterval(interval)
+      interval = setTimeout(updateRoulette, currentSpeed)
+    }
+    
+    // 最初のシャッフルを開始
+    interval = setTimeout(updateRoulette, currentSpeed)
+    
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [isRoulette, rouletteTexts])
 
   // HP減少時のshakeアニメーション
   useEffect(() => {
@@ -154,14 +187,15 @@ function App() {
             setTimeout(() => {
               setScreenShake(false)
             }, 200)
+            // 0.5秒表示維持してからダメージ処理に移行
             setTimeout(() => {
               setShowImpact(false)
-            }, 1200)
+            }, 1700) // 1200msから1700msに延長（0.5秒追加）
           } else {
-            // 通常技は800msで消える
+            // 通常技は0.5秒表示維持してから消える
             setTimeout(() => {
               setShowImpact(false)
-            }, 800)
+            }, 1300) // 800msから1300msに延長（0.5秒追加）
           }
         }
         return false
@@ -331,6 +365,24 @@ function App() {
       setIsProcessing(true)
       
       // ルーレット演出開始
+      // ダミーのスキル名リスト（実際にはサーバーからランダムに選ばれた技が決定されるまで回す）
+      const dummySkills = [
+        '通常攻撃',
+        '高速斬撃',
+        'ハンマー落とし',
+        'ファイアボール',
+        '氷結呪法',
+        '稲妻撃ち',
+        'スペシャルサンダー',
+        'グレートハンマー',
+        'インファーノ',
+        '超冷凍',
+        'ギガインパクト',
+        'ドラゴンロア'
+      ]
+      
+      setRouletteTexts(dummySkills)
+      setRouletteIndex(0)
       setIsRoulette(true)
       setRouletteFlash(0)
     }
@@ -513,8 +565,23 @@ function App() {
             'bg-cyan-400/60'
           }`} />
         )}
-        {/* 擬音オーバーレイ */}
-        {showImpact && (
+        {/* ルーレット中のシャッフル表示 */}
+        {isRoulette && rouletteTexts.length > 0 && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-40">
+            <p 
+              className="text-[180px] font-black text-yellow-300 tracking-tighter leading-none select-none"
+              style={{
+                textShadow: 
+                  '-3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000, 3px 3px 0 #000, ' +
+                  '-2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000',
+              }}
+            >
+              {rouletteTexts[rouletteIndex]}
+            </p>
+          </div>
+        )}
+        {/* 決定時のインパクト表示 */}
+        {showImpact && !isRoulette && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-50">
             {/* 衝撃波リング */}
             <div 
@@ -531,7 +598,9 @@ function App() {
               className="text-[120px] font-black text-white tracking-tighter leading-none select-none relative"
               style={{
                 transform: `rotate(${impactRotation}deg)`,
-                textShadow: '8px 8px 0px #000, -2px -2px 0px #000, 2px -2px 0px #000, -2px 2px 0px #000, 0 0 30px rgba(255, 255, 0, 1)',
+                textShadow: 
+                  '-3px -3px 0 #000, 3px -3px 0 #000, -3px 3px 0 #000, 3px 3px 0 #000, ' +
+                  '-2px 0 0 #000, 2px 0 0 #000, 0 -2px 0 #000, 0 2px 0 #000',
                 WebkitTextStroke: '4px black',
                 filter: 'drop-shadow(0 0 20px #ffff00) drop-shadow(0 0 40px #ff00ff)'
               }}
