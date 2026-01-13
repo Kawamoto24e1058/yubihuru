@@ -50,6 +50,49 @@
   .animate-shield-pulse {
     animation: shield-pulse 0.6s ease-in-out;
   }
+
+  @keyframes inverseFlash {
+    0% { opacity: 1; filter: invert(1) brightness(1.5); }
+    100% { opacity: 0; filter: invert(0) brightness(1); }
+  }
+
+  @keyframes rainbowGlow {
+    0% { 
+      background: linear-gradient(0deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3);
+      opacity: 0;
+    }
+    50% { 
+      background: linear-gradient(45deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3);
+      opacity: 0.8;
+    }
+    100% { 
+      background: linear-gradient(360deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3);
+      opacity: 0;
+    }
+  }
+
+  .animate-rainbow-glow {
+    animation: rainbowGlow 0.2s ease-out;
+  }
+
+  @keyframes impactWave {
+    0% {
+      width: 100px;
+      height: 100px;
+      border-width: 4px;
+      opacity: 1;
+    }
+    100% {
+      width: 500px;
+      height: 500px;
+      border-width: 1px;
+      opacity: 0;
+    }
+  }
+
+  .animate-impact-wave {
+    animation: impactWave 0.5s ease-out forwards;
+  }
 }
   @keyframes expand-bar {
     0% { transform: scaleX(0.95); }

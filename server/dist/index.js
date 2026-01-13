@@ -628,6 +628,8 @@ io.on('connection', (socket) => {
                 state: defender.state,
             },
             skill: selectedSkill,
+            skillName: selectedSkill.name,
+            skillPower: selectedSkill.power,
             damage: result.damage,
             healing: result.healing,
             message: result.message,

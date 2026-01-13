@@ -125,29 +125,44 @@ function App() {
       // ルーレット演出停止 + 決定演出（常に実行、isRouletteのstale closure回避）
       setIsRoulette(prev => {
         if (prev) {
-          // 擬音をランダムに選ぶ
-          const impactTexts = [
-            'ドグシャァッ！',
-            'ズギュゥゥン！',
-            'バァァァン！',
-            'ドゴォォッ！',
-            'ズバババッ！',
-            'ガキィィン！',
-            'ドカァァッ！'
-          ]
-          const randomText = impactTexts[Math.floor(Math.random() * impactTexts.length)]
-          const randomRotation = Math.random() * 8 - 4 // -4deg ~ 4deg
+          // 技名を表示
+          const skillName = data.skillName || '技'
           
-          setImpactText(randomText)
-          setImpactRotation(randomRotation)
+          setImpactText(skillName)
+          setImpactRotation(0)
           setShowImpact(true)
-          setScreenShake(true)
           
-          // 決定演出の終了
-          setTimeout(() => {
-            setShowImpact(false)
-            setScreenShake(false)
-          }, 800)
+          // パワー150以上で超必殺演出
+          if (data.skillPower && data.skillPower >= 150) {
+            setScreenShake(true)
+            // 白黒反転フラッシュ（グローバルフィルター追加）
+            const filterOverlay = document.createElement('div')
+            filterOverlay.style.cssText = `
+              position: fixed;
+              inset: 0;
+              background: white;
+              opacity: 0;
+              pointer-events: none;
+              z-index: 9999;
+              animation: inverseFlash 0.2s ease-out;
+            `
+            document.body.appendChild(filterOverlay)
+            setTimeout(() => filterOverlay.remove(), 200)
+            
+            // 虹色発光背景
+            setRouletteFlash(0) // ここで虹色を有効化
+            setTimeout(() => {
+              setScreenShake(false)
+            }, 200)
+            setTimeout(() => {
+              setShowImpact(false)
+            }, 1200)
+          } else {
+            // 通常技は800msで消える
+            setTimeout(() => {
+              setShowImpact(false)
+            }, 800)
+          }
         }
         return false
       })
@@ -358,6 +373,39 @@ function App() {
     return 'text-gray-700'
   }
 
+  // ログを虹色で表示するカスタム要素（技名などが含まれる場合）
+  const renderLogWithRainbow = (log: string) => {
+    // 技名パターンを抽出：「XXXが〇〇を使用！」や「XXXは△△で〇〇のダメージ」など
+    // シンプルに、複数の単語が連続している部分を技名と判定
+    // スキップする単語を除外して処理
+    const skillNames = [
+      'ギガインパクト', '立直', 'ロン', 'ツモ', '一撃必殺',
+      '何も起こらなかった', '運命に見放された', '謝罪', '土下座', 'HEAL'
+    ]
+    
+    for (const skillName of skillNames) {
+      if (log.includes(skillName)) {
+        const parts = log.split(skillName)
+        return (
+          <span>
+            {parts[0]}
+            <span style={{
+              background: 'linear-gradient(90deg, #ff0000, #ff7f00, #ffff00, #00ff00, #0000ff, #4b0082, #9400d3)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text',
+              fontWeight: 'bold'
+            }}>
+              {skillName}
+            </span>
+            {parts[1]}
+          </span>
+        )
+      }
+    }
+    return log
+  }
+
   const renderZoneDisplay = (zoneType: string, isActive: boolean) => {
     if (zoneType === 'none' || !isActive) return null
     
@@ -468,12 +516,24 @@ function App() {
         {/* 擬音オーバーレイ */}
         {showImpact && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center z-50">
+            {/* 衝撃波リング */}
+            <div 
+              className="absolute border-4 border-white rounded-full animate-impact-wave"
+              style={{
+                left: '50%',
+                top: '50%',
+                transform: 'translate(-50%, -50%)',
+                boxShadow: '0 0 30px rgba(255, 255, 255, 0.8)'
+              }}
+            />
+            {/* 技名テキスト */}
             <p 
-              className="text-[120px] font-black text-white tracking-tighter leading-none select-none"
+              className="text-[120px] font-black text-white tracking-tighter leading-none select-none relative"
               style={{
                 transform: `rotate(${impactRotation}deg)`,
-                textShadow: '8px 8px 0px #000, -2px -2px 0px #000, 2px -2px 0px #000, -2px 2px 0px #000',
-                WebkitTextStroke: '4px black'
+                textShadow: '8px 8px 0px #000, -2px -2px 0px #000, 2px -2px 0px #000, -2px 2px 0px #000, 0 0 30px rgba(255, 255, 0, 1)',
+                WebkitTextStroke: '4px black',
+                filter: 'drop-shadow(0 0 20px #ffff00) drop-shadow(0 0 40px #ff00ff)'
               }}
             >
               {impactText}
@@ -621,7 +681,7 @@ function App() {
               ) : (
                 logs.map((log, index) => (
                   <div key={index} className={`font-bold text-sm py-1 border-b-2 border-gray-200 ${getLogColor(log)}`}>
-                    {log}
+                    {renderLogWithRainbow(log)}
                   </div>
                 ))
               )}
