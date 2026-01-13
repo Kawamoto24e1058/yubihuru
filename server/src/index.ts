@@ -63,58 +63,34 @@ function createPlayerState(): PlayerState {
       type: 'none',
       remainingTurns: 0,
     },
+    status: {
+      poison: null,
+      mpRegenBonus: null,
+    },
   };
 }
 
-// Helper function to get random skill from SKILLS array with zone effects
+// Helper: weighted random pick according to zone rules
 function getRandomSkill(activeZone: PlayerState['activeZone']): Skill {
-  const zoneType = activeZone.type;
-  
-  if (zoneType === '強攻のゾーン') {
-    // 高威力技（power >= 30）の排出率を大幅アップ
-    const powerfulSkills = SKILLS.filter(s => s.type === 'attack' && s.power >= 30);
-    const otherSkills = SKILLS.filter(s => !(s.type === 'attack' && s.power >= 30));
-    // 高威力技を5倍に
-    const weightedSkills = [
-      ...powerfulSkills, ...powerfulSkills, ...powerfulSkills, 
-      ...powerfulSkills, ...powerfulSkills, 
-      ...otherSkills
-    ];
-    return weightedSkills[Math.floor(Math.random() * weightedSkills.length)];
-  } else if (zoneType === '集中のゾーン') {
-    // 回復・補助技の排出率がアップ
-    const supportSkills = SKILLS.filter(s => s.type === 'heal' || s.type === 'buff');
-    const otherSkills = SKILLS.filter(s => s.type !== 'heal' && s.type !== 'buff');
-    // サポート技を3倍に
-    const weightedSkills = [...supportSkills, ...supportSkills, ...supportSkills, ...otherSkills];
-    return weightedSkills[Math.floor(Math.random() * weightedSkills.length)];
-  } else if (zoneType === '乱舞のゾーン') {
-    // 攻撃技が非常に出やすい
-    const attackSkills = SKILLS.filter(s => s.type === 'attack');
-    const otherSkills = SKILLS.filter(s => s.type !== 'attack');
-    // 攻撃技を10倍に（非常に出やすい）
-    const weightedSkills = [
-      ...attackSkills, ...attackSkills, ...attackSkills, 
-      ...attackSkills, ...attackSkills, ...attackSkills,
-      ...attackSkills, ...attackSkills, ...attackSkills,
-      ...attackSkills,
-      ...otherSkills
-    ];
-    return weightedSkills[Math.floor(Math.random() * weightedSkills.length)];
-  } else if (zoneType === '博打のゾーン') {
-    // 超必殺技か何もしないのどちらか
-    const ultimateSkills = SKILLS.filter(s => s.power >= 40);
-    const nothingSkill = { id: 0, name: '何もしない', type: 'special' as const, power: 0, description: '何も起こらなかった' };
-    // 50%で超必殺技、50%で何もしない
-    if (Math.random() < 0.5) {
-      return ultimateSkills[Math.floor(Math.random() * ultimateSkills.length)];
-    } else {
-      return nothingSkill;
+  const weightedPool: Skill[] = [];
+
+  SKILLS.forEach((skill) => {
+    let weight = 1;
+
+    if (activeZone.type === '強攻のゾーン' && skill.power >= 100) {
+      weight *= 3;
     }
-  } else {
-    // ゾーンなしの場合は通常の抽選
-    return SKILLS[Math.floor(Math.random() * SKILLS.length)];
-  }
+    if (activeZone.type === '集中のゾーン' && (skill.type === 'heal' || skill.type === 'buff')) {
+      weight *= 3;
+    }
+
+    for (let i = 0; i < weight; i++) {
+      weightedPool.push(skill);
+    }
+  });
+
+  const randomIndex = Math.floor(Math.random() * weightedPool.length);
+  return weightedPool[randomIndex];
 }
 
 
@@ -126,63 +102,70 @@ function applySkillEffect(
 ): { damage: number; healing: number; message: string } {
   let damage = 0;
   let healing = 0;
-  let message = '';
+  const logs: string[] = [];
+
+  // ダメージ軽減（集中のゾーン）を計算する補助
+  const applyDefense = (base: number) => {
+    if (defender.state.activeZone.type === '集中のゾーン') {
+      return Math.floor(base * 0.75);
+    }
+    return base;
+  };
 
   switch (skill.type) {
-    case 'attack':
-      damage = skill.power;
-      
-      // 防御者が集中のゾーン中の場合、ダメージを軽減（75%のダメージになる）
-      if (defender.state.activeZone.type === '集中のゾーン') {
-        damage = Math.floor(damage * 0.75);
-        message = `${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！（集中のゾーンで軽減）`;
-      } else {
-        message = `${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！`;
-      }
-      
+    case 'attack': {
+      damage = applyDefense(skill.power);
       defender.state.hp = Math.max(0, defender.state.hp - damage);
-      break;
+      logs.push(`${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ与えた！`);
 
-    case 'heal':
+      if (skill.effect === 'lifesteal') {
+        const ratio = skill.lifestealRatio ?? 0.5;
+        const healAmount = Math.floor(damage * ratio);
+        attacker.state.hp = Math.min(100, attacker.state.hp + healAmount);
+        healing += healAmount;
+        logs.push(`🩸 ドレイン効果で${healAmount}回復！`);
+      }
+
+      if (skill.effect === 'recoil') {
+        const ratio = skill.recoilRatio ?? 0.25;
+        const recoil = Math.floor(skill.power * ratio);
+        attacker.state.hp = Math.max(0, attacker.state.hp - recoil);
+        logs.push(`⚠️ 反動で${recoil}ダメージ！`);
+      }
+      break;
+    }
+
+    case 'heal': {
       healing = skill.power;
       attacker.state.hp = Math.min(100, attacker.state.hp + healing);
-      message = `${attacker.username}の${skill.name}！ HPが${healing}回復！`;
+      logs.push(`${attacker.username}の${skill.name}！ HPを${healing}回復！`);
       break;
+    }
 
-    case 'buff':
-      message = `${attacker.username}の${skill.name}！ ${skill.description}`;
-      // バフは将来的に実装予定
-      break;
-
-    case 'special':
-      // 特殊技は様々な効果を持つ
-      if (skill.name === '何もしない') {
-        message = `${attacker.username}は何もしなかった...`;
-      } else if (skill.name === '自爆') {
-        damage = skill.power;
-        const selfDamage = Math.floor(skill.power * 0.5);
-        defender.state.hp = Math.max(0, defender.state.hp - damage);
-        attacker.state.hp = Math.max(0, attacker.state.hp - selfDamage);
-        message = `${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！ 自分も${selfDamage}ダメージを受けた！`;
-      } else if (skill.power > 0) {
-        damage = skill.power;
-        
-        // 防御者が集中のゾーン中の場合、ダメージを軽減
-        if (defender.state.activeZone.type === '集中のゾーン') {
-          damage = Math.floor(damage * 0.75);
-          message = `${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！（集中のゾーンで軽減）`;
-        } else {
-          message = `${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！`;
-        }
-        
-        defender.state.hp = Math.max(0, defender.state.hp - damage);
+    case 'buff': {
+      if (skill.effect === 'mp_regen_boost') {
+        const amount = skill.mpRegenBonus ?? 1;
+        const duration = skill.mpRegenDuration ?? 3;
+        attacker.state.status.mpRegenBonus = { amount, turns: duration };
+        logs.push(`${attacker.username}の${skill.name}！ しばらくMP回復量が+${amount}に！`);
+      } else if (skill.effect === 'poison') {
+        const dmg = skill.poisonDamage ?? 10;
+        const duration = skill.poisonDuration ?? 3;
+        defender.state.status.poison = { damagePerTurn: dmg, turns: duration };
+        logs.push(`${attacker.username}の${skill.name}！ ${defender.username}をどく状態にした（${duration}ターン、毎ターン${dmg}ダメージ）！`);
       } else {
-        message = `${attacker.username}の${skill.name}！ ${skill.description}`;
+        logs.push(`${attacker.username}の${skill.name}！ ${skill.description}`);
       }
       break;
+    }
+
+    case 'special': {
+      logs.push(`${attacker.username}の${skill.name}！ ${skill.description}`);
+      break;
+    }
   }
 
-  return { damage, healing, message };
+  return { damage, healing, message: logs.join('\n') };
 }
 
 io.on('connection', (socket) => {
@@ -405,6 +388,30 @@ io.on('connection', (socket) => {
     const attacker = isPlayer1 ? currentGame.player1 : currentGame.player2;
     const defender = isPlayer1 ? currentGame.player2 : currentGame.player1;
 
+    // ターン開始時の状態異常処理（毒など）
+    const preMessages: string[] = [];
+    if (attacker.state.status.poison) {
+      const poisonDamage = attacker.state.status.poison.damagePerTurn;
+      attacker.state.hp = Math.max(0, attacker.state.hp - poisonDamage);
+      attacker.state.status.poison.turns -= 1;
+      preMessages.push(`☠️ 毒のダメージで${poisonDamage}を受けた！`);
+      if (attacker.state.status.poison.turns <= 0) {
+        attacker.state.status.poison = null;
+        preMessages.push('☠️ 毒が解除された！');
+      }
+      // 毒で戦闘不能になった場合は即終了
+      if (attacker.state.hp <= 0) {
+        currentGame.isGameOver = true;
+        currentGame.winner = defender.username;
+        io.to(currentRoomId).emit('game_over', {
+          winner: defender.username,
+          gameState: currentGame,
+        });
+        activeGames.delete(currentRoomId);
+        return;
+      }
+    }
+
     // Get random skill from SKILLS array with zone effects
     const selectedSkill = getRandomSkill(attacker.state.activeZone);
     console.log(`🎲 Random skill selected: ${selectedSkill.name} (${selectedSkill.type})`);
@@ -417,44 +424,29 @@ io.on('connection', (socket) => {
         zoneEffectMessage = `💥 ゾーン効果: 高威力技が出現！`;
       } else if (attacker.state.activeZone.type === '集中のゾーン') {
         zoneEffectMessage = `🎯 ゾーン効果: 支援技が出現！`;
-      } else if (attacker.state.activeZone.type === '乱舞のゾーン') {
-        zoneEffectMessage = `🌪️ ゾーン効果: 攻撃技が激増！`;
-      } else if (attacker.state.activeZone.type === '博打のゾーン') {
-        if (selectedSkill.power >= 40) {
-          zoneEffectMessage = `🎰 ゾーン効果: 超必殺技が出現！`;
-        } else if (selectedSkill.power === 0 && selectedSkill.name === '何もしない') {
-          zoneEffectMessage = `🎰 ゾーン効果: 何もしなかった...`;
-        }
       }
     }
 
     // Apply skill effect
     let result = applySkillEffect(selectedSkill, attacker, defender);
+    const messageParts = [...preMessages];
     if (zoneEffectMessage) {
-      result.message = zoneEffectMessage + '\n' + result.message;
+      messageParts.push(zoneEffectMessage);
     }
+    messageParts.push(result.message);
+    result.message = messageParts.join('\n');
 
-    // ゾーン効果の適用
-    if (attacker.state.activeZone.type === '強攻のゾーン') {
-      // 20%の確率で反動ダメージ
-      if (Math.random() < 0.2) {
-        const recoilDamage = Math.floor(selectedSkill.power * 0.5); // 技の威力の50%
-        attacker.state.hp = Math.max(0, attacker.state.hp - recoilDamage);
-        console.log(`⚠️ ${attacker.username} took ${recoilDamage} recoil damage from 強攻のゾーン!`);
-        result.message += `\n反動ダメージ！${recoilDamage}ダメージを受けた！`;
+    // MP回復計算（乱舞ゾーン中は0、瞑想バフで加算）
+    let regenAmount = attacker.state.activeZone.type === '乱舞のゾーン' ? 0 : 1;
+    if (attacker.state.status.mpRegenBonus) {
+      regenAmount += attacker.state.status.mpRegenBonus.amount;
+      attacker.state.status.mpRegenBonus.turns -= 1;
+      if (attacker.state.status.mpRegenBonus.turns <= 0) {
+        attacker.state.status.mpRegenBonus = null;
       }
-    } else if (attacker.state.activeZone.type === '集中のゾーン') {
-      // 受けるダメージを少し軽減する（既に効果が出ている）
-      // ここではログのみ
-      console.log(`🛡️ ${attacker.username} is in 集中のゾーン, damage reduction applied`);
-    } else if (attacker.state.activeZone.type === '乱舞のゾーン') {
-      // MP回復が止まる（後で処理）
-      console.log(`🌪️ ${attacker.username} is in 乱舞のゾーン, MP recovery stopped`);
     }
-
-    // Recover MP at turn end (1 MP recovery) - ただし乱舞のゾーン中は回復しない、上限5
-    if (attacker.state.activeZone.type !== '乱舞のゾーン') {
-      attacker.state.mp = Math.min(5, attacker.state.mp + 1);
+    if (regenAmount > 0) {
+      attacker.state.mp = Math.min(5, attacker.state.mp + regenAmount);
     }
     console.log(`💧 ${attacker.username} MP: ${attacker.state.mp} (max 5)`);
 

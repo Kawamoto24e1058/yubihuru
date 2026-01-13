@@ -31,6 +31,13 @@ export interface Skill {
   type: 'attack' | 'heal' | 'buff' | 'special';
   power: number; // ダメージ量、回復量、またはバフの場合は0
   description: string;
+  effect?: 'none' | 'recoil' | 'lifesteal' | 'mp_regen_boost' | 'poison';
+  recoilRatio?: number; // 自傷割合（例: 0.25なら25%）
+  lifestealRatio?: number; // 与ダメージに対する回復割合
+  mpRegenBonus?: number; // 追加MP回復量
+  mpRegenDuration?: number; // 追加MP回復の継続ターン
+  poisonDamage?: number; // どくダメージ/ターン
+  poisonDuration?: number; // どくの継続ターン
 }
 
 /**
@@ -68,6 +75,16 @@ export interface PlayerState {
   activeZone: {
     type: '強攻のゾーン' | '集中のゾーン' | '乱舞のゾーン' | '博打のゾーン' | 'none';
     remainingTurns: number;
+  };
+  status: {
+    poison: {
+      turns: number;
+      damagePerTurn: number;
+    } | null;
+    mpRegenBonus: {
+      turns: number;
+      amount: number;
+    } | null;
   };
 }
 
