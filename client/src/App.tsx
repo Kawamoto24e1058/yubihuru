@@ -75,6 +75,7 @@ function App() {
   const [lastAttackGrayscale, setLastAttackGrayscale] = useState(false) // グレースケール
   const [lastAttackFlash, setLastAttackFlash] = useState(false) // 画面フラッシュ
   const [shouldApplyFinalDamage, setShouldApplyFinalDamage] = useState(false) // HP最終反映フラグ
+  const [mobileZoneInfoOpen, setMobileZoneInfoOpen] = useState(false) // スマホ向けゾーン説明
 
   // 相手のactiveEffectを監視
   useEffect(() => {
@@ -111,6 +112,40 @@ function App() {
     }
   }, [opponentData?.state.activeEffect, opponentData?.state.activeEffectTurns])
 
+  // 試合終了・リセット時の演出フラグ掃除
+  useEffect(() => {
+    if (!gameStarted) {
+      setSpecialVictoryText(null)
+      setVictoryResult(null)
+      setOpponentInkEffect(false)
+      setOpponentShakeEffect(false)
+      setInkSplashes([])
+      setYakumanFreeze(false)
+      setLastAttackGrayscale(false)
+      setLastAttackFlash(false)
+      setShowImpact(false)
+      setIsDoraTurn(false)
+      setShowFinishText(false)
+    }
+
+    if (isGameOver) {
+      const timer = setTimeout(() => {
+        setSpecialVictoryText(null)
+        setVictoryResult(null)
+        setOpponentInkEffect(false)
+        setOpponentShakeEffect(false)
+        setInkSplashes([])
+        setYakumanFreeze(false)
+        setLastAttackGrayscale(false)
+        setLastAttackFlash(false)
+        setShowImpact(false)
+        setIsDoraTurn(false)
+        setShowFinishText(false)
+      }, 2000)
+      return () => clearTimeout(timer)
+    }
+  }, [gameStarted, isGameOver])
+
   // HP減少時のshakeアニメーション
   useEffect(() => {
     if (myData && myData.state.hp > 0) {
@@ -146,6 +181,17 @@ function App() {
       setPoisonFlash(false)
       setShieldEffect(false)
       setLogs([])
+      setSpecialVictoryText(null)
+      setVictoryResult(null)
+      setOpponentInkEffect(false)
+      setOpponentShakeEffect(false)
+      setInkSplashes([])
+      setYakumanFreeze(false)
+      setLastAttackGrayscale(false)
+      setLastAttackFlash(false)
+      setShowImpact(false)
+      setIsDoraTurn(false)
+      setShowFinishText(false)
       
       // ドラをランダム選択（麻雀システム）
       const allSkillNames = ['パンチ', 'キック', 'ヒール', '火炎弾', '氷結魔法', 'ポイズン', 'シールド', 
@@ -906,18 +952,27 @@ function App() {
               </div>
             )}
 
-            {/* ゾーン選択ドロップダウン */}
-            <select
-              value={selectedZoneType}
-              onChange={(e) => setSelectedZoneType(e.target.value as any)}
-              disabled={mySocketId !== currentTurnId || isProcessing}
-              className="w-full px-2 py-2 border-2 border-black font-bold text-xs bg-white"
-            >
-              <option value="強攻のゾーン">🔥 強攻のゾーン</option>
-              <option value="集中のゾーン">🎯 集中のゾーン</option>
-              <option value="乱舞のゾーン">🌪️ 乱舞のゾーン</option>
-              <option value="博打のゾーン">🎰 博打のゾーン</option>
-            </select>
+            {/* ゾーン選択ドロップダウン + ?アイコン（スマホ） */}
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedZoneType}
+                onChange={(e) => setSelectedZoneType(e.target.value as any)}
+                disabled={mySocketId !== currentTurnId || isProcessing}
+                className="flex-1 px-2 py-2 border-2 border-black font-bold text-xs bg-white"
+              >
+                <option value="強攻のゾーン">🔥 強攻のゾーン</option>
+                <option value="集中のゾーン">🎯 集中のゾーン</option>
+                <option value="乱舞のゾーン">🌪️ 乱舞のゾーン</option>
+                <option value="博打のゾーン">🎰 博打のゾーン</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => setMobileZoneInfoOpen(true)}
+                className="w-10 h-10 shrink-0 border-3 border-black bg-white font-black text-base rounded-full shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+              >
+                ?
+              </button>
+            </div>
 
             {/* ゾーン展開ボタン */}
             <button
@@ -1038,6 +1093,36 @@ function App() {
             </div>
           </div>
         </div>
+
+        {/* スマホ用ゾーン説明モーダル */}
+        {mobileZoneInfoOpen && (
+          <div className="fixed inset-0 z-[120] md:hidden bg-black/70 flex items-center justify-center px-4">
+            <div className="w-full max-w-sm bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">{ZONE_DESCRIPTIONS[selectedZoneType].emoji}</span>
+                  <p className="font-black text-base" style={{ WebkitTextStroke: '2px black' }}>{selectedZoneType}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileZoneInfoOpen(false)}
+                  className="w-10 h-10 border-3 border-black bg-yellow-200 font-black rounded-full shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                  aria-label="close zone info"
+                >
+                  ×
+                </button>
+              </div>
+              <p className="text-sm font-bold whitespace-pre-wrap leading-tight">{ZONE_DESCRIPTIONS[selectedZoneType].details}</p>
+              <button
+                type="button"
+                onClick={() => setMobileZoneInfoOpen(false)}
+                className="w-full border-4 border-black bg-blue-400 hover:bg-blue-300 font-black py-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     )
   }

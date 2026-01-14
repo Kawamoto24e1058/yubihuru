@@ -308,6 +308,20 @@ function applySkillEffect(skill, attacker, defender) {
             break;
         }
         case 'special': {
+            // 高威力単発（例: ギガインパクトなど）
+            if (skill.effect === 'hit_rate' && skill.hitRate) {
+                const hit = Math.random();
+                if (hit > skill.hitRate) {
+                    logs.push(`${attacker.username}の${skill.name}！ しかし、外れた！`);
+                    return { damage: 0, healing: 0, message: logs.join('\n'), skillType: 'special' };
+                }
+                // 命中時は防御補正込みで確定ダメージを与える
+                const baseDamage = calculateDamage(skill.power);
+                damage = applyDefense(baseDamage);
+                defender.state.hp = Math.max(0, defender.state.hp - damage);
+                logs.push(`${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！！`);
+                break;
+            }
             // 【逆転の目】起死回生
             if (skill.effect === 'comeback') {
                 // 威力 = (最大HP - 現在HP) * 0.5
