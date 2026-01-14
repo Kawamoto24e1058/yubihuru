@@ -291,6 +291,9 @@ function App() {
         timestamp: Date.now()
       }))
       
+      // マッチング成立を確認したことをサーバーに通知
+      newSocket.emit('battle_ready_ack', { roomId: data.roomId })
+      
       // ゲーム状態をリセット
       setIsGameOver(false)
       setWinner(null)
@@ -620,6 +623,8 @@ function App() {
       
       // バトル終了時、active_battle をクリア
       localStorage.removeItem('yubihuru_active_battle')
+      // セッションを完全に破棄（復帰ボタンを無効化）
+      localStorage.removeItem('yubihuru_player_id')
       
       // グレースケール解除
       setLastAttackGrayscale(false)

@@ -60,6 +60,8 @@ const activeGames = new Map<string, GameState>();
 // オフライン保持: playerId -> { roomId, lastSeen, username }
 const offlinePlayers = new Map<string, { roomId: string; lastSeen: number; username: string; socketId: string }>();
 const socketToPlayerId = new Map<string, string>();
+// マッチング確認待ち: roomId -> { player1_ready, player2_ready, timeout }
+const matchingWaitingRooms = new Map<string, { player1_ready: boolean; player2_ready: boolean; timeout: NodeJS.Timeout; roomData: any }>();
 
 // Helper function to create initial player state
 function createPlayerState(): PlayerState {
@@ -426,9 +428,9 @@ function applySkillEffect(
 
       // 【逆転の目】起死回生
       if (skill.effect === 'comeback') {
-        // 威力 = (最大HP - 現在HP) * 0.5
+        // 威力 = (最大HP - 現在HP) * 0.8（減っているHPが多いほど強い）
         const hpDeficit = attacker.state.maxHp - attacker.state.hp;
-        damage = Math.floor(hpDeficit * 0.5);
+        damage = Math.max(20, Math.floor(hpDeficit * 0.8)); // 最低威力20を保証
         defender.state.hp = Math.max(0, defender.state.hp - damage);
         logs.push(`🔄 ${attacker.username}の${skill.name}！！！`);
         logs.push(`💫 絶望から蘇る... ${defender.username}に${damage}ダメージ！`);
@@ -621,9 +623,6 @@ io.on('connection', (socket) => {
           startedAt: Date.now(), // マッチング直後の保護用
         };
 
-        // Store active game
-        activeGames.set(roomId, gameState);
-
         // Send game_start event to both clients
         const gameData = {
           roomId,
@@ -641,18 +640,33 @@ io.on('connection', (socket) => {
           },
         };
 
+        // マッチング確認待ちに追加
+        const ackTimeout = setTimeout(() => {
+          console.log(`⚠️ ACK timeout for room ${roomId}`);
+          // 一方が ACK を返さない場合は、強制的にゲーム開始
+          if (matchingWaitingRooms.has(roomId)) {
+            matchingWaitingRooms.delete(roomId);
+            activeGames.set(roomId, gameState);
+            io.to(roomId).emit('turn_change', {
+              currentTurnPlayerId: gameState.currentTurnPlayerId,
+              currentTurnPlayerName: player1.username,
+            });
+            console.log(`🚀 Game started in room ${roomId} (force start after timeout)`);
+          }
+        }, 5000); // 5秒のタイムアウト
+
+        matchingWaitingRooms.set(roomId, {
+          player1_ready: false,
+          player2_ready: false,
+          timeout: ackTimeout,
+          roomData: gameData,
+        });
+
         io.to(roomId).emit('game_start', gameData);
         
-        // 最初のターンを通知
-        io.to(roomId).emit('turn_change', {
-          currentTurnPlayerId: gameState.currentTurnPlayerId,
-          currentTurnPlayerName: player1.username,
-        });
-        
-        console.log(`🚀 Game started in room ${roomId}`);
-        console.log(`   Player 1 HP: ${player1State.hp}, MP: ${player1State.mp}`);
-        console.log(`   Player 2 HP: ${player2State.hp}, MP: ${player2State.mp}`);
-        console.log(`   First turn: ${player1.username} (${player1.socketId})`);
+        console.log(`📋 Matching confirmed. Waiting for battle_ready_ack from both players in room ${roomId}`);
+        console.log(`   Player 1: ${player1.username} (${player1.socketId})`);
+        console.log(`   Player 2: ${player2.username} (${player2.socketId})`);
       }
     } else {
       // Notify player they're in waiting room
@@ -1182,6 +1196,56 @@ io.on('connection', (socket) => {
     console.log(`   ${attacker.username}: HP ${attacker.state.hp}, MP ${attacker.state.mp}`);
     console.log(`   ${defender.username}: HP ${defender.state.hp}, MP ${defender.state.mp}`);
     console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.socketId})`);
+  });
+
+  // マッチング準備完了を受け取る
+  socket.on('battle_ready_ack', (data: { roomId: string }) => {
+    const roomId = data.roomId;
+    const waitingMatch = matchingWaitingRooms.get(roomId);
+    
+    if (!waitingMatch) {
+      console.log(`⚠️ No matching waiting room found for ${roomId}`);
+      return;
+    }
+
+    // どのプレイヤーからのACKか判定
+    const gameData = waitingMatch.roomData;
+    if (gameData.player1.socketId === socket.id) {
+      waitingMatch.player1_ready = true;
+      console.log(`✅ Player 1 ready: ${gameData.player1.username}`);
+    } else if (gameData.player2.socketId === socket.id) {
+      waitingMatch.player2_ready = true;
+      console.log(`✅ Player 2 ready: ${gameData.player2.username}`);
+    }
+
+    // 両方準備できたらゲーム開始
+    if (waitingMatch.player1_ready && waitingMatch.player2_ready) {
+      console.log(`🚀 Both players ready! Starting game in room ${roomId}`);
+      clearTimeout(waitingMatch.timeout);
+      matchingWaitingRooms.delete(roomId);
+
+      // gameState を作成して activeGames に追加
+      const gameState: GameState = {
+        roomId,
+        player1: gameData.player1,
+        player2: gameData.player2,
+        currentTurn: 0,
+        currentTurnPlayerId: gameData.player1.socketId,
+        isGameOver: false,
+        winner: null,
+        startedAt: Date.now(),
+      };
+
+      activeGames.set(roomId, gameState);
+
+      // ターン変更通知
+      io.to(roomId).emit('turn_change', {
+        currentTurnPlayerId: gameState.currentTurnPlayerId,
+        currentTurnPlayerName: gameData.player1.username,
+      });
+
+      console.log(`✅ Game officially started in room ${roomId}`);
+    }
   });
 
   socket.on('disconnect', () => {
