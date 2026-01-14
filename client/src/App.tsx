@@ -253,7 +253,28 @@ function App() {
       setIsGameOver(false)
       setWinner(null)
       setZoneBanner(null)
-      setIsProcessing(false)
+      setIsProcessing(false) // 演出中フラグを強制リセット
+      
+      // すべての演出フラグをリセット
+      setDamageFlash(false)
+      setHealFlash(false)
+      setPoisonFlash(false)
+      setShieldEffect(false)
+      setSpecialVictoryText(null)
+      setVictoryResult(null)
+      setOpponentInkEffect(false)
+      setOpponentShakeEffect(false)
+      setInkSplashes([])
+      setYakumanFreeze(false)
+      setLastAttackGrayscale(false)
+      setLastAttackFlash(false)
+      setShowImpact(false)
+      setShowFinishText(false)
+      setFatalFlash(false)
+      setFatalWarning(false)
+      setGlassBreak(false)
+      setSlowMotion(false)
+      setBuffedDamage(null)
 
       const mySocketId = newSocket.id || ''
       const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
@@ -262,6 +283,7 @@ function App() {
       setMyData(me)
       setOpponentData(opponent)
       setCurrentTurnId(data.gameState.currentTurnPlayerId)
+      console.log('✅ Reconnect: Current turn set to:', data.gameState.currentTurnPlayerId)
       setLogs(prev => [`🔁 再接続しました`, ...prev].slice(0, 10))
     })
 
@@ -310,6 +332,7 @@ function App() {
       setGlassBreak(false)
       setSlowMotion(false)
       setBuffedDamage(null)
+      setIsProcessing(false) // 演出中フラグを強制リセット
       
       // プレイヤーデータを設定（重要：これがないとホーム画面に戻る）
       const mySocketId = newSocket.id || ''
@@ -318,6 +341,12 @@ function App() {
       
       setMyData(me)
       setOpponentData(opponent)
+      
+      // ターンIDを設定（重要：初回ターンプレイヤーを把握）
+      if (data.currentTurnPlayerId) {
+        setCurrentTurnId(data.currentTurnPlayerId)
+        console.log('✅ Current turn set to:', data.currentTurnPlayerId)
+      }
       
       setLogs([`⚔️ バトル開始！ vs ${opponent.username}`])
     })

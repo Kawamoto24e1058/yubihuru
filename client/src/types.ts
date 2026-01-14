@@ -172,6 +172,7 @@ export interface PlayerData {
  */
 export interface GameStartData {
   roomId: string;
+  currentTurnPlayerId: string; // 初回ターンプレイヤーID
   player1: PlayerData;
   player2: PlayerData;
 }

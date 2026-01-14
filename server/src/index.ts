@@ -56,6 +56,7 @@ interface GameState {
   isGameOver: boolean;
   winner: string | null;
   startedAt?: number; // ゲーム開始時刻（マッチング直後の保護用）
+  lastTurnChangeTime?: number; // 最後のターン変更時刻（ウォッチドッグ用）
 }
 
 const waitingRoom: WaitingPlayer[] = [];
@@ -65,6 +66,8 @@ const offlinePlayers = new Map<string, { roomId: string; lastSeen: number; usern
 const socketToPlayerId = new Map<string, string>();
 // マッチング確認待ち: roomId -> { player1_ready, player2_ready, timeout }
 const matchingWaitingRooms = new Map<string, { player1_ready: boolean; player2_ready: boolean; timeout: NodeJS.Timeout; roomData: any }>();
+// ウォッチドッグ監視: roomId -> timeoutID
+const watchdogTimers = new Map<string, NodeJS.Timeout>();
 
 // Helper function to create initial player state
 function createPlayerState(): PlayerState {
@@ -116,7 +119,42 @@ function cleanupGameRoom(roomId: string) {
   }
   
   activeGames.delete(roomId);
+  stopWatchdog(roomId); // ウォッチドッグをクリア
   console.log(`🗑️ Room ${roomId} cleaned up: game data and offline player info deleted`);
+}
+
+// Helper function to start watchdog for a game room (re-sync turn after 5s inactivity)
+function startWatchdog(roomId: string) {
+  // 既存のウォッチドッグをクリア
+  const existingTimer = watchdogTimers.get(roomId);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+  }
+
+  const timer = setTimeout(() => {
+    const game = activeGames.get(roomId);
+    if (game && !game.isGameOver) {
+      console.log(`⏰ Watchdog triggered for room ${roomId}: Re-syncing turn...`);
+      io.to(roomId).emit('turn_change', {
+        currentTurnPlayerId: game.currentTurnPlayerId,
+        currentTurnPlayerName: game.currentTurnPlayerId === game.player1.socketId ? game.player1.username : game.player2.username,
+      });
+      console.log(`✅ Turn re-synced: ${game.currentTurnPlayerId}`);
+    }
+  }, 5000); // 5秒のウォッチドッグ
+
+  watchdogTimers.set(roomId, timer);
+  console.log(`🐕 Watchdog started for room ${roomId} (5s timeout)`);
+}
+
+// Helper function to stop watchdog for a game room
+function stopWatchdog(roomId: string) {
+  const timer = watchdogTimers.get(roomId);
+  if (timer) {
+    clearTimeout(timer);
+    watchdogTimers.delete(roomId);
+    console.log(`🛑 Watchdog stopped for room ${roomId}`);
+  }
 }
 
 // Helper: weighted random pick according to zone rules
@@ -773,6 +811,7 @@ io.on('connection', (socket) => {
         // Send game_start event to both clients
         const gameData = {
           roomId,
+          currentTurnPlayerId: gameState.currentTurnPlayerId, // 初回ターンプレイヤーIDを含める
           player1: {
             playerId: player1.playerId,
             socketId: player1.socketId,
@@ -814,6 +853,9 @@ io.on('connection', (socket) => {
         
         // ゲームスタート通知
         io.to(roomId).emit('game_start', gameData);
+        
+        // ゲーム開始時にウォッチドッグを開始（ボタンロック対策）
+        startWatchdog(roomId);
         
         console.log(`📋 Matching confirmed. Waiting for battle_ready_ack from both players in room ${roomId}`);
         console.log(`   Player 1: ${player1.username} (${player1.socketId})`);
@@ -1393,6 +1435,9 @@ io.on('connection', (socket) => {
       currentTurnPlayerId: currentGame.currentTurnPlayerId,
       currentTurnPlayerName: nextPlayer.username,
     });
+
+    // ウォッチドッグを再開（新しいターンの5秒ウォッチドッグ）
+    startWatchdog(currentRoomId);
 
     console.log(`📊 Turn ${currentGame.currentTurn}:`);
     console.log(`   ${attacker.username}: HP ${attacker.state.hp}, MP ${attacker.state.mp}`);
