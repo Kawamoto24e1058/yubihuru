@@ -186,6 +186,13 @@ export const SKILLS: Skill[] = [
   { id: 131, name: '天和（テンホウ）', type: 'special', power: 999, description: '究極のレア技！配牌で役満を作る奇跡', effect: 'tenpai', isTenpai: true },
 
   // ============================================
+  // 反射・カウンター系技
+  // ============================================
+  { id: 132, name: 'ミラーコート', type: 'special', power: 0, description: '次のターンに受けるダメージを跳ね返す', effect: 'mirror_coat' },
+  { id: 133, name: 'カウンター', type: 'special', power: 0, description: '次のターンのダメージを軽減し、2倍で返す', effect: 'counter' },
+  { id: 134, name: '道連れ', type: 'special', power: 0, description: '自分が倒された時、相手も道連れにする', effect: 'destiny_bond' },
+
+  // ============================================
   // 博打のゾーン限定技（通常リストには含めない）
   // ============================================
   { id: 200, name: 'ギガインパクト(超必殺)', type: 'special', power: 200, description: '威力200の超必殺技', effect: 'hit_rate', hitRate: 0.5 },

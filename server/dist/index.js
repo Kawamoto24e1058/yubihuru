@@ -159,10 +159,50 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
     }
     // ランダムに1つ選択
     const randomIndex = Math.floor(Math.random() * availableSkills.length);
-    return availableSkills[randomIndex];
+    let selectedSkill = availableSkills[randomIndex];
+    // 【立直中の役昇格】通常技が選ばれた場合、役に昇格する可能性
+    if (isRiichi) {
+        // 役のIDリスト（タンヤオ127、清一色128、国士無双129、九蓮宝燈130）
+        const yakuIds = [127, 128, 129, 130];
+        const isYaku = yakuIds.includes(selectedSkill.id);
+        // 通常技（役ではない）が選ばれた場合のみ昇格抽選
+        if (!isYaku) {
+            const upgradeRoll = Math.random() * 100; // 0-100の乱数
+            if (upgradeRoll < 1) { // 1%で九蓮宝燈
+                const chuuren = SKILLS.find(skill => skill.id === 130);
+                if (chuuren) {
+                    selectedSkill = chuuren;
+                    console.log('🀄✨ 立直昇格！九蓮宝燈へ昇格！（1%）');
+                }
+            }
+            else if (upgradeRoll < 4) { // 3%で国士無双（累計4%）
+                const kokushi = SKILLS.find(skill => skill.id === 129);
+                if (kokushi) {
+                    selectedSkill = kokushi;
+                    console.log('🀄 立直昇格！国士無双へ昇格！（3%）');
+                }
+            }
+            else if (upgradeRoll < 9) { // 5%で清一色（累計9%）
+                const chinItsu = SKILLS.find(skill => skill.id === 128);
+                if (chinItsu) {
+                    selectedSkill = chinItsu;
+                    console.log('🀄 立直昇格！清一色へ昇格！（5%）');
+                }
+            }
+            else if (upgradeRoll < 19) { // 10%で断幺九（累計19%）
+                const tanyao = SKILLS.find(skill => skill.id === 127);
+                if (tanyao) {
+                    selectedSkill = tanyao;
+                    console.log('🀄 立直昇格！断幺九へ昇格！（10%）');
+                }
+            }
+            // 19%を超えた場合は通常技のまま
+        }
+    }
+    return selectedSkill;
 }
 // Helper function to apply skill effect
-function applySkillEffect(skill, attacker, defender) {
+function applySkillEffect(skill, attacker, defender, riichiFieldBoost = 1.0) {
     let isPoisonApplied = false;
     let isMultiHit = false;
     let isProtected = false;
@@ -212,6 +252,8 @@ function applySkillEffect(skill, attacker, defender) {
                     attacker.state.buffTurns = 0;
                 }
             }
+            // 立直フィールド効果を適用（役のみ、相手が立直中）
+            baseDamage = Math.floor(baseDamage * riichiFieldBoost);
             damage = applyDefense(baseDamage);
             defender.state.hp = Math.max(0, defender.state.hp - damage);
             // ネタ技の特別ログ
@@ -903,11 +945,26 @@ io.on('connection', (socket) => {
                 zoneEffectMessage = `🎯 ゾーン効果: 支援技が出現！`;
             }
         }
+        // 【立直フィールド効果】相手が立直中で、自分が役を引いた場合、威力1.5倍
+        const yakuIds = [127, 128, 129, 130]; // 断幺九、清一色、国士無双、九蓮宝燈
+        const isYakuSkill = yakuIds.includes(selectedSkill.id);
+        const isOpponentRiichi = defender.state.isRiichi;
+        let riichiFieldBoost = 1.0;
+        let riichiFieldMessage = '';
+        if (isOpponentRiichi && isYakuSkill && !attacker.state.isRiichi) {
+            // 相手が立直中、自分は立直していない、そして役を引いた
+            riichiFieldBoost = 1.5;
+            riichiFieldMessage = `🀄💥 立直による場荒れ！役の威力が跳ね上がった！`;
+            console.log(`🀄 立直フィールド効果: ${attacker.username}の役が1.5倍！`);
+        }
         // Apply skill effect
-        let result = applySkillEffect(selectedSkill, attacker, defender);
+        let result = applySkillEffect(selectedSkill, attacker, defender, riichiFieldBoost);
         const messageParts = [...preMessages];
         if (zoneEffectMessage) {
             messageParts.push(zoneEffectMessage);
+        }
+        if (riichiFieldMessage) {
+            messageParts.push(riichiFieldMessage);
         }
         messageParts.push(result.message);
         // 強攻のゾーン：20%の確率で自傷ダメージ

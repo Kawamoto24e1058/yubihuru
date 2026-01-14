@@ -88,6 +88,14 @@ function App() {
   const [isCheckingReconnect, setIsCheckingReconnect] = useState(true)
   const [totalWins, setTotalWins] = useState(0) // 通算勝利数
   const [currentStreak, setCurrentStreak] = useState(0) // 連勝数
+  
+  // 反射・カウンター系演出
+  const [showReflectReady, setShowReflectReady] = useState(false) // ミラーコート待機中
+  const [showCounterReady, setShowCounterReady] = useState(false) // カウンター待機中
+  const [showDestinyBondReady, setShowDestinyBondReady] = useState(false) // 道連れ待機中
+  const [showReflectSuccess, setShowReflectSuccess] = useState(false) // 反射成功
+  const [showCounterSuccess, setShowCounterSuccess] = useState(false) // カウンター成功
+  const [showDestinyBondActivated, setShowDestinyBondActivated] = useState(false) // 道連れ発動
 
   // 相手のactiveEffectを監視
   useEffect(() => {
@@ -430,6 +438,27 @@ function App() {
         }, 3000)
       }
       
+      // 【反射・カウンター系演出】
+      if (data.skillEffect === 'reflect-ready') {
+        setShowReflectReady(true)
+      } else if (data.skillEffect === 'counter-ready') {
+        setShowCounterReady(true)
+      } else if (data.skillEffect === 'destiny-bond-ready') {
+        setShowDestinyBondReady(true)
+      } else if (data.skillEffect === 'reflect-success') {
+        setShowReflectReady(false)
+        setShowReflectSuccess(true)
+        setTimeout(() => setShowReflectSuccess(false), 2000)
+      } else if (data.skillEffect === 'counter-success') {
+        setShowCounterReady(false)
+        setShowCounterSuccess(true)
+        setTimeout(() => setShowCounterSuccess(false), 2000)
+      } else if (data.skillEffect === 'destiny-bond-activated') {
+        setShowDestinyBondReady(false)
+        setShowDestinyBondActivated(true)
+        setTimeout(() => setShowDestinyBondActivated(false), 3000)
+      }
+      
       // 技名を即座に表示
       const skillName = data.skillName || '技'
       setImpactText(skillName)
@@ -739,6 +768,13 @@ function App() {
     setInkSplashes([])
     setSpecialVictoryText(null)
     setZoneBanner(null)
+    // 反射・カウンター系
+    setShowReflectReady(false)
+    setShowCounterReady(false)
+    setShowDestinyBondReady(false)
+    setShowReflectSuccess(false)
+    setShowCounterSuccess(false)
+    setShowDestinyBondActivated(false)
   }
 
   const handleJoin = () => {
@@ -1124,6 +1160,95 @@ function App() {
               }}
             >
               役満
+            </p>
+          </div>
+        )}
+        
+        {/* 反射待機中（ミラーコート）：六角形バリア */}
+        {(showReflectReady || (myData?.state.isReflecting)) && (
+          <div className="pointer-events-none absolute inset-0 z-[70] flex items-center justify-center">
+            <div 
+              className="w-80 h-80 border-8 border-cyan-400 animate-pulse"
+              style={{
+                clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+                boxShadow: '0 0 40px rgba(34, 211, 238, 0.6), inset 0 0 40px rgba(34, 211, 238, 0.3)',
+              }}
+            />
+          </div>
+        )}
+        
+        {/* カウンター待機中：回転するバリア */}
+        {(showCounterReady || (myData?.state.isCounter)) && (
+          <div className="pointer-events-none absolute inset-0 z-[70] flex items-center justify-center">
+            <div 
+              className="w-80 h-80 border-8 border-orange-500"
+              style={{
+                clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
+                boxShadow: '0 0 40px rgba(249, 115, 22, 0.6), inset 0 0 40px rgba(249, 115, 22, 0.3)',
+                animation: 'spin 2s linear infinite'
+              }}
+            />
+          </div>
+        )}
+        
+        {/* 道連れ待機中：紫の呪いオーラ */}
+        {(showDestinyBondReady || (myData?.state.isDestinyBond)) && (
+          <div className="pointer-events-none absolute inset-0 z-[70] flex items-center justify-center">
+            <div 
+              className="w-full h-full border-8 border-purple-700 animate-pulse"
+              style={{
+                boxShadow: '0 0 60px rgba(126, 34, 206, 0.8), inset 0 0 60px rgba(126, 34, 206, 0.4)',
+              }}
+            />
+          </div>
+        )}
+        
+        {/* 反射成功演出 */}
+        {showReflectSuccess && (
+          <div className="pointer-events-none absolute inset-0 z-[90] flex items-center justify-center bg-cyan-500/30">
+            <p 
+              className="text-[200px] font-black select-none animate-bounce"
+              style={{
+                WebkitTextStroke: '8px black',
+                fontWeight: 900,
+                color: '#22D3EE'
+              }}
+            >
+              REFLECT!!
+            </p>
+          </div>
+        )}
+        
+        {/* カウンター成功演出 */}
+        {showCounterSuccess && (
+          <div className="pointer-events-none absolute inset-0 z-[90] flex items-center justify-center bg-orange-500/30">
+            <p 
+              className="text-[200px] font-black select-none animate-bounce"
+              style={{
+                WebkitTextStroke: '8px black',
+                fontWeight: 900,
+                color: '#F97316'
+              }}
+            >
+              COUNTER!!
+            </p>
+          </div>
+        )}
+        
+        {/* 道連れ発動演出 */}
+        {showDestinyBondActivated && (
+          <div className="pointer-events-none absolute inset-0 z-[95] flex items-center justify-center bg-black/80"
+            style={{filter: 'sepia(60%)'}}>
+            <p 
+              className="text-[250px] font-black select-none"
+              style={{
+                WebkitTextStroke: '8px black',
+                fontWeight: 900,
+                color: '#7E22CE',
+                animation: 'pulse 1s ease-in-out infinite'
+              }}
+            >
+              道連れ
             </p>
           </div>
         )}
