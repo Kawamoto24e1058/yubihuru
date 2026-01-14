@@ -115,7 +115,7 @@ function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean
     }
   }
 
-  // 【特殊勝利】出禁の超レア抽選（0.5%）
+  // 【特殊勝利】出禁の超レア抽選（0.15%）
   const rareLuck = Math.random();
   if (rareLuck < 0.0015) { // 0.15%
     const kinshi = SKILLS.find(skill => skill.id === 120);
@@ -123,25 +123,25 @@ function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean
     return kinshi!;
   }
 
-  // 【麻雀役満】九蓮宝燈の超超超レア抽選（0.1%）
+  // 【麻雀役満】九蓮宝燈の超超超レア抽選（0.05%）
   const chuurenLuck = Math.random();
-  if (chuurenLuck < 0.0008) { // 0.08%
+  if (chuurenLuck < 0.0005) { // 0.05%
     const chuuren = SKILLS.find(skill => skill.id === 130);
     console.log('🀄✨ 幻の役満！九蓮宝燈が出現！');
     return chuuren!;
   }
 
-  // 【麻雀役満】国士無双のレア抽選（1%）
+  // 【麻雀役満】国士無双のレア抽選（0.1%）
   const kokushiLuck = Math.random();
-  if (kokushiLuck < 0.01) { // 1%
+  if (kokushiLuck < 0.001) { // 0.1%
     const kokushi = SKILLS.find(skill => skill.id === 129);
     console.log('🀄 役満！国士無双が出現！');
     return kokushi!;
   }
 
-  // 【麻雀役】清一色の低確率抽選（3%）
+  // 【麻雀役】清一色の低確率抽選（2%）
   const chinItsuLuck = Math.random();
-  if (chinItsuLuck < 0.03) { // 3%
+  if (chinItsuLuck < 0.02) { // 2%
     const chinItsu = SKILLS.find(skill => skill.id === 128);
     console.log('🀄 清一色が出現！');
     return chinItsu!;

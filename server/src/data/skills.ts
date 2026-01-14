@@ -180,8 +180,8 @@ export const SKILLS: Skill[] = [
   // 麻雀役必殺技システム
   // ============================================
   { id: 127, name: '断幺九（タンヤオ）', type: 'attack', power: 40, description: '中張牌のみで構成された役', effect: 'none' },
-  { id: 128, name: '清一色（チンイツ）', type: 'attack', power: 120, description: '一色のみで構成された役満級の大技', effect: 'none' },
-  { id: 129, name: '国士無双', type: 'special', power: 400, description: '13種の幺九牌を揃えた役満', effect: 'yakuman' },
+  { id: 128, name: '清一色（チンイツ）', type: 'attack', power: 80, description: '一色のみで構成された役満級の大技', effect: 'none' },
+  { id: 129, name: '国士無双', type: 'special', power: 250, description: '13種の幺九牌を揃えた役満', effect: 'yakuman' },
   { id: 130, name: '九蓮宝燈', type: 'special', power: 999, description: '幻の役満！一撃必殺', effect: 'chuuren' },
 
   // ============================================

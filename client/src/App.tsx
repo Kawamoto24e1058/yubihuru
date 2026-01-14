@@ -67,9 +67,7 @@ function App() {
   const [victoryResult, setVictoryResult] = useState<'WINNER' | 'LOSER' | null>(null)
 
   // 麻雀役システム用
-  const [doraSkill, setDoraSkill] = useState<string>('') // ドラ表示用
   const [yakumanFreeze, setYakumanFreeze] = useState(false) // 役満フリーズ演出
-  const [isDoraTurn, setIsDoraTurn] = useState(false) // ドラが該当した時の金縁表示
 
   // ラストアタック・インパクト用
   const [lastAttackGrayscale, setLastAttackGrayscale] = useState(false) // グレースケール
@@ -133,7 +131,6 @@ function App() {
       setLastAttackGrayscale(false)
       setLastAttackFlash(false)
       setShowImpact(false)
-      setIsDoraTurn(false)
       setShowFinishText(false)
       setFatalFlash(false)
       setFatalWarning(false)
@@ -153,7 +150,6 @@ function App() {
         setLastAttackGrayscale(false)
         setLastAttackFlash(false)
         setShowImpact(false)
-        setIsDoraTurn(false)
         setShowFinishText(false)
         setFatalFlash(false)
         setFatalWarning(false)
@@ -260,7 +256,6 @@ function App() {
       setLastAttackGrayscale(false)
       setLastAttackFlash(false)
       setShowImpact(false)
-      setIsDoraTurn(false)
       setShowFinishText(false)
       setFatalFlash(false)
       setFatalWarning(false)
@@ -268,25 +263,7 @@ function App() {
       setSlowMotion(false)
       setBuffedDamage(null)
       
-      // ドラをランダム選択（麻雀システム）
-      const allSkillNames = ['パンチ', 'キック', 'ヒール', '火炎弾', '氷結魔法', 'ポイズン', 'シールド', 
-        'MP吸収', 'HP吸収', 'ギガ・インパクト', '等価交換', '借金取り', '指が折れる', '飯テロ',
-        '断幺九', '清一色', '国士無双', '九蓮宝燈']
-      const randomDora = allSkillNames[Math.floor(Math.random() * allSkillNames.length)]
-      setDoraSkill(randomDora)
-      
-      const mySocketId = newSocket.id || ''
-      const me = data.player1.socketId === mySocketId ? data.player1 : data.player2
-      const opponent = data.player1.socketId === mySocketId ? data.player2 : data.player1
-      if (me.playerId) {
-        localStorage.setItem('yubihuru_player_id', me.playerId)
-      }
-      
-      // サーバーがプレイヤー1から始める
-      setCurrentTurnId(data.player1.socketId)
-      
-      setMyData(me)
-      setOpponentData(opponent)
+      const opponent = data.player1.playerId === myData?.playerId ? data.player2 : data.player1
       setLogs([`⚔️ バトル開始！ vs ${opponent.username}`])
     })
 
@@ -297,9 +274,11 @@ function App() {
       // 役満フリーズ演出（国士無双・九蓮宝燈）
       if (data.skillEffect === 'yakuman-freeze') {
         setYakumanFreeze(true)
+        // 九蓮宝燈は特別な長い演出時間
+        const freezeDuration = data.skillName === '九蓮宝燈' ? 5000 : 3000
         setTimeout(() => {
           setYakumanFreeze(false)
-        }, 3000) // 3秒間のフリーズ
+        }, freezeDuration)
       }
       
       // 特殊勝利を検知（出禁 or 数え役満）
@@ -334,10 +313,7 @@ function App() {
       }
       
       // ドラ該当時は金縁表示
-      if (doraSkill && skillName === doraSkill) {
-        setIsDoraTurn(true)
-        setTimeout(() => setIsDoraTurn(false), 1200)
-      }
+      // (削除: ドラ機能は廃止)
       
       // パワー150以上で超必殺演出（虹色）
       if (data.skillPower && data.skillPower >= 150) {
@@ -917,22 +893,6 @@ function App() {
               }}
             >
               役満
-            </p>
-          </div>
-        )}
-        
-        {/* ドラ表示（右上） */}
-        {doraSkill && gameStarted && !isGameOver && (
-          <div className="absolute top-4 right-4 z-30">
-            <p 
-              className={`text-2xl font-black ${isDoraTurn ? 'animate-dora-glow' : ''}`}
-              style={{
-                WebkitTextStroke: isDoraTurn ? '3px gold' : '3px black',
-                fontWeight: 900,
-                color: isDoraTurn ? '#FFD700' : '#FFFFFF'
-              }}
-            >
-              ドラ：{doraSkill}
             </p>
           </div>
         )}
