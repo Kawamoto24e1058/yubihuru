@@ -101,6 +101,8 @@ export interface PlayerState {
   riichiBombCount?: number; // 立直時の連続パンチカウント
   isBroken?: boolean; // 指が折れている状態
   brokenTurns?: number; // 行動不能の残りターン数
+  isBuffed?: boolean; // 攻撃力上昇フラグ
+  buffTurns?: number; // バフ残りターン
 }
 
 /**

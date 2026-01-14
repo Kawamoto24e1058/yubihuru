@@ -96,6 +96,8 @@ export interface PlayerState {
     riichiBombCount?: number;
     isBroken?: boolean;
     brokenTurns?: number;
+    isBuffed?: boolean;
+    buffTurns?: number;
 }
 /**
  * Game State interface

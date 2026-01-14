@@ -66,13 +66,21 @@ export interface PlayerState {
   hp: number; // 初期値500
   maxHp: number; // 初期値500、上限1000
   mp: number; // 初期値10
+  isBuffed?: boolean;
+  buffTurns?: number;
   activeZone: {
-    type: 'attack' | 'heal' | 'chaos' | 'none';
+    type: '強攻のゾーン' | '集中のゾーン' | '乱舞のゾーン' | '博打のゾーン' | 'none';
     remainingTurns: number;
   };
   status: {
-    poison: number | null; // 毒のターン数
-    mpRegenBonus: number | null; // MP回復ボーナス
+    poison: {
+      turns: number;
+      damagePerTurn: number;
+    } | null; // 毒状態
+    mpRegenBonus: {
+      turns: number;
+      amount: number;
+    } | null; // MP回復ボーナス
   };
   isRiichi: boolean; // 立直状態
   activeEffect?: 'ink' | 'shake' | 'none'; // メタ要素

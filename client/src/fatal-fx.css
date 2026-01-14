@@ -1,0 +1,84 @@
+/* 必殺技フラッシュ（BAN用・3回） */
+@keyframes fatal-flash {
+  0% { 
+    opacity: 0;
+  }
+  50% { 
+    opacity: 1;
+  }
+  100% { 
+    opacity: 0;
+  }
+}
+
+.animate-fatal-flash {
+  animation: fatal-flash 0.1s ease-out;
+}
+
+/* 警告バナー（BAN用） */
+@keyframes warning-banner {
+  0% { 
+    transform: translateY(-100px);
+    opacity: 0;
+  }
+  20% { 
+    transform: translateY(0);
+    opacity: 1;
+  }
+  80% { 
+    transform: translateY(0);
+    opacity: 1;
+  }
+  100% { 
+    transform: translateY(-100px);
+    opacity: 0;
+  }
+}
+
+.animate-warning-banner {
+  animation: warning-banner 0.9s ease-out;
+}
+
+/* ガラス割れ（BAN用） */
+@keyframes glass-shatter {
+  0% { 
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% { 
+    opacity: 0.8;
+    transform: scale(1.02);
+  }
+  100% { 
+    opacity: 0;
+    transform: scale(1.1);
+  }
+}
+
+.animate-glass-shatter {
+  animation: glass-shatter 1s ease-out forwards;
+}
+
+/* バフ付きダメージ（巨大） */
+@keyframes buffed-damage {
+  0% { 
+    transform: scale(0.5) rotate(-10deg);
+    opacity: 0;
+  }
+  30% { 
+    transform: scale(1.1) rotate(5deg);
+    opacity: 1;
+  }
+  70% { 
+    transform: scale(1) rotate(-2deg);
+    opacity: 1;
+  }
+  100% { 
+    transform: scale(0.9);
+    opacity: 0;
+  }
+}
+
+.animate-buffed-damage {
+  animation: buffed-damage 1.2s ease-out forwards;
+}

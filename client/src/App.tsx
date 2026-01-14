@@ -76,6 +76,11 @@ function App() {
   const [lastAttackFlash, setLastAttackFlash] = useState(false) // 画面フラッシュ
   const [shouldApplyFinalDamage, setShouldApplyFinalDamage] = useState(false) // HP最終反映フラグ
   const [mobileZoneInfoOpen, setMobileZoneInfoOpen] = useState(false) // スマホ向けゾーン説明
+  const [fatalFlash, setFatalFlash] = useState(false)
+  const [fatalWarning, setFatalWarning] = useState(false)
+  const [glassBreak, setGlassBreak] = useState(false)
+  const [slowMotion, setSlowMotion] = useState(false)
+  const [buffedDamage, setBuffedDamage] = useState<number | null>(null)
 
   // 相手のactiveEffectを監視
   useEffect(() => {
@@ -126,6 +131,11 @@ function App() {
       setShowImpact(false)
       setIsDoraTurn(false)
       setShowFinishText(false)
+      setFatalFlash(false)
+      setFatalWarning(false)
+      setGlassBreak(false)
+      setSlowMotion(false)
+      setBuffedDamage(null)
     }
 
     if (isGameOver) {
@@ -141,6 +151,11 @@ function App() {
         setShowImpact(false)
         setIsDoraTurn(false)
         setShowFinishText(false)
+        setFatalFlash(false)
+        setFatalWarning(false)
+        setGlassBreak(false)
+        setSlowMotion(false)
+        setBuffedDamage(null)
       }, 2000)
       return () => clearTimeout(timer)
     }
@@ -232,6 +247,11 @@ function App() {
       setShowImpact(false)
       setIsDoraTurn(false)
       setShowFinishText(false)
+      setFatalFlash(false)
+      setFatalWarning(false)
+      setGlassBreak(false)
+      setSlowMotion(false)
+      setBuffedDamage(null)
       
       // ドラをランダム選択（麻雀システム）
       const allSkillNames = ['パンチ', 'キック', 'ヒール', '火炎弾', '氷結魔法', 'ポイズン', 'シールド', 
@@ -270,6 +290,14 @@ function App() {
       // 特殊勝利を検知（出禁 or 数え役満）
       if (data.message && data.message.includes('出禁')) {
         setSpecialVictoryText('BAN')
+        setFatalFlash(true)
+        setFatalWarning(true)
+        setSlowMotion(true)
+        setTimeout(() => setSlowMotion(false), 1000)
+        setTimeout(() => setFatalWarning(false), 900)
+        setTimeout(() => setFatalFlash(false), 900)
+        setTimeout(() => setGlassBreak(true), 250)
+        setTimeout(() => setGlassBreak(false), 1250)
       } else if (data.message && data.message.includes('役満')) {
         setSpecialVictoryText('役満')
       }
@@ -278,6 +306,17 @@ function App() {
       const skillName = data.skillName || '技'
       setImpactText(skillName)
       setShowImpact(true)
+
+      // バフ付き攻撃の場合、ダメージを記録して後で巨大化表示
+      if (data.wasBuffedAttack && data.damage > 0) {
+        setBuffedDamage(data.damage)
+        setTimeout(() => setBuffedDamage(null), 1200)
+      }
+
+      if (data.wasBuffedAttack && data.damage && data.damage > 0) {
+        setBuffedDamage(data.damage)
+        setTimeout(() => setBuffedDamage(null), 900)
+      }
       
       // ドラ該当時は金縁表示
       if (doraSkill && skillName === doraSkill) {
@@ -686,7 +725,59 @@ function App() {
     const myZoneBorder = zoneBorderMap[myData.state.activeZone.type] || 'border-black'
 
     return (
-      <div className={`min-h-screen bg-yellow-50 p-4 transition-all relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${opponentShakeEffect ? 'animate-window-shake' : ''} ${lastAttackGrayscale ? 'filter grayscale' : ''}`}>
+      <div className={`min-h-screen bg-yellow-50 p-4 transition-all relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${opponentShakeEffect ? 'animate-window-shake' : ''} ${lastAttackGrayscale ? 'filter grayscale' : ''} ${slowMotion ? 'animate-slow-motion' : ''}`}>
+        {/* 必殺技演出：3回フラッシュ（BAN用） */}
+        {fatalFlash && (
+          <>
+            <div className="pointer-events-none absolute inset-0 z-[100] bg-white opacity-0 animate-fatal-flash" />
+            <div className="pointer-events-none absolute inset-0 z-[100] bg-white opacity-0 animate-fatal-flash" style={{ animationDelay: '0.15s' }} />
+            <div className="pointer-events-none absolute inset-0 z-[100] bg-white opacity-0 animate-fatal-flash" style={{ animationDelay: '0.3s' }} />
+          </>
+        )}
+
+        {/* 警告バナー（BAN用） */}
+        {fatalWarning && (
+          <div className="pointer-events-none absolute top-1/4 left-0 right-0 z-[101] flex items-center justify-center animate-warning-banner">
+            <div className="bg-black text-yellow-400 border-8 border-yellow-400 shadow-[0_0_40px_rgba(255,255,0,0.8)] px-12 py-6 text-6xl font-black tracking-widest uppercase">
+              ⚠️ WARNING ⚠️
+            </div>
+          </div>
+        )}
+
+        {/* ガラス割れオーバーレイ（BAN用） */}
+        {glassBreak && (
+          <div className="pointer-events-none absolute inset-0 z-[102] animate-glass-shatter" style={{
+            backgroundImage: 'radial-gradient(circle at center, transparent 0%, transparent 30%, rgba(255,255,255,0.9) 100%)',
+          }}>
+            {/* ガラス破片エフェクト（SVG） */}
+            <svg className="absolute inset-0 w-full h-full opacity-80">
+              <defs>
+                <filter id="shatter">
+                  <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="5" result="turbulence"/>
+                  <feDisplacementMap in="SourceGraphic" in2="turbulence" scale="50" xChannelSelector="R" yChannelSelector="G"/>
+                </filter>
+              </defs>
+              <rect width="100%" height="100%" fill="rgba(255,255,255,0.3)" filter="url(#shatter)"/>
+            </svg>
+          </div>
+        )}
+
+        {/* バフ付きダメージ表示（3倍サイズ） */}
+        {buffedDamage !== null && (
+          <div className="pointer-events-none absolute inset-0 z-[55] flex items-center justify-center">
+            <p 
+              className="text-[24vw] font-black select-none animate-buffed-damage"
+              style={{
+                WebkitTextStroke: '6px black',
+                fontWeight: 900,
+                color: '#FF4444'
+              }}
+            >
+              {buffedDamage}
+            </p>
+          </div>
+        )}
+
         {/* ラストアタック：グレースケール + 画面フラッシュ */}
         {lastAttackFlash && (
           <div className="pointer-events-none absolute inset-0 z-[90] bg-white opacity-0 animate-last-attack-flash" />
@@ -785,7 +876,7 @@ function App() {
               className="text-[200px] font-black select-none"
               style={{
                 color: specialVictoryText === 'BAN' ? '#FF0000' : '#FFD700',
-                WebkitTextStroke: '3px black',
+                WebkitTextStroke: specialVictoryText === 'BAN' ? '4px black' : '3px black',
                 fontWeight: 900,
                 animation: 'victory-bounce 0.5s ease-out'
               }}
@@ -976,7 +1067,7 @@ function App() {
                   : 'bg-gray-400 cursor-not-allowed'
               }`}
             >
-              {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : '✨ 指を振る'}
+              {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る')}
             </button>
 
             {/* 現在のゾーン効果表示 */}
@@ -1058,7 +1149,7 @@ function App() {
                     : 'bg-gray-400 cursor-not-allowed'
                 }`}
               >
-                {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : '✨ 指を振る'}
+                {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る')}
               </button>
 
               {/* ゾーン展開エリア */}

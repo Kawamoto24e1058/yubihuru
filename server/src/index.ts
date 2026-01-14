@@ -66,6 +66,8 @@ function createPlayerState(): PlayerState {
     hp: 500, // 初期HP 500
     maxHp: 500, // 初期最大HP 500
     mp: 0, // 初期MP 0、上限5
+    isBuffed: false,
+    buffTurns: 0,
     activeZone: {
       type: 'none',
       remainingTurns: 0,
@@ -115,7 +117,7 @@ function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean
 
   // 【特殊勝利】出禁の超レア抽選（0.5%）
   const rareLuck = Math.random();
-  if (rareLuck < 0.005) { // 0.5%
+  if (rareLuck < 0.0015) { // 0.15%
     const kinshi = SKILLS.find(skill => skill.id === 120);
     console.log('⛔ 出禁が発動！相手を場外へ！');
     return kinshi!;
@@ -123,7 +125,7 @@ function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean
 
   // 【麻雀役満】九蓮宝燈の超超超レア抽選（0.1%）
   const chuurenLuck = Math.random();
-  if (chuurenLuck < 0.001) { // 0.1%
+  if (chuurenLuck < 0.0008) { // 0.08%
     const chuuren = SKILLS.find(skill => skill.id === 130);
     console.log('🀄✨ 幻の役満！九蓮宝燈が出現！');
     return chuuren!;
@@ -208,10 +210,12 @@ function applySkillEffect(
   isProtected?: boolean;
   skillType?: string;
   skillEffect?: string;
+  wasBuffedAttack?: boolean;
 } {
   let isPoisonApplied = false;
   let isMultiHit = false;
   let isProtected = false;
+  let wasBuffedAttack = false;
   let damage = 0;
   let healing = 0;
   const logs: string[] = [];
@@ -237,6 +241,12 @@ function applySkillEffect(
 
   switch (skill.type) {
     case 'attack': {
+      const hadBuff = attacker.state.isBuffed;
+      if (hadBuff) {
+        wasBuffedAttack = true;
+        attacker.state.buffTurns = (attacker.state.buffTurns ?? 1) - 1;
+      }
+      // 攻撃バフが乗っている場合、最終計算前に倍率適用
       // 命中率チェック（ギガインパクト用）
       if (skill.effect === 'hit_rate' && skill.hitRate) {
         const hit = Math.random();
@@ -248,6 +258,14 @@ function applySkillEffect(
 
       // 基本ダメージ計算
       let baseDamage = calculateDamage(skill.power);
+      if (hadBuff) {
+        baseDamage = Math.floor(baseDamage * 2);
+        // バフは一度攻撃したら消費
+        if ((attacker.state.buffTurns ?? 0) <= 0) {
+          attacker.state.isBuffed = false;
+          attacker.state.buffTurns = 0;
+        }
+      }
       damage = applyDefense(baseDamage);
       defender.state.hp = Math.max(0, defender.state.hp - damage);
       
@@ -342,6 +360,8 @@ function applySkillEffect(
       } else if (skill.effect === 'charge') {
         // チャージ：次のターンの攻撃力2倍（実装はゲームロジックで行う）
         logs.push(`${attacker.username}の${skill.name}！ 次のターン攻撃力が2倍になる！`);
+        attacker.state.isBuffed = true;
+        attacker.state.buffTurns = 1;
       } else if (skill.effect === 'protect') {
         // まもる：次の相手の攻撃を80%カット（実装はゲームロジックで行う）
         logs.push(`${attacker.username}の${skill.name}！ 次の相手の攻撃を大きく軽減する！`);
@@ -511,6 +531,7 @@ function applySkillEffect(
     isProtected,
     skillType: skill.type,
     skillEffect: resultSkillEffect,
+    wasBuffedAttack,
   };
 }
 
@@ -1037,6 +1058,7 @@ io.on('connection', (socket) => {
       healing: result.healing,
       message: result.message,
       skillEffect: result.skillEffect,
+      wasBuffedAttack: result.wasBuffedAttack,
       gameState: currentGame,
     };
 
