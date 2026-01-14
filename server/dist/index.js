@@ -56,6 +56,29 @@ function createPlayerState() {
         isDestinyBond: false,
     };
 }
+// Helper function to clean up game room and offline player data
+function cleanupGameRoom(roomId) {
+    const game = activeGames.get(roomId);
+    if (game) {
+        // 両プレイヤーのオフラインデータを削除
+        const player1Id = Array.from(socketToPlayerId.entries()).find(([, id]) => {
+            const info = offlinePlayers.get(id);
+            return info && info.roomId === roomId;
+        })?.[1];
+        const player2Id = Array.from(socketToPlayerId.entries()).find(([, id]) => {
+            if (id === player1Id)
+                return false;
+            const info = offlinePlayers.get(id);
+            return info && info.roomId === roomId;
+        })?.[1];
+        if (player1Id)
+            offlinePlayers.delete(player1Id);
+        if (player2Id)
+            offlinePlayers.delete(player2Id);
+    }
+    activeGames.delete(roomId);
+    console.log(`🗑️ Room ${roomId} cleaned up: game data and offline player info deleted`);
+}
 // Helper: weighted random pick according to zone rules
 function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 500, currentTurn = 1) {
     // 【天和】究極のレア技：1ターン目のみ、0.01%の確率で出現
@@ -712,17 +735,18 @@ io.on('connection', (socket) => {
         const { playerId } = payload;
         const offlineInfo = offlinePlayers.get(playerId);
         if (!offlineInfo) {
-            socket.emit('can_reconnect', { canReconnect: false });
+            socket.emit('can_reconnect', { canReconnect: false, hasActiveGame: false });
             return;
         }
         const game = activeGames.get(offlineInfo.roomId);
         if (!game) {
             offlinePlayers.delete(playerId);
-            socket.emit('can_reconnect', { canReconnect: false });
+            socket.emit('can_reconnect', { canReconnect: false, hasActiveGame: false });
             return;
         }
-        // 有効な対戦データが存在する
-        socket.emit('can_reconnect', { canReconnect: true });
+        // 有効な対戦データが存在する：hasActiveGame フラグを true で返す
+        console.log(`📢 Active game found for playerId ${playerId}: ${offlineInfo.roomId}`);
+        socket.emit('can_reconnect', { canReconnect: false, hasActiveGame: true });
     });
     // 再接続リクエスト
     socket.on('reconnect', (payload) => {
@@ -890,7 +914,7 @@ io.on('connection', (socket) => {
                     winner: defender.username,
                     gameState: currentGame,
                 });
-                activeGames.delete(currentRoomId);
+                cleanupGameRoom(currentRoomId);
                 return;
             }
         }
@@ -995,7 +1019,7 @@ io.on('connection', (socket) => {
                     winner: attacker.username,
                     gameState: currentGame,
                 });
-                activeGames.delete(currentRoomId);
+                cleanupGameRoom(currentRoomId);
                 return;
             }
         }
@@ -1129,7 +1153,7 @@ io.on('connection', (socket) => {
                             gameState: currentGame,
                             isDraw: true,
                         });
-                        activeGames.delete(roomIdForTimeout);
+                        cleanupGameRoom(roomIdForTimeout);
                     }, 3000);
                 }
                 return;
@@ -1145,7 +1169,7 @@ io.on('connection', (socket) => {
                     gameState: currentGame,
                 });
                 // Remove game from active games
-                activeGames.delete(roomIdForTimeout);
+                cleanupGameRoom(roomIdForTimeout);
             }, 2000);
             return;
         }
@@ -1161,7 +1185,7 @@ io.on('connection', (socket) => {
                     winner: defender.username,
                     gameState: currentGame,
                 });
-                activeGames.delete(roomIdForTimeout);
+                cleanupGameRoom(roomIdForTimeout);
             }, 2000);
             return;
         }

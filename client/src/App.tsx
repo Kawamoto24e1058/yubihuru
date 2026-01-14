@@ -92,7 +92,7 @@ function App() {
   const [buffedDamage, setBuffedDamage] = useState<number | null>(null)
   const [showMenu, setShowMenu] = useState(false)
   const [showQuitConfirm, setShowQuitConfirm] = useState(false)
-  const [canReconnect, setCanReconnect] = useState(false)
+  const [hasActiveGame, setHasActiveGame] = useState(false) // サーバーが進行中ゲーム検知時のフラグ
   const [isCheckingReconnect, setIsCheckingReconnect] = useState(true)
   const [totalWins, setTotalWins] = useState(0) // 通算勝利数
   const [currentStreak, setCurrentStreak] = useState(0) // 連勝数
@@ -215,35 +215,10 @@ function App() {
 
     newSocket.on('connect', () => {
       console.log('Connected to server')
-
-      // 進行中のバトルがあるかチェック
-      const activeBattle = localStorage.getItem('yubihuru_active_battle')
-      if (activeBattle && !gameStarted) {
-        try {
-          const battleData = JSON.parse(activeBattle)
-          // 5分以内のバトルなら復帰を試みる
-          if (Date.now() - battleData.timestamp < 300000) {
-            console.log('Active battle detected, attempting to reconnect...')
-            const savedId = localStorage.getItem('yubihuru_player_id')
-            if (savedId) {
-              newSocket.emit('reconnect', { playerId: savedId })
-              setIsWaiting(true)
-              return
-            }
-          } else {
-            // 古いバトル情報はクリア
-            localStorage.removeItem('yubihuru_active_battle')
-          }
-        } catch (e) {
-          console.error('Failed to parse active battle data:', e)
-          localStorage.removeItem('yubihuru_active_battle')
-        }
-      }
-
-      // 初回接続時は再接続可否のチェックのみ
+      
+      // 初回接続時は再接続可否のチェックのみ（自動復帰はしない）
       const savedId = localStorage.getItem('yubihuru_player_id')
       if (savedId && !gameStarted) {
-        // 再接続可能かチェック（自動接続はしない）
         newSocket.emit('check_reconnect', { playerId: savedId })
       } else {
         setIsCheckingReconnect(false)
@@ -256,8 +231,9 @@ function App() {
     })
 
     // 再接続可否の応答
-    newSocket.on('can_reconnect', (data: { canReconnect: boolean }) => {
-      setCanReconnect(data.canReconnect)
+    newSocket.on('can_reconnect', (data: { canReconnect: boolean; hasActiveGame: boolean }) => {
+      console.log('Reconnect check response:', data)
+      setHasActiveGame(data.hasActiveGame)
       setIsCheckingReconnect(false)
     })
 
@@ -292,7 +268,7 @@ function App() {
     newSocket.on('reconnect_failed', (data: any) => {
       console.warn('Reconnect failed', data)
       setLogs(prev => [`❌ 再接続に失敗しました`, ...prev].slice(0, 10))
-      setCanReconnect(false)
+      setHasActiveGame(false)
       setIsCheckingReconnect(false)
     })
 
@@ -346,11 +322,29 @@ function App() {
       setLogs([`⚔️ バトル開始！ vs ${opponent.username}`])
     })
 
-    // マッチング成立直後に winner と gameOver をリセット（保険）
+    // マッチング成立直後：100msディレイ後に画面遷移 + gameState強制セット
     newSocket.on('match_found', (data: any) => {
       console.log('Match found confirmation:', data)
+      
+      // サーバーから受け取った最新のgameStateをクライアント側で強制的に再セット
+      if (data.gameState) {
+        const mySocketId = newSocket.id || ''
+        const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
+        const opponent = data.gameState.player1.socketId === mySocketId ? data.gameState.player2 : data.gameState.player1
+        
+        setMyData(me)
+        setOpponentData(opponent)
+        setCurrentTurnId(data.gameState.currentTurnPlayerId)
+      }
+      
       setWinner(null)
       setIsGameOver(false)
+      
+      // 100msのディレイを入れてからバトル画面に遷移（ブラウザレンダリングブロック回避）
+      setTimeout(() => {
+        setIsWaiting(false)
+        setGameStarted(true)
+      }, 100)
     })
 
     // 強制同期：サーバーから最新バトルデータを受け取る（スマホ救済）
@@ -901,9 +895,9 @@ function App() {
         localStorage.setItem('yubihuru_current_streak', '0')
       }
       
-      // バトル終了処理
+      // バトル終了処理：セッションキャッシュと復帰情報を削除
       localStorage.removeItem('yubihuru_active_battle')
-      localStorage.removeItem('yubihuru_player_id')
+      setHasActiveGame(false) // 復帰ボタンを非表示に
       
       console.log('✅ Result screen ready')
     }, 2500) // FINISH表示後に遷移
@@ -2012,14 +2006,14 @@ function App() {
             </div>
           ) : (
             <>
-              {canReconnect && (
+              {hasActiveGame && (
                 <div className="bg-yellow-100 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-4 mb-4">
                   <p className="font-black text-sm mb-3 text-center">前回のバトルが残っています</p>
                   <button
                     onClick={handleReconnect}
                     className="w-full py-3 bg-cyan-400 border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:bg-cyan-300 active:translate-x-1 active:translate-y-1 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-lg"
                   >
-                    🔄 復帰する
+                    🔄 前回の続きから復帰
                   </button>
                 </div>
               )}
