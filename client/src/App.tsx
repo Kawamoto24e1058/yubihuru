@@ -739,14 +739,33 @@ function App() {
     })
 
     newSocket.on('turn_change', (data: any) => {
-      // 新しいターン開始時に全演出をリセット（スマホ救済）
+      // 【ボタンロック強制解放】新しいターン開始時に全演出をリセット
       resetAllEffects()
       
-      setCurrentTurnId(data.currentTurnPlayerId)
+      // 演出によるボタンロックを強制解除
       setIsProcessing(false)
       
-      console.log(`🔄 Turn changed to: ${data.currentTurnPlayerName} (ID: ${data.currentTurnPlayerId})`)
-      setLogs(prev => [`🔄 ${data.currentTurnPlayerName}のターン`, ...prev].slice(0, 10))
+      // ターンIDを再判定・更新
+      setCurrentTurnId(data.currentTurnPlayerId)
+      
+      // gameState が送られてきた場合、プレイヤーデータも更新
+      if (data.gameState) {
+        const mySocketId = newSocket.id || ''
+        const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
+        const opponent = data.gameState.player1.socketId === mySocketId ? data.gameState.player2 : data.gameState.player1
+        
+        setMyData(me)
+        setOpponentData(opponent)
+        console.log('✅ GameState updated from turn_change event')
+      }
+      
+      // リマインド送信の場合、ログに表示
+      const logMessage = data.isReminder 
+        ? `🔄 【リマインド】${data.currentTurnPlayerName}のターンです！`
+        : `🔄 ${data.currentTurnPlayerName}のターン`
+      
+      console.log(`${logMessage} (ID: ${data.currentTurnPlayerId})`)
+      setLogs(prev => [logMessage, ...prev].slice(0, 10))
     })
 
     newSocket.on('zone_activated', (data: any) => {

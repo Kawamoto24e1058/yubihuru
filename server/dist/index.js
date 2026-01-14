@@ -89,19 +89,31 @@ function startWatchdog(roomId) {
     if (existingTimer) {
         clearTimeout(existingTimer);
     }
+    // 3秒後：警告ログを出す
+    const warningTimer = setTimeout(() => {
+        const game = activeGames.get(roomId);
+        if (game && !game.isGameOver) {
+            console.log(`⚠️ Room ${roomId}: No action for 3 seconds. Preparing reminder...`);
+        }
+    }, 3000);
+    // 5秒後：ターン状態を再送信（3秒以上行動なし）
     const timer = setTimeout(() => {
         const game = activeGames.get(roomId);
         if (game && !game.isGameOver) {
             console.log(`⏰ Watchdog triggered for room ${roomId}: Re-syncing turn...`);
+            const currentPlayerName = game.currentTurnPlayerId === game.player1.socketId ? game.player1.username : game.player2.username;
+            // 【自動復旧】現在のターン状態をリマインド送信
             io.to(roomId).emit('turn_change', {
                 currentTurnPlayerId: game.currentTurnPlayerId,
-                currentTurnPlayerName: game.currentTurnPlayerId === game.player1.socketId ? game.player1.username : game.player2.username,
+                currentTurnPlayerName: currentPlayerName,
+                gameState: game, // 完全なgameStateを送信
+                isReminder: true, // リマインド フラグ
             });
-            console.log(`✅ Turn re-synced: ${game.currentTurnPlayerId}`);
+            console.log(`✅ Turn re-synced (reminder): ${currentPlayerName} (${game.currentTurnPlayerId})`);
         }
     }, 5000); // 5秒のウォッチドッグ
     watchdogTimers.set(roomId, timer);
-    console.log(`🐕 Watchdog started for room ${roomId} (5s timeout)`);
+    console.log(`🐕 Watchdog started for room ${roomId} (3s warning → 5s reminder)`);
 }
 // Helper function to stop watchdog for a game room
 function stopWatchdog(roomId) {
@@ -747,8 +759,12 @@ io.on('connection', (socket) => {
                     timeout: ackTimeout,
                     roomData: gameData,
                 });
+                // 【審判ロジック】必ず最初のターンプレイヤーを明示的に指定
+                gameState.currentTurnPlayerId = player1.socketId;
+                activeGames.set(roomId, gameState);
+                console.log(`🎯 Initial turn set to: ${player1.username} (${player1.socketId})`);
                 // マッチング確立を通知（winner/gameOverリセット用）
-                io.to(roomId).emit('match_found', { roomId });
+                io.to(roomId).emit('match_found', { roomId, currentTurnPlayerId: gameState.currentTurnPlayerId });
                 // ゲームスタート通知
                 io.to(roomId).emit('game_start', gameData);
                 // 【握手プロセス】通信揺らぎ対策：300msおきに最新のgameStateを5回送信
@@ -1262,10 +1278,11 @@ io.on('connection', (socket) => {
                 defender.state.activeEffect = 'none';
             }
         }
-        // ターン変更を通知
+        // ターン変更を通知（ターンプレイヤー情報を含める）
         io.to(currentRoomId).emit('turn_change', {
             currentTurnPlayerId: currentGame.currentTurnPlayerId,
             currentTurnPlayerName: nextPlayer.username,
+            gameState: currentGame, // 完全なgameStateを送信
         });
         // ウォッチドッグを再開（新しいターンの5秒ウォッチドッグ）
         startWatchdog(currentRoomId);
