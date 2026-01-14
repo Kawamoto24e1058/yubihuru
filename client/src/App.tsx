@@ -177,6 +177,12 @@ function App() {
     const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
     const newSocket = io(socketUrl)
 
+    // アプリ起動時に localStorage から保存されたユーザー名を読み込む
+    const savedName = localStorage.getItem('yubihuru_user_name')
+    if (savedName) {
+      setName(savedName)
+    }
+
     newSocket.on('connect', () => {
       console.log('Connected to server')
 
@@ -566,6 +572,8 @@ function App() {
 
   const handleJoin = () => {
     if (socket && name.trim()) {
+      // ユーザー名を localStorage に保存
+      localStorage.setItem('yubihuru_user_name', name)
       socket.emit('joinGame', { username: name })
       setIsWaiting(true)
     }
@@ -588,6 +596,11 @@ function App() {
     setOpponentData(null)
     setLogs([])
     setCurrentTurnId('')
+    // バトルから戻る際、保存されたユーザー名を復元
+    const savedName = localStorage.getItem('yubihuru_user_name')
+    if (savedName) {
+      setName(savedName)
+    }
     setIsProcessing(false)
     // IDは残す（再接続可能にする）
   }
