@@ -751,6 +751,23 @@ io.on('connection', (socket) => {
                 io.to(roomId).emit('match_found', { roomId });
                 // ゲームスタート通知
                 io.to(roomId).emit('game_start', gameData);
+                // 【握手プロセス】通信揺らぎ対策：300msおきに最新のgameStateを5回送信
+                let shakehandCount = 0;
+                const shakehandInterval = setInterval(() => {
+                    const currentGame = activeGames.get(roomId);
+                    if (currentGame && shakehandCount < 5) {
+                        io.to(roomId).emit('game_state_sync', {
+                            gameState: currentGame,
+                            currentTurnPlayerId: currentGame.currentTurnPlayerId,
+                        });
+                        console.log(`🤝 Handshake #${shakehandCount + 1}/5 for room ${roomId}`);
+                        shakehandCount++;
+                    }
+                    else {
+                        clearInterval(shakehandInterval);
+                        console.log(`✅ Handshake completed for room ${roomId}`);
+                    }
+                }, 300); // 300msおきに送信
                 // ゲーム開始時にウォッチドッグを開始（ボタンロック対策）
                 startWatchdog(roomId);
                 console.log(`📋 Matching confirmed. Waiting for battle_ready_ack from both players in room ${roomId}`);

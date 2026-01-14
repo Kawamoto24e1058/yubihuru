@@ -355,7 +355,23 @@ function App() {
     newSocket.on('match_found', (data: any) => {
       console.log('Match found confirmation:', data)
       
-      // サーバーから受け取った最新のgameStateをクライアント側で強制的に再セット
+      // 【強制描画】ディレイなしで即座にbattle画面へ遷移（通信揺らぎ対策）
+      setIsWaiting(false)
+      setGameStarted(true)
+      
+      setWinner(null)
+      setIsGameOver(false)
+      
+      // battle_ready を送信してサーバーに準備完了を通知
+      newSocket.emit('battle_ready', { roomId: data.roomId })
+      console.log('✅ battle_ready sent to server')
+    })
+
+    // 【握手プロセス】サーバーから300msおきに送られてくるgameStateを同期
+    newSocket.on('game_state_sync', (data: any) => {
+      console.log('🤝 game_state_sync received:', data)
+      
+      // 最新のgameStateをクライアント側に反映
       if (data.gameState) {
         const mySocketId = newSocket.id || ''
         const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
@@ -363,17 +379,19 @@ function App() {
         
         setMyData(me)
         setOpponentData(opponent)
-        setCurrentTurnId(data.gameState.currentTurnPlayerId)
+        
+        // ターンIDを上書き保証
+        if (data.currentTurnPlayerId) {
+          setCurrentTurnId(data.currentTurnPlayerId)
+          console.log('✅ Turn ID synced:', data.currentTurnPlayerId)
+        }
+        
+        // ボタンロック防止：演出中フラグをリセット
+        setIsProcessing(false)
       }
       
-      setWinner(null)
-      setIsGameOver(false)
-      
-      // 100msのディレイを入れてからバトル画面に遷移（ブラウザレンダリングブロック回避）
-      setTimeout(() => {
-        setIsWaiting(false)
-        setGameStarted(true)
-      }, 100)
+      // battle_ready を必ず送信（冗長性）
+      newSocket.emit('battle_ready', { roomId: data.gameState?.roomId })
     })
 
     // 強制同期：サーバーから最新バトルデータを受け取る（スマホ救済）
