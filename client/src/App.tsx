@@ -337,6 +337,24 @@ function App() {
       setIsGameOver(false)
     })
 
+    // 強制同期：サーバーから最新バトルデータを受け取る（スマホ救済）
+    newSocket.on('battle_sync', (data: any) => {
+      console.log('Battle sync received:', data)
+      setIsWaiting(false)
+      setGameStarted(true)
+      setIsGameOver(false)
+      setWinner(null)
+      
+      const mySocketId = newSocket.id || ''
+      const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
+      const opponent = data.gameState.player1.socketId === mySocketId ? data.gameState.player2 : data.gameState.player1
+      
+      setMyData(me)
+      setOpponentData(opponent)
+      setCurrentTurnId(data.gameState.currentTurnPlayerId)
+      setLogs(prev => [`🔄 バトル画面に同期しました`, ...prev].slice(0, 10))
+    })
+
     newSocket.on('battle_update', (data: any) => {
       console.log('Battle update:', data)
       setLogs(prev => [data.message, ...prev].slice(0, 10))
@@ -658,6 +676,22 @@ function App() {
       newSocket.close()
     }
   }, [])
+
+  // 待機中に1秒ごとにステータスをチェック（スマホ救済）
+  useEffect(() => {
+    if (!socket || !isWaiting || gameStarted) return
+    
+    console.log('Starting status check interval (waiting for match)...')
+    const intervalId = setInterval(() => {
+      console.log('Sending check_status...')
+      socket.emit('check_status', { timestamp: Date.now() })
+    }, 1000)
+    
+    return () => {
+      console.log('Clearing status check interval')
+      clearInterval(intervalId)
+    }
+  }, [socket, isWaiting, gameStarted])
 
   const handleJoin = () => {
     if (socket && name.trim()) {

@@ -19,6 +19,9 @@ const io = new Server(httpServer, {
     origin: '*',
     methods: ['GET', 'POST'],
   },
+  // スマホ向け：heartbeat間隔を短く設定
+  pingInterval: 5000,
+  pingTimeout: 3000,
 });
 
 app.use(cors({
@@ -1252,6 +1255,35 @@ io.on('connection', (socket) => {
       });
 
       console.log(`✅ Game officially started in room ${roomId}`);
+    }
+  });
+
+  // 状態チェック（スマホ救済：待機中にバトルルームに入っているかを確認）
+  socket.on('check_status', (data: any) => {
+    const playerId = socketToPlayerId.get(socket.id);
+    
+    // activeGames の中に自分が参加しているルームを探す
+    let foundRoom: GameState | null = null;
+    let roomId: string | null = null;
+    
+    for (const [rid, gameState] of activeGames.entries()) {
+      if (gameState.player1.socketId === socket.id || gameState.player2.socketId === socket.id) {
+        foundRoom = gameState;
+        roomId = rid;
+        break;
+      }
+    }
+    
+    if (foundRoom && roomId) {
+      console.log(`🔄 Status check: ${socket.id} is in active game room ${roomId}`);
+      // バトルルームに入っている → 最新データを送信して強制同期
+      socket.emit('battle_sync', {
+        gameState: foundRoom,
+        roomId: roomId
+      });
+    } else {
+      // 待機中または未参加
+      console.log(`⏳ Status check: ${socket.id} is waiting or not in game`);
     }
   });
 
