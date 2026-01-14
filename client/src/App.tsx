@@ -403,12 +403,15 @@ function App() {
       setIsWaiting(false)
       setGameStarted(true)
       
-      // マッチング成立時、全ての演出フラグを強制的にリセット
+      // 【重要】マッチング成立時、全ての演出フラグを強制的にリセット → ボタンロック解除
       setIsProcessing(false)
       resetAllEffects()
       
       setWinner(null)
       setIsGameOver(false)
+      
+      // 【即座にボタン点灯】自分のターンなら、isYourTurn = true が既に設定されているのでボタンが有効化される
+      console.log('🔓 ボタンロック解除: isProcessing=false, isYourTurn=', data.isYourTurn)
       
       // battle_ready を送信してサーバーに準備完了を通知
       newSocket.emit('battle_ready', { roomId: data.roomId })
