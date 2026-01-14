@@ -144,7 +144,7 @@ function startWatchdog(roomId: string) {
     const game = activeGames.get(roomId);
     if (game && !game.isGameOver) {
       console.log(`⏰ Watchdog triggered for room ${roomId}: Re-syncing turn...`);
-      const currentPlayerName = game.currentTurnPlayerId === game.player1.socketId ? game.player1.username : game.player2.username;
+      const currentPlayerName = game.currentTurnPlayerId === game.player1.playerId ? game.player1.username : game.player2.username;
       
       // 【自動復旧】現在のターン状態をリマインド送信
       io.to(roomId).emit('turn_change', {
@@ -816,7 +816,7 @@ io.on('connection', (socket) => {
             state: player2State,
           },
           currentTurn: 0,
-          currentTurnPlayerId: player1.socketId, // player1が最初のターン
+          currentTurnPlayerId: player1.playerId, // 🔴 socket.id → playerId に変更（不変ID方式）
           isGameOver: false,
           winner: null,
           startedAt: Date.now(), // マッチング直後の保護用
@@ -825,7 +825,7 @@ io.on('connection', (socket) => {
         // Send game_start event to both clients
         const gameData = {
           roomId,
-          currentTurnPlayerId: gameState.currentTurnPlayerId, // 初回ターンプレイヤーIDを含める
+          currentTurnPlayerId: gameState.currentTurnPlayerId, // playerId ベース
           player1: {
             playerId: player1.playerId,
             socketId: player1.socketId,
@@ -863,9 +863,9 @@ io.on('connection', (socket) => {
         });
 
         // 【審判ロジック】必ず最初のターンプレイヤーを明示的に指定
-        gameState.currentTurnPlayerId = player1.socketId;
+        gameState.currentTurnPlayerId = player1.playerId; // 🔴 socket.id → playerId に変更
         activeGames.set(roomId, gameState);
-        console.log(`🎯 Initial turn set to: ${player1.username} (${player1.socketId})`);
+        console.log(`🎯 Initial turn set to: ${player1.username} (${player1.playerId})`);
 
         // 【強制フラグ方式】各プレイヤーに対して「操作許可」を明確に指名
         // Player1: 先行プレイヤー（isYourTurn: true）
@@ -910,7 +910,7 @@ io.on('connection', (socket) => {
         const forceStartTimeout = setTimeout(() => {
           const game = activeGames.get(roomId);
           if (game && !game.isGameOver) {
-            const currentPlayer = game.currentTurnPlayerId === player1.socketId ? player1 : player2;
+            const currentPlayer = game.currentTurnPlayerId === player1.playerId ? player1 : player2;
             console.log(`⏱️ 2秒経過：先行プレイヤー(${currentPlayer.username})に強制通知`);
             io.to(currentPlayer.socketId).emit('force_turn_start', {
               message: `${currentPlayer.username}のターン！ボタンを押してください！`,
@@ -984,15 +984,17 @@ io.on('connection', (socket) => {
 
     if (game.player1.playerId === playerId) {
       game.player1.socketId = socket.id;
-      if (game.currentTurnPlayerId === previousSocketId) {
-        game.currentTurnPlayerId = socket.id;
-      }
+      // 🔴 currentTurnPlayerId は playerId ベースなので更新不要
+      // if (game.currentTurnPlayerId === previousSocketId) {
+      //   game.currentTurnPlayerId = socket.id;
+      // }
     }
     if (game.player2.playerId === playerId) {
       game.player2.socketId = socket.id;
-      if (game.currentTurnPlayerId === previousSocketId) {
-        game.currentTurnPlayerId = socket.id;
-      }
+      // 🔴 currentTurnPlayerId は playerId ベースなので更新不要
+      // if (game.currentTurnPlayerId === previousSocketId) {
+      //   game.currentTurnPlayerId = socket.id;
+      // }
     }
 
     offlinePlayers.delete(playerId);
@@ -1070,10 +1072,10 @@ io.on('connection', (socket) => {
     console.log(`   MP: ${player.state.mp + ZONE_MP_COST} -> ${player.state.mp}`);
 
     // ターンを交代
-    const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId 
+    const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.playerId 
       ? currentGame.player2 
       : currentGame.player1;
-    currentGame.currentTurnPlayerId = nextPlayer.socketId;
+    currentGame.currentTurnPlayerId = nextPlayer.playerId;
 
     // Send zone_activated event to both players
     io.to(currentRoomId).emit('zone_activated', {
@@ -1211,10 +1213,10 @@ io.on('connection', (socket) => {
 
       // ターンカウントと交代
       currentGame.currentTurn++;
-      const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId 
+      const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.playerId 
         ? currentGame.player2 
         : currentGame.player1;
-      currentGame.currentTurnPlayerId = nextPlayer.socketId;
+      currentGame.currentTurnPlayerId = nextPlayer.playerId;
 
       // 行動不能の battle_update を送信
       const battleUpdate = {
@@ -1478,10 +1480,10 @@ io.on('connection', (socket) => {
     currentGame.currentTurn++;
 
     // ターンを交代
-    const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId 
+    const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.playerId 
       ? currentGame.player2 
       : currentGame.player1;
-    currentGame.currentTurnPlayerId = nextPlayer.socketId;
+    currentGame.currentTurnPlayerId = nextPlayer.playerId;
 
     // 【メタ要素】activeEffectの期間を減らす
     if (attacker.state.activeEffectTurns && attacker.state.activeEffectTurns > 0) {

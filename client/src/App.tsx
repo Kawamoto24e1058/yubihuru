@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { io, Socket } from 'socket.io-client'
 import './App.css'
 import type { GameStartData, PlayerData } from './types'
@@ -98,6 +98,7 @@ function App() {
   const [totalWins, setTotalWins] = useState(0) // 通算勝利数
   const [currentStreak, setCurrentStreak] = useState(0) // 連勝数
   const [currentRoomId, setCurrentRoomId] = useState<string>('') // 🔄 手動同期用：現在のroomId
+  const [myPersistentId, setMyPersistentId] = useState<string>('') // 🔴 不変ID方式：サーバーから与えられた固定ID
   
   // 反射・カウンター系演出
   const [showReflectReady, setShowReflectReady] = useState(false) // ミラーコート待機中
@@ -116,6 +117,9 @@ function App() {
     console.log('🔄 Requesting manual sync from server...')
     socket.emit('request_manual_sync', { roomId: currentRoomId })
   }, [socket, currentRoomId])
+
+  // 🔴 【接続イベント重複防止ガード】connect イベントが複数回実行されることを防ぐ
+  const hasConnectedRef = useRef(false)
 
   // 相手のactiveEffectを監視
   useEffect(() => {
@@ -227,6 +231,13 @@ function App() {
 
     newSocket.on('connect', () => {
       console.log('Connected to server')
+      
+      // 🔴 重複防止ガード：既に connect イベントを実行済みなら skip
+      if (hasConnectedRef.current) {
+        console.warn('⚠️ connect event already handled, skipping...')
+        return
+      }
+      hasConnectedRef.current = true
       
       // 初回接続時は再接続可否のチェックのみ（自動復帰はしない）
       const savedId = localStorage.getItem('yubihuru_player_id')
@@ -351,6 +362,16 @@ function App() {
       const me = data.player1.socketId === mySocketId ? data.player1 : data.player2
       const opponent = data.player1.socketId === mySocketId ? data.player2 : data.player1
       
+      // 🔴 【不変ID方式】サーバーから送られた playerId を永続ID として保存
+      const persistentId = me.playerId || ''
+      setMyPersistentId(persistentId)
+      if (persistentId) {
+        localStorage.setItem('yubihuru_my_player_id', persistentId)
+        console.log(`🔴 My Persistent ID set: ${persistentId}`)
+      } else {
+        console.warn('⚠️ playerId is empty!')
+      }
+      
       setMyData(me)
       setOpponentData(opponent)
       
@@ -418,8 +439,10 @@ function App() {
           console.log('✅ Turn ID synced:', data.currentTurnPlayerId)
         }
         
-        // 🔴 【デバッグ】ターンID一致確認
-        console.log(`📍 Current Turn: ${data.currentTurnPlayerId} | My ID: ${mySocketId} | Match: ${data.currentTurnPlayerId === mySocketId ? '✅ YES' : '❌ NO'}`)
+        // 🔴 不変ID方式：currentTurnPlayerId と myPersistentId を比較
+        const isMyTurn = data.currentTurnPlayerId === myPersistentId
+        setIsYourTurn(isMyTurn)
+        console.log(`📍 Current Turn: ${data.currentTurnPlayerId} | My ID: ${myPersistentId} | Match: ${isMyTurn ? '✅ YES' : '❌ NO'}`)
         
         // ボタンロック防止：演出中フラグをリセット
         setIsProcessing(false)
@@ -776,12 +799,13 @@ function App() {
     // 強制ターン開始：サーバーから強制的にターンを割り当てる（2秒タイムアウト対策）
     newSocket.on('force_turn_start', (data: any) => {
       console.log('🚨 Force turn start received:', data)
-      setIsYourTurn(data.isYourTurn || false)
+      // 🔴 不変ID方式：currentTurnPlayerId と myPersistentId を比較
+      const isMyTurn = data.currentTurnPlayerId === myPersistentId
+      setIsYourTurn(isMyTurn)
       setIsProcessing(false)
       resetAllEffects()
-      console.log(`✅ Force turn enabled: isYourTurn=${data.isYourTurn}, message=${data.message}`)
+      console.log(`✅ Force turn enabled: isYourTurn=${isMyTurn}, currentTurnId=${data.currentTurnPlayerId}, myId=${myPersistentId}`)
     })
-
     newSocket.on('turn_change', (data: any) => {
       // 【ボタンロック強制解放】新しいターン開始時に全演出をリセット
       resetAllEffects()
@@ -791,6 +815,11 @@ function App() {
       
       // ターンIDを再判定・更新
       setCurrentTurnId(data.currentTurnPlayerId)
+      
+      // 🔴 不変ID方式：currentTurnPlayerId と myPersistentId を比較
+      const isMyTurn = data.currentTurnPlayerId === myPersistentId
+      setIsYourTurn(isMyTurn)
+      console.log(`🔴 Turn check: currentTurn=${data.currentTurnPlayerId}, myId=${myPersistentId}, isMyTurn=${isMyTurn}`)
       
       // gameState が送られてきた場合、プレイヤーデータも更新
       if (data.gameState) {
