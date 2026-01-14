@@ -466,7 +466,6 @@ function applySkillEffect(skill, attacker, defender) {
 }
 io.on('connection', (socket) => {
     console.log(`✅ User connected: ${socket.id}`);
-    // Handle join game event
     socket.on('joinGame', (payload) => {
         console.log(`🎮 ${payload.username} (${socket.id}) joining game...`);
         const playerId = uuidv4();
@@ -555,6 +554,23 @@ io.on('connection', (socket) => {
                 playersWaiting: waitingRoom.length,
             });
         }
+    });
+    // 再接続可能かチェック
+    socket.on('check_reconnect', (payload) => {
+        const { playerId } = payload;
+        const offlineInfo = offlinePlayers.get(playerId);
+        if (!offlineInfo) {
+            socket.emit('can_reconnect', { canReconnect: false });
+            return;
+        }
+        const game = activeGames.get(offlineInfo.roomId);
+        if (!game) {
+            offlinePlayers.delete(playerId);
+            socket.emit('can_reconnect', { canReconnect: false });
+            return;
+        }
+        // 有効な対戦データが存在する
+        socket.emit('can_reconnect', { canReconnect: true });
     });
     // 再接続リクエスト
     socket.on('reconnect', (payload) => {

@@ -81,6 +81,10 @@ function App() {
   const [glassBreak, setGlassBreak] = useState(false)
   const [slowMotion, setSlowMotion] = useState(false)
   const [buffedDamage, setBuffedDamage] = useState<number | null>(null)
+  const [showMenu, setShowMenu] = useState(false)
+  const [showQuitConfirm, setShowQuitConfirm] = useState(false)
+  const [canReconnect, setCanReconnect] = useState(false)
+  const [isCheckingReconnect, setIsCheckingReconnect] = useState(true)
 
   // 相手のactiveEffectを監視
   useEffect(() => {
@@ -177,16 +181,25 @@ function App() {
     newSocket.on('connect', () => {
       console.log('Connected to server')
 
-      // 既存プレイヤーIDがあれば再接続を試行
+      // 初回接続時は再接続可否のチェックのみ
       const savedId = localStorage.getItem('yubihuru_player_id')
-      if (savedId) {
-        newSocket.emit('reconnect', { playerId: savedId })
+      if (savedId && !gameStarted) {
+        // 再接続可能かチェック（自動接続はしない）
+        newSocket.emit('check_reconnect', { playerId: savedId })
+      } else {
+        setIsCheckingReconnect(false)
       }
     })
 
     // 永続IDを受信
     newSocket.on('player_id', (data: { playerId: string }) => {
       localStorage.setItem('yubihuru_player_id', data.playerId)
+    })
+
+    // 再接続可否の応答
+    newSocket.on('can_reconnect', (data: { canReconnect: boolean }) => {
+      setCanReconnect(data.canReconnect)
+      setIsCheckingReconnect(false)
     })
 
     newSocket.on('waiting', () => {
@@ -220,6 +233,8 @@ function App() {
     newSocket.on('reconnect_failed', (data: any) => {
       console.warn('Reconnect failed', data)
       setLogs(prev => [`❌ 再接続に失敗しました`, ...prev].slice(0, 10))
+      setCanReconnect(false)
+      setIsCheckingReconnect(false)
     })
 
     newSocket.on('game_start', (data: GameStartData) => {
@@ -548,6 +563,27 @@ function App() {
     }
   }
 
+  const handleReconnect = () => {
+    const savedId = localStorage.getItem('yubihuru_player_id')
+    if (socket && savedId) {
+      socket.emit('reconnect', { playerId: savedId })
+      setIsWaiting(true)
+    }
+  }
+
+  const handleQuitToTitle = () => {
+    setShowQuitConfirm(false)
+    setShowMenu(false)
+    setGameStarted(false)
+    setIsWaiting(false)
+    setMyData(null)
+    setOpponentData(null)
+    setLogs([])
+    setCurrentTurnId('')
+    setIsProcessing(false)
+    // IDは残す（再接続可能にする）
+  }
+
   const handleUseSkill = () => {
     const mySocketId = socket?.id || ''
     if (socket && gameStarted && mySocketId === currentTurnId && !isProcessing) {
@@ -726,6 +762,60 @@ function App() {
 
     return (
       <div className={`min-h-screen bg-yellow-50 p-4 transition-all relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${opponentShakeEffect ? 'animate-window-shake' : ''} ${lastAttackGrayscale ? 'filter grayscale' : ''} ${slowMotion ? 'animate-slow-motion' : ''}`}>
+        {/* メニューボタン（右上） */}
+        <button
+          onClick={() => setShowMenu(true)}
+          className="fixed top-4 right-4 z-[110] w-12 h-12 bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all flex items-center justify-center"
+          aria-label="メニュー"
+        >
+          <span className="text-2xl">⚙️</span>
+        </button>
+
+        {/* メニューモーダル */}
+        {showMenu && (
+          <div className="fixed inset-0 z-[120] bg-black/70 flex items-center justify-center px-4">
+            <div className="w-full max-w-sm bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-6 space-y-4">
+              <h3 className="text-2xl font-black text-center mb-4" style={{ WebkitTextStroke: '2px black' }}>メニュー</h3>
+              <button
+                onClick={() => setShowQuitConfirm(true)}
+                className="w-full py-3 bg-red-500 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-red-400 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black text-lg"
+              >
+                🚪 タイトルに戻る（中断）
+              </button>
+              <button
+                onClick={() => setShowMenu(false)}
+                className="w-full py-3 bg-gray-300 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-200 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black text-lg"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 中断確認ダイアログ */}
+        {showQuitConfirm && (
+          <div className="fixed inset-0 z-[130] bg-black/80 flex items-center justify-center px-4">
+            <div className="w-full max-w-sm bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-6 space-y-4">
+              <h3 className="text-xl font-black text-center mb-2" style={{ WebkitTextStroke: '2px black' }}>バトルを中断しますか？</h3>
+              <p className="text-sm font-bold text-center text-gray-700 mb-4">
+                タイトルに戻っても、5分以内なら復帰できます。
+              </p>
+              <button
+                onClick={handleQuitToTitle}
+                className="w-full py-3 bg-red-500 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-red-400 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black text-lg"
+              >
+                はい、中断する
+              </button>
+              <button
+                onClick={() => setShowQuitConfirm(false)}
+                className="w-full py-3 bg-blue-500 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-400 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black text-lg"
+              >
+                いいえ、続ける
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* 必殺技演出：3回フラッシュ（BAN用） */}
         {fatalFlash && (
           <>
@@ -1270,25 +1360,45 @@ function App() {
         </h1>
         
         <div className="space-y-6">
-          <div>
-            <label className="block font-black text-sm mb-2">PLAYER NAME</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleJoin()}
-              placeholder="Enter your name..."
-              className="w-full px-4 py-3 border-4 border-black font-bold focus:outline-none focus:ring-4 focus:ring-yellow-300"
-              maxLength={20}
-            />
-          </div>
+          {isCheckingReconnect ? (
+            <div className="text-center py-8">
+              <p className="font-black text-xl animate-pulse">接続確認中...</p>
+            </div>
+          ) : (
+            <>
+              {canReconnect && (
+                <div className="bg-yellow-100 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-4 mb-4">
+                  <p className="font-black text-sm mb-3 text-center">前回のバトルが残っています</p>
+                  <button
+                    onClick={handleReconnect}
+                    className="w-full py-4 bg-green-500 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-green-400 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black text-xl"
+                  >
+                    🔄 前回のバトルに復帰する
+                  </button>
+                </div>
+              )}
 
-          <button
-            onClick={handleJoin}
-            className="w-full py-4 bg-blue-500 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-400 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black text-xl"
-          >
-            ⚔️ BATTLE START
-          </button>
+              <div>
+                <label className="block font-black text-sm mb-2">PLAYER NAME</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleJoin()}
+                  placeholder="Enter your name..."
+                  className="w-full px-4 py-3 border-4 border-black font-bold focus:outline-none focus:ring-4 focus:ring-yellow-300"
+                  maxLength={20}
+                />
+              </div>
+
+              <button
+                onClick={handleJoin}
+                className="w-full py-4 bg-blue-500 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-400 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black text-xl"
+              >
+                ⚔️ 新しいバトルを始める
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
