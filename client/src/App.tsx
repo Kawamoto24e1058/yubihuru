@@ -3,6 +3,14 @@ import { io, Socket } from 'socket.io-client'
 import './App.css'
 import type { GameStartData, PlayerData } from './types'
 
+// グローバル変数の型定義
+declare global {
+  interface Window {
+    __gameOverData?: any
+    __resultTimeout?: any
+  }
+}
+
 // ゾーン効果の説明データ
 const ZONE_DESCRIPTIONS = {
   '強攻のゾーン': {
@@ -569,14 +577,20 @@ function App() {
               setShouldApplyFinalDamage(true)
               setSlowMotion(false) // スロー終了
               
-              // Phase 4: 1.2秒後にWINNER表示＆演出完全終了
+              // Phase 4: 1.2秒後にWINNER表示＆演出完全終了＋リザルト画面遷移
               setTimeout(() => {
-                console.log('🎬 WINNER表示');
+                console.log('🎬 WINNER表示＆演出完了');
                 setVictoryResult('WINNER')
                 setLastAttackGrayscale(false)
                 setLastAttackFlash(false)
                 setShowImpact(false)
                 setShowFinishText(false)
+                
+                // game_overデータが到着済みの場合は handleBattleEnd を呼び出し
+                if ((window as any).__gameOverData) {
+                  console.log('🎬 Game over data available - transitioning to result')
+                  handleBattleEnd((window as any).__gameOverData)
+                }
               }, 1200)
             }, 1500)
           }, 800)
@@ -718,39 +732,19 @@ function App() {
         return
       }
       
-      setIsGameOver(true)
-      setWinner(data.winner)
-      setLogs(prev => [`🏆 ${data.winner} の勝利！`, ...prev])
+      // すぐには結果を表示せず、演出完了を待つ
+      console.log('⏳ Waiting for battle end effects to complete...')
       
-      // 勝敗結果を表示
-      const mySocketId = newSocket.id || ''
-      const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
-      const isWinner = me.username === data.winner
-      setVictoryResult(isWinner ? 'WINNER' : 'LOSER')
+      // 演出完了後のリザルト画面遷移を5秒後に強制実行（セーフティネット）
+      const resultTimeout = setTimeout(() => {
+        console.log('🏆 Force transitioning to result screen (timeout)')
+        handleBattleEnd(data)
+      }, 5000)
       
-      // 戦績を更新・保存
-      if (isWinner) {
-        // 勝利時：通算勝利数と連勝数を +1
-        const newTotalWins = totalWins + 1
-        const newStreak = currentStreak + 1
-        setTotalWins(newTotalWins)
-        setCurrentStreak(newStreak)
-        localStorage.setItem('yubihuru_total_wins', newTotalWins.toString())
-        localStorage.setItem('yubihuru_current_streak', newStreak.toString())
-      } else {
-        // 敗北時：連勝数をリセット（通算勝利数は変わらない）
-        setCurrentStreak(0)
-        localStorage.setItem('yubihuru_current_streak', '0')
-      }
-      
-      // バトル終了時、active_battle をクリア
-      localStorage.removeItem('yubihuru_active_battle')
-      // セッションを完全に破棄（復帰ボタンを無効化）
-      localStorage.removeItem('yubihuru_player_id')
-      
-      // グレースケール解除
-      setLastAttackGrayscale(false)
-      setLastAttackFlash(false)
+      // 実際の演出完了時（FINISH表示後）にここで遷移
+      // handleBattleEnd 関数で適切なタイミングで呼ぶ
+      window.__gameOverData = data
+      window.__resultTimeout = resultTimeout
     })
 
     setSocket(newSocket)
@@ -758,7 +752,7 @@ function App() {
     return () => {
       newSocket.close()
     }
-  }, [])
+  }, [gameStarted])
 
   // 待機中に1秒ごとにステータスをチェック（スマホ救済）
   useEffect(() => {
@@ -860,6 +854,59 @@ function App() {
       socket.emit('action_activate_zone', { zoneType: selectedZoneType })
       setIsProcessing(true)
     }
+  }
+
+  // バトル終了演出処理
+  const handleBattleEnd = (gameOverData: any) => {
+    console.log('🎬 handleBattleEnd called')
+    
+    // タイムアウトをクリア
+    if ((window as any).__resultTimeout) {
+      clearTimeout((window as any).__resultTimeout)
+    }
+    
+    // 1. ボタン即座に無効化
+    setIsProcessing(true)
+    
+    // 2. 操作ボタン非表示状態を設定（isProcessingで隠れるはず）
+    
+    // 3. FINISH演出を2秒間表示中（既に showFinishText で表示済み）
+    
+    // 4. 演出完了後、リザルト画面へ遷移（ここで全演出フラグをリセット）
+    setTimeout(() => {
+      console.log('🏆 Showing result screen')
+      
+      // すべての演出フラグをリセット
+      resetAllEffects()
+      
+      // 戦績情報の更新
+      const mySocketId = socket?.id || ''
+      const me = gameOverData.gameState.player1.socketId === mySocketId ? gameOverData.gameState.player1 : gameOverData.gameState.player2
+      const isWinner = me.username === gameOverData.winner || (gameOverData.isDraw && true)
+      
+      setIsGameOver(true)
+      setWinner(gameOverData.winner)
+      setVictoryResult(gameOverData.isDraw ? null : (isWinner ? 'WINNER' : 'LOSER'))
+      
+      // 戦績を更新・保存
+      if (isWinner && !gameOverData.isDraw) {
+        const newTotalWins = totalWins + 1
+        const newStreak = currentStreak + 1
+        setTotalWins(newTotalWins)
+        setCurrentStreak(newStreak)
+        localStorage.setItem('yubihuru_total_wins', newTotalWins.toString())
+        localStorage.setItem('yubihuru_current_streak', newStreak.toString())
+      } else if (!isWinner) {
+        setCurrentStreak(0)
+        localStorage.setItem('yubihuru_current_streak', '0')
+      }
+      
+      // バトル終了処理
+      localStorage.removeItem('yubihuru_active_battle')
+      localStorage.removeItem('yubihuru_player_id')
+      
+      console.log('✅ Result screen ready')
+    }, 2500) // FINISH表示後に遷移
   }
 
   // ログ色決定関数
