@@ -93,6 +93,7 @@ function App() {
   const [showMenu, setShowMenu] = useState(false)
   const [showQuitConfirm, setShowQuitConfirm] = useState(false)
   const [hasActiveGame, setHasActiveGame] = useState(false) // サーバーが進行中ゲーム検知時のフラグ
+  const [isYourTurn, setIsYourTurn] = useState(false) // 強制フラグ方式：サーバーから指名された場合のみtrue
   const [isCheckingReconnect, setIsCheckingReconnect] = useState(true)
   const [totalWins, setTotalWins] = useState(0) // 通算勝利数
   const [currentStreak, setCurrentStreak] = useState(0) // 連勝数
@@ -355,9 +356,21 @@ function App() {
     newSocket.on('match_found', (data: any) => {
       console.log('Match found confirmation:', data)
       
+      // 【強制フラグ方式】サーバーから指名された「isYourTurn」フラグを設定
+      setIsYourTurn(data.isYourTurn || false);
+      if (data.isYourTurn) {
+        console.log(`✅ あなたのターンです！(${data.yourOpponent}と対戦)`);
+      } else {
+        console.log(`⏳ 相手のターンです。待ってください...(${data.yourOpponent}と対戦)`);
+      }
+      
       // 【強制描画】ディレイなしで即座にbattle画面へ遷移（通信揺らぎ対策）
       setIsWaiting(false)
       setGameStarted(true)
+      
+      // マッチング成立時、全ての演出フラグを強制的にリセット
+      setIsProcessing(false)
+      resetAllEffects()
       
       setWinner(null)
       setIsGameOver(false)
@@ -738,6 +751,15 @@ function App() {
       }, 2000)
     })
 
+    // 強制ターン開始：サーバーから強制的にターンを割り当てる（2秒タイムアウト対策）
+    newSocket.on('force_turn_start', (data: any) => {
+      console.log('🚨 Force turn start received:', data)
+      setIsYourTurn(data.isYourTurn || false)
+      setIsProcessing(false)
+      resetAllEffects()
+      console.log(`✅ Force turn enabled: isYourTurn=${data.isYourTurn}, message=${data.message}`)
+    })
+
     newSocket.on('turn_change', (data: any) => {
       // 【ボタンロック強制解放】新しいターン開始時に全演出をリセット
       resetAllEffects()
@@ -1114,7 +1136,8 @@ function App() {
   // バトル画面
   if (gameStarted && myData && opponentData) {
     const mySocketId = socket?.id || ''
-    const isMyTurn = mySocketId === currentTurnId
+    // 🔄 新方式：isYourTurn はサーバーから直接指名されたフラグを使用
+    // const isMyTurn = mySocketId === currentTurnId  // ❌ 旧方式（削除）
     const myHpPercent = (myData.state.hp / myData.state.maxHp) * 100
     const myMpPercent = (myData.state.mp / 5) * 100
     const opponentHpPercent = (opponentData.state.hp / opponentData.state.maxHp) * 100
@@ -1537,8 +1560,9 @@ function App() {
         {(() => {
           if (!myData || !opponentData) return null
           
-          const mySocketId = socket?.id || ''
-          const isMyTurn = mySocketId === currentTurnId
+          // 🔄 新方式：isYourTurn はサーバーから直接指名されたフラグを使用
+          // const mySocketId = socket?.id || ''  // ❌ 旧方式（削除）
+          // const isMyTurn = mySocketId === currentTurnId  // ❌ 旧方式（削除）
           const myHpPercent = (myData.state.hp / myData.state.maxHp) * 100
           const myMpPercent = (myData.state.mp / 5) * 100
           const opponentHpPercent = (opponentData.state.hp / opponentData.state.maxHp) * 100
@@ -1620,11 +1644,11 @@ function App() {
             <div className="space-y-3">
               {/* 自分ステータス */}
               <div className={`bg-white border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 transition-all ${
-                `${myZoneBorder} ${isMyTurn ? 'animate-pulse' : ''}`
+                `${myZoneBorder} ${isYourTurn ? 'animate-pulse' : ''}`
               } ${isShaking ? 'animate-shake' : ''}`}>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <p className="font-black text-sm">⚔️ YOU {isMyTurn && '⭐'}</p>
+                    <p className="font-black text-sm">⚔️ YOU {isYourTurn && '⭐'}</p>
                     {myData.state.status.poison && (
                       <span className="bg-purple-600 text-white text-xs font-black px-2 py-1 rounded">☠️ 毒</span>
                     )}
@@ -1669,26 +1693,26 @@ function App() {
               <div className="grid grid-cols-3 gap-3">
                 <button
                   onClick={handleUseSkill}
-                  disabled={isMyTurn === false || isProcessing}
+                  disabled={!isYourTurn || isProcessing}
                   className={`py-4 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-lg ${
-                    isMyTurn && !isProcessing
+                    isYourTurn && !isProcessing
                       ? 'bg-red-500 hover:bg-red-400'
                       : 'bg-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  {isMyTurn === false ? '⏳ 待機' : isProcessing ? '処理中...' : '👆 指を振る'}
+                  {!isYourTurn ? '⏳ 待機' : isProcessing ? '処理中...' : '👆 指を振る'}
                 </button>
 
                 <button
                   onClick={handleActivateZone}
-                  disabled={isMyTurn === false || isProcessing || myData.state.mp < 5}
+                  disabled={!isYourTurn || isProcessing || myData.state.mp < 5}
                   className={`py-4 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-lg ${
-                    isMyTurn && !isProcessing && myData.state.mp >= 5
+                    isYourTurn && !isProcessing && myData.state.mp >= 5
                       ? 'bg-purple-500 hover:bg-purple-400'
                       : 'bg-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  {isMyTurn === false ? '待機' : isProcessing ? '中...' : '🌀 立直'}
+                  {!isYourTurn ? '待機' : isProcessing ? '中...' : '🌀 立直'}
                 </button>
 
                 <button
@@ -1776,11 +1800,11 @@ function App() {
             {/* 自分ステータス */}
             <div className="space-y-2 relative">
               <div className={`bg-white border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-3 md:p-4 transition-all ${
-                `${myZoneBorder} ${isMyTurn ? 'animate-pulse' : ''}`
+                `${myZoneBorder} ${isYourTurn ? 'animate-pulse' : ''}`
               } ${isShaking ? 'animate-shake' : ''}`}>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <p className="font-black text-xs md:text-sm">YOU {isMyTurn && '⭐'}</p>
+                    <p className="font-black text-xs md:text-sm">YOU {isYourTurn && '⭐'}</p>
                     {myData.state.status.poison && (
                       <span className="bg-purple-600 text-white text-xs font-black px-2 py-1 rounded">☠️ 毒</span>
                     )}
@@ -1827,12 +1851,12 @@ function App() {
           {/* スマホ時のボタンエリア（下部固定） */}
           <div className="order-5 md:hidden fixed bottom-0 left-0 right-0 p-4 bg-yellow-50 border-t-4 border-black space-y-3 max-h-[35vh] overflow-y-auto">
             {/* ターン表示 */}
-            {!isMyTurn && (
+            {!isYourTurn && (
               <div className="bg-orange-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-2 text-center">
                 <p className="font-black text-sm animate-pulse">⏳ 相手の行動を待っています...</p>
               </div>
             )}
-            {isProcessing && isMyTurn && (
+            {isProcessing && isYourTurn && (
               <div className="bg-blue-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-2 text-center">
                 <p className="font-black text-sm animate-pulse">⚡ 演出中...</p>
               </div>
@@ -1907,12 +1931,12 @@ function App() {
           {/* PC版：下部アクション */}
           <div className="hidden md:block space-y-4">
             {/* ターン表示 */}
-            {!isMyTurn && (
+            {!isYourTurn && (
               <div className="bg-orange-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 text-center">
                 <p className="font-black text-xl animate-pulse">⏳ 相手の行動を待っています...</p>
               </div>
             )}
-            {isProcessing && isMyTurn && (
+            {isProcessing && isYourTurn && (
               <div className="bg-blue-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 text-center">
                 <p className="font-black text-xl animate-pulse">⚡ 演出中...</p>
               </div>

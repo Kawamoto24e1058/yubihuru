@@ -763,8 +763,23 @@ io.on('connection', (socket) => {
                 gameState.currentTurnPlayerId = player1.socketId;
                 activeGames.set(roomId, gameState);
                 console.log(`🎯 Initial turn set to: ${player1.username} (${player1.socketId})`);
-                // マッチング確立を通知（winner/gameOverリセット用）
-                io.to(roomId).emit('match_found', { roomId, currentTurnPlayerId: gameState.currentTurnPlayerId });
+                // 【強制フラグ方式】各プレイヤーに対して「操作許可」を明確に指名
+                // Player1: 先行プレイヤー（isYourTurn: true）
+                io.to(player1.socketId).emit('match_found', {
+                    roomId,
+                    currentTurnPlayerId: gameState.currentTurnPlayerId,
+                    isYourTurn: true,
+                    yourOpponent: player2.username,
+                });
+                console.log(`✅ Player1 (${player1.username}): isYourTurn = true`);
+                // Player2: 後攻プレイヤー（isYourTurn: false）
+                io.to(player2.socketId).emit('match_found', {
+                    roomId,
+                    currentTurnPlayerId: gameState.currentTurnPlayerId,
+                    isYourTurn: false,
+                    yourOpponent: player1.username,
+                });
+                console.log(`✅ Player2 (${player2.username}): isYourTurn = false`);
                 // ゲームスタート通知
                 io.to(roomId).emit('game_start', gameData);
                 // 【握手プロセス】通信揺らぎ対策：300msおきに最新のgameStateを5回送信
@@ -784,6 +799,20 @@ io.on('connection', (socket) => {
                         console.log(`✅ Handshake completed for room ${roomId}`);
                     }
                 }, 300); // 300msおきに送信
+                // 【同期保証のハメ技】2秒経ってアクションがない場合、先行プレイヤーに強制通知
+                const forceStartTimeout = setTimeout(() => {
+                    const game = activeGames.get(roomId);
+                    if (game && !game.isGameOver) {
+                        const currentPlayer = game.currentTurnPlayerId === player1.socketId ? player1 : player2;
+                        console.log(`⏱️ 2秒経過：先行プレイヤー(${currentPlayer.username})に強制通知`);
+                        io.to(currentPlayer.socketId).emit('force_turn_start', {
+                            message: `${currentPlayer.username}のターン！ボタンを押してください！`,
+                            isYourTurn: true,
+                            currentTurnPlayerId: game.currentTurnPlayerId,
+                        });
+                        console.log(`🚨 force_turn_start sent to ${currentPlayer.username}`);
+                    }
+                }, 2000); // 2秒のタイムアウト
                 // ゲーム開始時にウォッチドッグを開始（ボタンロック対策）
                 startWatchdog(roomId);
                 console.log(`📋 Matching confirmed. Waiting for battle_ready_ack from both players in room ${roomId}`);
