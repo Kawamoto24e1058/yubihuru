@@ -177,7 +177,13 @@ function App() {
 
   useEffect(() => {
     const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-    const newSocket = io(socketUrl)
+    const newSocket = io(socketUrl, {
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      timeout: 10000,
+      transports: ['websocket', 'polling']
+    })
 
     // アプリ起動時に localStorage から保存されたユーザー名を読み込む
     const savedName = localStorage.getItem('yubihuru_user_name')
@@ -193,6 +199,30 @@ function App() {
 
     newSocket.on('connect', () => {
       console.log('Connected to server')
+
+      // 進行中のバトルがあるかチェック
+      const activeBattle = localStorage.getItem('yubihuru_active_battle')
+      if (activeBattle && !gameStarted) {
+        try {
+          const battleData = JSON.parse(activeBattle)
+          // 5分以内のバトルなら復帰を試みる
+          if (Date.now() - battleData.timestamp < 300000) {
+            console.log('Active battle detected, attempting to reconnect...')
+            const savedId = localStorage.getItem('yubihuru_player_id')
+            if (savedId) {
+              newSocket.emit('reconnect', { playerId: savedId })
+              setIsWaiting(true)
+              return
+            }
+          } else {
+            // 古いバトル情報はクリア
+            localStorage.removeItem('yubihuru_active_battle')
+          }
+        } catch (e) {
+          console.error('Failed to parse active battle data:', e)
+          localStorage.removeItem('yubihuru_active_battle')
+        }
+      }
 
       // 初回接続時は再接続可否のチェックのみ
       const savedId = localStorage.getItem('yubihuru_player_id')
@@ -254,6 +284,12 @@ function App() {
       console.log('Game started!', data)
       setIsWaiting(false)
       setGameStarted(true)
+      
+      // マッチング成立時、バトル情報を localStorage に保存
+      localStorage.setItem('yubihuru_active_battle', JSON.stringify({
+        roomId: data.roomId,
+        timestamp: Date.now()
+      }))
       
       // ゲーム状態をリセット
       setIsGameOver(false)
@@ -581,6 +617,9 @@ function App() {
         setCurrentStreak(0)
         localStorage.setItem('yubihuru_current_streak', '0')
       }
+      
+      // バトル終了時、active_battle をクリア
+      localStorage.removeItem('yubihuru_active_battle')
       
       // グレースケール解除
       setLastAttackGrayscale(false)

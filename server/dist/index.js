@@ -534,6 +534,7 @@ io.on('connection', (socket) => {
                     currentTurnPlayerId: player1.socketId, // player1が最初のターン
                     isGameOver: false,
                     winner: null,
+                    startedAt: Date.now(), // マッチング直後の保護用
                 };
                 // Store active game
                 activeGames.set(roomId, gameState);
@@ -1031,9 +1032,17 @@ io.on('connection', (socket) => {
         // Handle disconnection from active games (保持して再接続を許可)
         activeGames.forEach((game, roomId) => {
             if (game.player1.socketId === socket.id || game.player2.socketId === socket.id) {
-                console.log(`🎮 Player disconnected from room ${roomId} (offline保持)`);
                 const username = game.player1.socketId === socket.id ? game.player1.username : game.player2.username;
                 const pid = game.player1.socketId === socket.id ? game.player1.playerId : game.player2.playerId;
+                // マッチング直後（3秒以内）の切断は特別な保護
+                const timeSinceStart = game.startedAt ? Date.now() - game.startedAt : Infinity;
+                if (timeSinceStart < 3000) {
+                    console.log(`⚡ Early disconnect detected (${timeSinceStart}ms after start). Extended grace period for ${username}`);
+                    offlinePlayers.set(pid, { roomId, lastSeen: Date.now(), username, socketId: socket.id });
+                    // 相手には通知せず、静かに再接続を待つ
+                    return;
+                }
+                console.log(`🎮 Player disconnected from room ${roomId} (offline保持)`);
                 offlinePlayers.set(pid, { roomId, lastSeen: Date.now(), username, socketId: socket.id });
                 io.to(roomId).emit('opponent_disconnected', {
                     message: 'Opponent has disconnected (5分以内に復帰可能)',
