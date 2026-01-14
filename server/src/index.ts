@@ -28,6 +28,7 @@ app.use(express.json());
 
 // Waiting room management
 interface WaitingPlayer {
+  playerId: string;
   socketId: string;
   username: string;
 }
@@ -36,11 +37,13 @@ interface WaitingPlayer {
 interface GameState {
   roomId: string;
   player1: {
+    playerId: string;
     socketId: string;
     username: string;
     state: PlayerState;
   };
   player2: {
+    playerId: string;
     socketId: string;
     username: string;
     state: PlayerState;
@@ -53,6 +56,9 @@ interface GameState {
 
 const waitingRoom: WaitingPlayer[] = [];
 const activeGames = new Map<string, GameState>();
+// オフライン保持: playerId -> { roomId, lastSeen, username }
+const offlinePlayers = new Map<string, { roomId: string; lastSeen: number; username: string; socketId: string }>();
+const socketToPlayerId = new Map<string, string>();
 
 // Helper function to create initial player state
 function createPlayerState(): PlayerState {
@@ -515,11 +521,16 @@ io.on('connection', (socket) => {
   socket.on('joinGame', (payload: { username: string }) => {
     console.log(`🎮 ${payload.username} (${socket.id}) joining game...`);
 
+    const playerId = uuidv4();
+    socketToPlayerId.set(socket.id, playerId);
+    socket.emit('player_id', { playerId });
+
     // Add player to waiting room
-    waitingRoom.push({
-      socketId: socket.id,
-      username: payload.username,
-    });
+      waitingRoom.push({
+        playerId,
+        socketId: socket.id,
+        username: payload.username,
+      });
 
     console.log(`⏳ Waiting room: ${waitingRoom.length} player(s)`);
 
@@ -552,11 +563,13 @@ io.on('connection', (socket) => {
         const gameState: GameState = {
           roomId,
           player1: {
+            playerId: player1.playerId,
             socketId: player1.socketId,
             username: player1.username,
             state: player1State,
           },
           player2: {
+            playerId: player2.playerId,
             socketId: player2.socketId,
             username: player2.username,
             state: player2State,
@@ -574,11 +587,13 @@ io.on('connection', (socket) => {
         const gameData = {
           roomId,
           player1: {
+            playerId: player1.playerId,
             socketId: player1.socketId,
             username: player1.username,
             state: player1State,
           },
           player2: {
+            playerId: player2.playerId,
             socketId: player2.socketId,
             username: player2.username,
             state: player2State,
@@ -605,6 +620,57 @@ io.on('connection', (socket) => {
         playersWaiting: waitingRoom.length,
       });
     }
+  });
+
+  // 再接続リクエスト
+  socket.on('reconnect', (payload: { playerId: string }) => {
+    const { playerId } = payload;
+    const offlineInfo = offlinePlayers.get(playerId);
+    if (!offlineInfo) {
+      socket.emit('reconnect_failed', { message: 'No session found' });
+      return;
+    }
+
+    const game = activeGames.get(offlineInfo.roomId);
+    if (!game) {
+      offlinePlayers.delete(playerId);
+      socket.emit('reconnect_failed', { message: 'Game not found' });
+      return;
+    }
+
+    // ルームへ再参加
+    socket.join(offlineInfo.roomId);
+    socketToPlayerId.set(socket.id, playerId);
+
+    // ソケットIDを更新
+    const previousSocketId = offlineInfo.socketId;
+
+    if (game.player1.playerId === playerId) {
+      game.player1.socketId = socket.id;
+      if (game.currentTurnPlayerId === previousSocketId) {
+        game.currentTurnPlayerId = socket.id;
+      }
+    }
+    if (game.player2.playerId === playerId) {
+      game.player2.socketId = socket.id;
+      if (game.currentTurnPlayerId === previousSocketId) {
+        game.currentTurnPlayerId = socket.id;
+      }
+    }
+
+    offlinePlayers.delete(playerId);
+
+    // 再接続完了通知（自身）
+    socket.emit('reconnect_success', {
+      gameState: game,
+      roomId: offlineInfo.roomId,
+    });
+
+    // 相手へ再接続通知
+    socket.to(offlineInfo.roomId).emit('opponent_reconnected', {
+      playerId,
+      username: offlineInfo.username,
+    });
   });
 
   // Handle action_activate_zone event
@@ -1058,6 +1124,9 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     console.log(`❌ User disconnected: ${socket.id}`);
 
+    const playerId = socketToPlayerId.get(socket.id);
+    socketToPlayerId.delete(socket.id);
+
     // Remove from waiting room if present
     const waitingIndex = waitingRoom.findIndex(p => p.socketId === socket.id);
     if (waitingIndex > -1) {
@@ -1065,18 +1134,39 @@ io.on('connection', (socket) => {
       console.log(`🚪 ${removed.username} left waiting room`);
     }
 
-    // Handle disconnection from active games
+    // Handle disconnection from active games (保持して再接続を許可)
     activeGames.forEach((game, roomId) => {
       if (game.player1.socketId === socket.id || game.player2.socketId === socket.id) {
-        console.log(`🎮 Player disconnected from room ${roomId}`);
+        console.log(`🎮 Player disconnected from room ${roomId} (offline保持)`);
+        const username = game.player1.socketId === socket.id ? game.player1.username : game.player2.username;
+        const pid = game.player1.socketId === socket.id ? game.player1.playerId : game.player2.playerId;
+        offlinePlayers.set(pid, { roomId, lastSeen: Date.now(), username, socketId: socket.id });
+
         io.to(roomId).emit('opponent_disconnected', {
-          message: 'Opponent has disconnected',
+          message: 'Opponent has disconnected (5分以内に復帰可能)',
         });
-        activeGames.delete(roomId);
       }
     });
   });
 });
+
+// 5分以上経過したオフラインプレイヤーをクリーンアップ
+setInterval(() => {
+  const now = Date.now();
+  offlinePlayers.forEach((info, playerId) => {
+    if (now - info.lastSeen > 5 * 60 * 1000) {
+      const game = activeGames.get(info.roomId);
+      if (game) {
+        io.to(info.roomId).emit('opponent_disconnected', {
+          message: 'Opponent did not return in time. Game ended.',
+        });
+        activeGames.delete(info.roomId);
+      }
+      offlinePlayers.delete(playerId);
+      console.log(`🧹 Cleaned offline session for ${playerId}`);
+    }
+  });
+}, 60 * 1000);
 
 const PORT = process.env.PORT || 3000;
 

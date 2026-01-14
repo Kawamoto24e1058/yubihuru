@@ -161,10 +161,50 @@ function App() {
 
     newSocket.on('connect', () => {
       console.log('Connected to server')
+
+      // 既存プレイヤーIDがあれば再接続を試行
+      const savedId = localStorage.getItem('yubihuru_player_id')
+      if (savedId) {
+        newSocket.emit('reconnect', { playerId: savedId })
+      }
+    })
+
+    // 永続IDを受信
+    newSocket.on('player_id', (data: { playerId: string }) => {
+      localStorage.setItem('yubihuru_player_id', data.playerId)
     })
 
     newSocket.on('waiting', () => {
       setIsWaiting(true)
+    })
+
+    newSocket.on('opponent_reconnected', () => {
+      setLogs(prev => [`🔌 相手が再接続しました`, ...prev].slice(0, 10))
+    })
+
+    // 再接続成功: 最新ゲーム状態を反映
+    newSocket.on('reconnect_success', (data: any) => {
+      console.log('Reconnected with state:', data)
+      setIsWaiting(false)
+      setGameStarted(true)
+      setIsGameOver(false)
+      setWinner(null)
+      setZoneBanner(null)
+      setIsProcessing(false)
+
+      const mySocketId = newSocket.id || ''
+      const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
+      const opponent = data.gameState.player1.socketId === mySocketId ? data.gameState.player2 : data.gameState.player1
+
+      setMyData(me)
+      setOpponentData(opponent)
+      setCurrentTurnId(data.gameState.currentTurnPlayerId)
+      setLogs(prev => [`🔁 再接続しました`, ...prev].slice(0, 10))
+    })
+
+    newSocket.on('reconnect_failed', (data: any) => {
+      console.warn('Reconnect failed', data)
+      setLogs(prev => [`❌ 再接続に失敗しました`, ...prev].slice(0, 10))
     })
 
     newSocket.on('game_start', (data: GameStartData) => {
@@ -203,6 +243,9 @@ function App() {
       const mySocketId = newSocket.id || ''
       const me = data.player1.socketId === mySocketId ? data.player1 : data.player2
       const opponent = data.player1.socketId === mySocketId ? data.player2 : data.player1
+      if (me.playerId) {
+        localStorage.setItem('yubihuru_player_id', me.playerId)
+      }
       
       // サーバーがプレイヤー1から始める
       setCurrentTurnId(data.player1.socketId)

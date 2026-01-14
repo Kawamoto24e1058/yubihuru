@@ -155,6 +155,7 @@ export interface GameOverPayload {
  * Player data for client-side rendering
  */
 export interface PlayerData {
+  playerId?: string;
   socketId: string;
   username: string;
   state: PlayerState;
