@@ -70,7 +70,7 @@ function App() {
   const [yakumanFreeze, setYakumanFreeze] = useState(false) // 役満フリーズ演出
   const [tenpaiUltimate, setTenpaiUltimate] = useState(false) // 天和の究極演出
   const [whiteoutFlash, setWhiteoutFlash] = useState(false) // ホワイトアウト
-  const [mahjongTiles, setMahjongTiles] = useState<Array<{id: number, left: number}>>([]) // 麻雀牌フロー
+  const [mahjongTiles, setMahjongTiles] = useState<Array<{id: number, left: number, emoji?: string, angle?: number, size?: number, duration?: number, delay?: number}>>([]) // 麻雀牌フロー
 
   // ラストアタック・インパクト用
   const [lastAttackGrayscale, setLastAttackGrayscale] = useState(false) // グレースケール
@@ -390,11 +390,35 @@ function App() {
         // 0.5秒後に天和テキスト表示開始
         setTimeout(() => {
           setTenpaiUltimate(true)
-          // 麻雀牌アニメーション生成
-          const tiles = Array.from({ length: 13 }, (_, i) => ({
-            id: i,
-            left: Math.random() * 100
-          }))
+          // 麻雀牌アニメーション生成（種類豊富＆密度UP）
+          const mahjongEmojis = [
+            // 字牌（7種）
+            '🀄', '🀅', '🀆', '🀀', '🀁', '🀂', '🀃',
+            // 萬子（9種）
+            '🀇', '🀈', '🀉', '🀊', '🀋', '🀌', '🀍', '🀎', '🀏',
+            // 筒子（9種）
+            '🀙', '🀚', '🀛', '🀜', '🀝', '🀞', '🀟', '🀠', '🀡',
+            // 索子（9種）
+            '🀐', '🀑', '🀒', '🀓', '🀔', '🀕', '🀖', '🀗', '🀘'
+          ]
+          
+          const tiles = Array.from({ length: 40 }, (_, i) => {
+            const randomEmoji = mahjongEmojis[Math.floor(Math.random() * mahjongEmojis.length)]
+            const randomAngle = Math.random() * 360
+            const randomSize = 0.6 + Math.random() * 0.7 // 0.6倍～1.3倍
+            const randomDuration = 6 + Math.random() * 3 // 6～9秒でランダムな落下速度
+            const randomDelay = Math.random() * 0.5 // 0～0.5秒のランダムな開始遅延
+            
+            return {
+              id: i,
+              left: Math.random() * 100,
+              emoji: randomEmoji,
+              angle: randomAngle,
+              size: randomSize,
+              duration: randomDuration,
+              delay: randomDelay
+            }
+          })
           setMahjongTiles(tiles)
         }, 500)
         
@@ -1302,22 +1326,24 @@ function App() {
                 style={{
                   left: `${tile.left}%`,
                   top: '-80px',
-                  width: '60px',
-                  height: '80px',
-                  animation: `mahjong-fall 7s linear forwards`,
-                  animationDelay: `${tile.id * 0.1}s`,
+                  width: `${60 * (tile.size || 1)}px`,
+                  height: `${80 * (tile.size || 1)}px`,
+                  animation: `mahjong-fall ${tile.duration || 7}s linear forwards`,
+                  animationDelay: `${(tile.delay || 0) + (tile.id * 0.08)}s`,
                   backgroundColor: '#fff',
                   border: '2px solid #333',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: '20px',
+                  fontSize: `${20 * (tile.size || 1)}px`,
                   fontWeight: 'bold',
                   color: '#e74c3c',
-                  borderRadius: '4px'
+                  borderRadius: '4px',
+                  transform: `rotate(${tile.angle || 0}deg)`,
+                  opacity: 0.9
                 }}
               >
-                🀄
+                {tile.emoji || '🀄'}
               </div>
             ))}
           </>
