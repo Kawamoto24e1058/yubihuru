@@ -1722,11 +1722,26 @@ function App() {
 
   // 初期画面（名前入力）
   return (
-    <div className="min-h-screen bg-yellow-50 flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center p-4">
       <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-8 max-w-md w-full">
-        <h1 className="text-6xl font-black text-center mb-8 -rotate-3">
-          YUBIFURU
-        </h1>
+        {/* タイトルロゴ */}
+        <div className="text-center mb-8 animate-logo">
+          <div className="text-5xl font-black mb-2" style={{
+            background: 'linear-gradient(90deg, #ffff00, #ff69b4, #00bfff, #ffff00)',
+            backgroundSize: '300% 100%',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            backgroundClip: 'text',
+            WebkitTextStroke: '2px black',
+            fontWeight: 900,
+            animation: 'gradient-shift 3s ease-in-out infinite'
+          }}>
+            指振博徒
+          </div>
+          <p className="text-sm font-black text-gray-700 tracking-widest">
+            - YUBIFURU -
+          </p>
+        </div>
         
         <div className="space-y-6">
           {isCheckingReconnect ? (
@@ -1740,9 +1755,9 @@ function App() {
                   <p className="font-black text-sm mb-3 text-center">前回のバトルが残っています</p>
                   <button
                     onClick={handleReconnect}
-                    className="w-full py-4 bg-green-500 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-green-400 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black text-xl"
+                    className="w-full py-3 bg-cyan-400 border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:bg-cyan-300 active:translate-x-1 active:translate-y-1 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-lg"
                   >
-                    🔄 前回のバトルに復帰する
+                    🔄 復帰する
                   </button>
                 </div>
               )}
@@ -1762,28 +1777,24 @@ function App() {
 
               {/* 戦績表示 */}
               <div 
-                className="bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-4 text-center"
-                style={{
-                  WebkitTextStroke: '1px black'
-                }}
+                className={`border-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-4 text-center font-black text-lg ${
+                  currentStreak >= 3 
+                    ? 'bg-red-100 border-red-500 animate-fire-glow'
+                    : 'bg-white border-black'
+                }`}
               >
-                <p 
-                  className="font-black text-lg"
-                  style={{
-                    color: currentStreak >= 3 ? '#ff3333' : '#000000',
-                    textShadow: currentStreak >= 3 ? '0 0 20px rgba(255, 51, 51, 0.6)' : 'none',
-                    animation: currentStreak >= 3 ? 'fire-glow 1.5s ease-in-out infinite' : 'none'
-                  }}
-                >
-                  {currentStreak >= 3 ? '🔥' : ''} 通算：{totalWins}勝 / {currentStreak}連勝中 {currentStreak >= 3 ? '🔥' : ''}
-                </p>
+                <div className="flex items-center justify-center gap-2">
+                  {currentStreak >= 3 && <span className="text-2xl">🔥</span>}
+                  <span>通算：{totalWins}勝 / {currentStreak}連勝中</span>
+                  {currentStreak >= 3 && <span className="text-2xl">🔥</span>}
+                </div>
               </div>
 
               <button
                 onClick={handleJoin}
-                className="w-full py-4 bg-blue-500 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-400 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black text-xl"
+                className="w-full py-6 bg-lime-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-lime-300 active:translate-x-1 active:translate-y-1 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-2xl"
               >
-                ⚔️ 新しいバトルを始める
+                ⚔️ BATTLE START
               </button>
             </>
           )}
