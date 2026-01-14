@@ -367,6 +367,10 @@ function App() {
         setTimeout(() => {
           setYakumanFreeze(false)
         }, freezeDuration)
+        // セーフティ：5秒後に強制リセット
+        setTimeout(() => {
+          resetAllEffects()
+        }, 5000)
       }
       
       // 天和の究極演出
@@ -396,6 +400,11 @@ function App() {
           setTenpaiUltimate(false)
           setMahjongTiles([])
         }, 8000)
+        
+        // セーフティ：9秒後に強制リセット
+        setTimeout(() => {
+          resetAllEffects()
+        }, 9000)
       }
       
       // 特殊勝利を検知（出禁 or 数え役満）
@@ -409,8 +418,16 @@ function App() {
         setTimeout(() => setFatalFlash(false), 900)
         setTimeout(() => setGlassBreak(true), 250)
         setTimeout(() => setGlassBreak(false), 1250)
+        // セーフティ：3秒後に強制リセット
+        setTimeout(() => {
+          resetAllEffects()
+        }, 3000)
       } else if (data.message && data.message.includes('役満')) {
         setSpecialVictoryText('役満')
+        // セーフティ：3秒後に強制リセット
+        setTimeout(() => {
+          setSpecialVictoryText(null)
+        }, 3000)
       }
       
       // 技名を即座に表示
@@ -604,6 +621,9 @@ function App() {
     })
 
     newSocket.on('turn_change', (data: any) => {
+      // 新しいターン開始時に全演出をリセット（スマホ救済）
+      resetAllEffects()
+      
       setCurrentTurnId(data.currentTurnPlayerId)
       setIsProcessing(false)
       
@@ -692,6 +712,34 @@ function App() {
       clearInterval(intervalId)
     }
   }, [socket, isWaiting, gameStarted])
+
+  // 全演出フラグをリセットする関数（スマホ救済）
+  const resetAllEffects = () => {
+    console.log('🧹 Resetting all effects...')
+    setDamageFlash(false)
+    setHealFlash(false)
+    setPoisonFlash(false)
+    setShieldEffect(false)
+    setShowImpact(false)
+    setShowFinishText(false)
+    setYakumanFreeze(false)
+    setTenpaiUltimate(false)
+    setWhiteoutFlash(false)
+    setMahjongTiles([])
+    setLastAttackGrayscale(false)
+    setLastAttackFlash(false)
+    setFatalFlash(false)
+    setFatalWarning(false)
+    setGlassBreak(false)
+    setSlowMotion(false)
+    setBuffedDamage(null)
+    setScreenShake(false)
+    setOpponentInkEffect(false)
+    setOpponentShakeEffect(false)
+    setInkSplashes([])
+    setSpecialVictoryText(null)
+    setZoneBanner(null)
+  }
 
   const handleJoin = () => {
     if (socket && name.trim()) {
@@ -904,8 +952,23 @@ function App() {
     }
     const myZoneBorder = zoneBorderMap[myData.state.activeZone.type] || 'border-black'
 
+    // 演出が表示されているかを判定
+    const isEffectPlaying = yakumanFreeze || tenpaiUltimate || whiteoutFlash || 
+                           specialVictoryText !== null || fatalFlash || glassBreak
+    
+    // 画面タップで演出スキップ（緊急リセット）
+    const handleEmergencyReset = () => {
+      if (isEffectPlaying) {
+        console.log('⚠️ Emergency reset triggered by tap')
+        resetAllEffects()
+      }
+    }
+
     return (
-      <div className={`min-h-screen bg-yellow-50 p-4 transition-all relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${opponentShakeEffect ? 'animate-window-shake' : ''} ${lastAttackGrayscale ? 'filter grayscale' : ''} ${slowMotion ? 'animate-slow-motion' : ''}`}>
+      <div 
+        className={`min-h-screen bg-yellow-50 p-4 transition-all relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${opponentShakeEffect ? 'animate-window-shake' : ''} ${lastAttackGrayscale ? 'filter grayscale' : ''} ${slowMotion ? 'animate-slow-motion' : ''}`}
+        onClick={handleEmergencyReset}
+      >
         {/* メニューボタン（右上） */}
         <button
           onClick={() => setShowMenu(true)}
