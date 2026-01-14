@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { io, Socket } from 'socket.io-client'
 import './App.css'
 import type { GameStartData, PlayerData } from './types'
@@ -97,6 +97,7 @@ function App() {
   const [isCheckingReconnect, setIsCheckingReconnect] = useState(true)
   const [totalWins, setTotalWins] = useState(0) // 通算勝利数
   const [currentStreak, setCurrentStreak] = useState(0) // 連勝数
+  const [currentRoomId, setCurrentRoomId] = useState<string>('') // 🔄 手動同期用：現在のroomId
   
   // 反射・カウンター系演出
   const [showReflectReady, setShowReflectReady] = useState(false) // ミラーコート待機中
@@ -105,6 +106,16 @@ function App() {
   const [showReflectSuccess, setShowReflectSuccess] = useState(false) // 反射成功
   const [showCounterSuccess, setShowCounterSuccess] = useState(false) // カウンター成功
   const [showDestinyBondActivated, setShowDestinyBondActivated] = useState(false) // 道連れ発動
+
+  // 🔄 【手動同期】クライアントからサーバーに同期リクエストを送信
+  const requestManualSync = useCallback(() => {
+    if (!socket?.id) {
+      console.warn('❌ Socket ID not available for sync')
+      return
+    }
+    console.log('🔄 Requesting manual sync from server...')
+    socket.emit('request_manual_sync', { roomId: currentRoomId })
+  }, [socket, currentRoomId])
 
   // 相手のactiveEffectを監視
   useEffect(() => {
@@ -356,6 +367,9 @@ function App() {
     newSocket.on('match_found', (data: any) => {
       console.log('Match found confirmation:', data)
       
+      // 🔄 手動同期用にroomIdを保存
+      setCurrentRoomId(data.roomId)
+      
       // 【強制フラグ方式】サーバーから指名された「isYourTurn」フラグを設定
       setIsYourTurn(data.isYourTurn || false);
       if (data.isYourTurn) {
@@ -384,6 +398,11 @@ function App() {
     newSocket.on('game_state_sync', (data: any) => {
       console.log('🤝 game_state_sync received:', data)
       
+      // 🔄 手動同期用にroomIdを保存
+      if (data.gameState?.roomId) {
+        setCurrentRoomId(data.gameState.roomId)
+      }
+      
       // 最新のgameStateをクライアント側に反映
       if (data.gameState) {
         const mySocketId = newSocket.id || ''
@@ -398,6 +417,9 @@ function App() {
           setCurrentTurnId(data.currentTurnPlayerId)
           console.log('✅ Turn ID synced:', data.currentTurnPlayerId)
         }
+        
+        // 🔴 【デバッグ】ターンID一致確認
+        console.log(`📍 Current Turn: ${data.currentTurnPlayerId} | My ID: ${mySocketId} | Match: ${data.currentTurnPlayerId === mySocketId ? '✅ YES' : '❌ NO'}`)
         
         // ボタンロック防止：演出中フラグをリセット
         setIsProcessing(false)
@@ -1135,8 +1157,8 @@ function App() {
 
   // バトル画面
   if (gameStarted && myData && opponentData) {
-    const mySocketId = socket?.id || ''
     // 🔄 新方式：isYourTurn はサーバーから直接指名されたフラグを使用
+    // const mySocketId = socket?.id || ''  // ❌ 旧方式（削除）
     // const isMyTurn = mySocketId === currentTurnId  // ❌ 旧方式（削除）
     const myHpPercent = (myData.state.hp / myData.state.maxHp) * 100
     const myMpPercent = (myData.state.mp / 5) * 100
@@ -1577,7 +1599,16 @@ function App() {
           const myZoneBorder = zoneBorderMap[myData.state.activeZone.type] || 'border-black'
 
           return (
-            <div className="hidden md:flex flex-col justify-between w-full h-full">
+            <div className="relative hidden md:flex flex-col justify-between w-full h-full">
+              
+              {/* 🔄 【デバッグ用】手動同期ボタン */}
+              <button
+                onClick={() => requestManualSync()}
+                className="fixed top-2 right-2 z-50 px-3 py-1 text-xs bg-cyan-300 border-2 border-black font-black rounded shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-cyan-200 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+              >
+                🔄 同期
+              </button>
+
           <div className="p-4 border-b-4 border-black bg-yellow-50">
             <div className="w-full">
               <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4">
@@ -1693,21 +1724,21 @@ function App() {
               <div className="grid grid-cols-3 gap-3">
                 <button
                   onClick={handleUseSkill}
-                  disabled={!isYourTurn || isProcessing}
+                  disabled={!isYourTurn}
                   className={`py-4 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-lg ${
-                    isYourTurn && !isProcessing
+                    isYourTurn
                       ? 'bg-red-500 hover:bg-red-400'
                       : 'bg-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  {!isYourTurn ? '⏳ 待機' : isProcessing ? '処理中...' : '👆 指を振る'}
+                  {!isYourTurn ? '⏳ 待機' : '👆 指を振る'}
                 </button>
 
                 <button
                   onClick={handleActivateZone}
-                  disabled={!isYourTurn || isProcessing || myData.state.mp < 5}
+                  disabled={!isYourTurn || myData.state.mp < 5}
                   className={`py-4 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-lg ${
-                    isYourTurn && !isProcessing && myData.state.mp >= 5
+                    isYourTurn && myData.state.mp >= 5
                       ? 'bg-purple-500 hover:bg-purple-400'
                       : 'bg-gray-400 cursor-not-allowed'
                   }`}
@@ -1865,14 +1896,14 @@ function App() {
             {/* 指を振るボタン */}
             <button
               onClick={handleUseSkill}
-              disabled={mySocketId !== currentTurnId || isProcessing}
+              disabled={!isYourTurn}
               className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-6 font-black text-lg ${
-                mySocketId === currentTurnId && !isProcessing
+                isYourTurn
                   ? 'bg-pink-500 hover:bg-pink-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
                   : 'bg-gray-400 cursor-not-allowed'
               }`}
             >
-              {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る')}
+              {!isYourTurn ? '相手の行動を待っています...' : (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る')}
             </button>
 
             {/* 現在のゾーン効果表示 */}
@@ -1896,7 +1927,7 @@ function App() {
               <select
                 value={selectedZoneType}
                 onChange={(e) => setSelectedZoneType(e.target.value as any)}
-                disabled={mySocketId !== currentTurnId || isProcessing}
+                disabled={!isYourTurn}
                 className="flex-1 px-2 py-2 border-2 border-black font-bold text-xs bg-white"
               >
                 <option value="強攻のゾーン">🔥 強攻のゾーン</option>
@@ -1916,15 +1947,15 @@ function App() {
             {/* ゾーン展開ボタン */}
             <button
               onClick={handleActivateZone}
-              disabled={mySocketId !== currentTurnId || isProcessing || myData.state.mp < 5}
+              disabled={!isYourTurn || myData.state.mp < 5}
               className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-3 font-black text-sm ${
-                mySocketId === currentTurnId && !isProcessing && myData.state.mp >= 5
+                isYourTurn && myData.state.mp >= 5
                   ? 'bg-purple-400 hover:bg-purple-300 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
                   : 'bg-gray-400 cursor-not-allowed'
               }`}
             >
-              {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : '🌀 ゾーン展開'}
-              {mySocketId === currentTurnId && !isProcessing && <span className="block text-xs">(MP 5消費)</span>}
+              {!isYourTurn ? '相手の行動を待っています...' : '🌀 ゾーン展開'}
+              {isYourTurn && <span className="block text-xs">(MP 5消費)</span>}
             </button>
           </div>
 
@@ -1947,14 +1978,14 @@ function App() {
               {/* 指を振るボタン */}
               <button
                 onClick={handleUseSkill}
-                disabled={mySocketId !== currentTurnId || isProcessing}
+                disabled={!isYourTurn}
                 className={`border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-8 font-black text-2xl ${
-                  mySocketId === currentTurnId && !isProcessing
+                  isYourTurn
                     ? 'bg-pink-500 hover:bg-pink-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
                     : 'bg-gray-400 cursor-not-allowed'
                 }`}
               >
-                {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る')}
+                {!isYourTurn ? '相手の行動を待っています...' : (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る')}
               </button>
 
               {/* ゾーン展開エリア */}
@@ -1979,7 +2010,7 @@ function App() {
                 <select
                   value={selectedZoneType}
                   onChange={(e) => setSelectedZoneType(e.target.value as any)}
-                  disabled={mySocketId !== currentTurnId || isProcessing}
+                  disabled={!isYourTurn}
                   className="w-full px-3 py-2 border-2 border-black font-bold text-sm bg-white"
                 >
                   <option value="強攻のゾーン">🔥 強攻のゾーン</option>
@@ -1994,15 +2025,15 @@ function App() {
                     onClick={handleActivateZone}
                     onMouseEnter={() => setShowZoneTooltip(true)}
                     onMouseLeave={() => setShowZoneTooltip(false)}
-                    disabled={mySocketId !== currentTurnId || isProcessing || myData.state.mp < 5}
+                    disabled={!isYourTurn || myData.state.mp < 5}
                     className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-4 font-black text-lg ${
-                      mySocketId === currentTurnId && !isProcessing && myData.state.mp >= 5
+                      isYourTurn && myData.state.mp >= 5
                         ? 'bg-purple-400 hover:bg-purple-300 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
                         : 'bg-gray-400 cursor-not-allowed'
                     }`}
                   >
-                    {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : '🌀 ゾーン展開'}
-                    {mySocketId === currentTurnId && !isProcessing && <span className="block text-xs">(MP 5消費)</span>}
+                    {!isYourTurn ? '相手の行動を待っています...' : '🌀 ゾーン展開'}
+                    {isYourTurn && <span className="block text-xs">(MP 5消費)</span>}
                   </button>
 
                   {/* ツールチップ：全ゾーン説明 */}

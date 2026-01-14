@@ -1595,6 +1595,31 @@ io.on('connection', (socket) => {
     }
   });
 
+  // 🔄 【手動同期】クライアントからの同期リクエストに応答
+  socket.on('request_manual_sync', (data: { roomId: string }) => {
+    const roomId = data.roomId;
+    const gameState = activeGames.get(roomId);
+
+    if (!gameState) {
+      console.warn(`⚠️ Manual sync requested but game not found: ${roomId}`);
+      socket.emit('manual_sync_response', {
+        error: 'Game not found',
+        gameState: null,
+        currentTurnPlayerId: null,
+      });
+      return;
+    }
+
+    // クライアントに最新の同期データを送信
+    socket.emit('manual_sync_response', {
+      gameState,
+      currentTurnPlayerId: gameState.currentTurnPlayerId,
+      turnNumber: gameState.currentTurn,
+    });
+
+    console.log(`🔄 Manual sync sent to client in room ${roomId}. Current turn: ${gameState.currentTurnPlayerId}`);
+  });
+
   socket.on('disconnect', () => {
     console.log(`❌ User disconnected: ${socket.id}`);
 
