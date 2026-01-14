@@ -86,6 +86,8 @@ function App() {
   const [showQuitConfirm, setShowQuitConfirm] = useState(false)
   const [canReconnect, setCanReconnect] = useState(false)
   const [isCheckingReconnect, setIsCheckingReconnect] = useState(true)
+  const [totalWins, setTotalWins] = useState(0) // 通算勝利数
+  const [currentStreak, setCurrentStreak] = useState(0) // 連勝数
 
   // 相手のactiveEffectを監視
   useEffect(() => {
@@ -182,6 +184,12 @@ function App() {
     if (savedName) {
       setName(savedName)
     }
+
+    // アプリ起動時に localStorage から戦績を読み込む
+    const savedWins = localStorage.getItem('yubihuru_total_wins')
+    const savedStreak = localStorage.getItem('yubihuru_current_streak')
+    if (savedWins) setTotalWins(parseInt(savedWins, 10))
+    if (savedStreak) setCurrentStreak(parseInt(savedStreak, 10))
 
     newSocket.on('connect', () => {
       console.log('Connected to server')
@@ -556,7 +564,23 @@ function App() {
       // 勝敗結果を表示
       const mySocketId = newSocket.id || ''
       const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
-      setVictoryResult(me.username === data.winner ? 'WINNER' : 'LOSER')
+      const isWinner = me.username === data.winner
+      setVictoryResult(isWinner ? 'WINNER' : 'LOSER')
+      
+      // 戦績を更新・保存
+      if (isWinner) {
+        // 勝利時：通算勝利数と連勝数を +1
+        const newTotalWins = totalWins + 1
+        const newStreak = currentStreak + 1
+        setTotalWins(newTotalWins)
+        setCurrentStreak(newStreak)
+        localStorage.setItem('yubihuru_total_wins', newTotalWins.toString())
+        localStorage.setItem('yubihuru_current_streak', newStreak.toString())
+      } else {
+        // 敗北時：連勝数をリセット（通算勝利数は変わらない）
+        setCurrentStreak(0)
+        localStorage.setItem('yubihuru_current_streak', '0')
+      }
       
       // グレースケール解除
       setLastAttackGrayscale(false)
@@ -1447,6 +1471,25 @@ function App() {
                   className="w-full px-4 py-3 border-4 border-black font-bold focus:outline-none focus:ring-4 focus:ring-yellow-300"
                   maxLength={20}
                 />
+              </div>
+
+              {/* 戦績表示 */}
+              <div 
+                className="bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-4 text-center"
+                style={{
+                  WebkitTextStroke: '1px black'
+                }}
+              >
+                <p 
+                  className="font-black text-lg"
+                  style={{
+                    color: currentStreak >= 3 ? '#ff3333' : '#000000',
+                    textShadow: currentStreak >= 3 ? '0 0 20px rgba(255, 51, 51, 0.6)' : 'none',
+                    animation: currentStreak >= 3 ? 'fire-glow 1.5s ease-in-out infinite' : 'none'
+                  }}
+                >
+                  {currentStreak >= 3 ? '🔥' : ''} 通算：{totalWins}勝 / {currentStreak}連勝中 {currentStreak >= 3 ? '🔥' : ''}
+                </p>
               </div>
 
               <button
