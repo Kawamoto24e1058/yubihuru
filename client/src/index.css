@@ -69,6 +69,53 @@
     animation: fire-glow 1.5s ease-in-out infinite;
   }
 
+  /* スローモーション演出 */
+  @keyframes slow-motion {
+    0%, 100% { 
+      animation-play-state: running;
+      opacity: 1;
+    }
+  }
+
+  .animate-slow-motion {
+    animation-play-state: paused !important;
+    opacity: 0.95;
+  }
+
+  /* フラッシュ演出（白黒反転） */
+  @keyframes inverse-flash {
+    0%, 100% { 
+      background-color: transparent;
+      filter: invert(0);
+    }
+    50% { 
+      background-color: rgba(255, 255, 255, 0.8);
+      filter: invert(1);
+    }
+  }
+
+  .animate-inverse-flash {
+    animation: inverse-flash 0.4s ease-out;
+  }
+
+  /* フィニッシュのグロー演出 */
+  @keyframes finish-glow {
+    0% {
+      opacity: 0;
+      transform: scale(0.3) rotateZ(-20deg);
+      textShadow: 0 0 10px rgba(255, 0, 0, 0.5);
+    }
+    50% {
+      opacity: 1;
+      textShadow: 0 0 40px rgba(255, 0, 0, 1), 0 0 80px rgba(255, 100, 0, 0.6);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1) rotateZ(0deg);
+      textShadow: 0 0 20px rgba(255, 0, 0, 0.8), 0 0 40px rgba(255, 100, 0, 0.4);
+    }
+  }
+
   @keyframes shake {
     0% { transform: translate(1px, 1px) rotate(0deg); }
     10% { transform: translate(-1px, -2px) rotate(-1deg); }

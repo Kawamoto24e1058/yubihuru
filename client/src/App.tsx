@@ -527,25 +527,35 @@ function App() {
         if (newHpOpponent <= 0 && prevHpOpponent > 0) {
           console.log('🎬 ラストアタック・インパクト開始！');
           
-          // Phase 1: スローモーション演出（グレースケール + 画面フラッシュ）を即座に開始
+          // Phase 1: スローモーション演出を即座に開始
+          setSlowMotion(true)
           setLastAttackGrayscale(true)
-          setLastAttackFlash(true)
+          setShowImpact(true) // 技名表示
+          setImpactText(data.skillName || '技')
           
-          // Phase 2: 1.5秒後にドカン音と共にHPを最終反映
+          // Phase 2: 0.8秒後に画面フラッシュ＋FINISH表示
           setTimeout(() => {
-            console.log('🎬 1.5秒経過 - ドカン！HP最終反映');
-            setShouldApplyFinalDamage(true)
-            setShowFinishText(true) // ドカン音表示
+            console.log('🎬 0.8秒経過 - FINISH！');
+            setLastAttackFlash(true)
+            setShowFinishText(true)
             
-            // Phase 3: 1.0秒後にWINNER表示
+            // Phase 3: 1.5秒後にHPを最終反映
             setTimeout(() => {
-              console.log('🎬 WINNER表示');
-              setVictoryResult('WINNER')
+              console.log('🎬 1.5秒経過 - HP最終反映');
+              setShouldApplyFinalDamage(true)
+              setSlowMotion(false) // スロー終了
               
-              // Phase 4: グレースケール解除（WINNER表示は続ける）
-              setLastAttackGrayscale(false)
-            }, 1000)
-          }, 1500)
+              // Phase 4: 1.2秒後にWINNER表示＆演出完全終了
+              setTimeout(() => {
+                console.log('🎬 WINNER表示');
+                setVictoryResult('WINNER')
+                setLastAttackGrayscale(false)
+                setLastAttackFlash(false)
+                setShowImpact(false)
+                setShowFinishText(false)
+              }, 1200)
+            }, 1500)
+          }, 800)
           
           return // HP反映を遅延させるため、ここでreturn
         }
@@ -1002,7 +1012,7 @@ function App() {
 
     return (
       <div 
-        className={`min-h-screen bg-yellow-50 p-4 transition-all relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${opponentShakeEffect ? 'animate-window-shake' : ''} ${lastAttackGrayscale ? 'filter grayscale' : ''} ${slowMotion ? 'animate-slow-motion' : ''}`}
+        className={`w-screen h-screen bg-yellow-50 transition-all relative overflow-hidden flex flex-col ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${opponentShakeEffect ? 'animate-window-shake' : ''} ${lastAttackGrayscale ? 'filter grayscale' : ''} ${slowMotion ? 'animate-slow-motion' : ''}`}
         onClick={handleEmergencyReset}
       >
         {/* メニューボタン（右上） */}
@@ -1095,7 +1105,13 @@ function App() {
           </div>
         )}
 
-        {/* バフ付きダメージ表示（3倍サイズ） */}
+        {/* === z-index レイアーの整理 === */}
+        {/* z-0: ゲーム画面（ベース） */}
+        {/* z-[60-80]: ゲーム内演出（バフダメージ、役満など） */}
+        {/* z-[90-100]: 決着演出（FINISH、道連れ） */}
+        {/* z-[110-130]: モーダル・メニュー */}
+
+        {/* バフ付きダメージ表示（3倍サイズ）z-[60] */}
         {buffedDamage !== null && (
           <div className="pointer-events-none absolute inset-0 z-[55] flex items-center justify-center">
             <p 
@@ -1113,21 +1129,22 @@ function App() {
 
         {/* ラストアタック：グレースケール + 画面フラッシュ */}
         {lastAttackFlash && (
-          <div className="pointer-events-none absolute inset-0 z-[90] bg-white opacity-0 animate-last-attack-flash" />
+          <div className="pointer-events-none absolute inset-0 z-[90] bg-white opacity-0 animate-last-attack-flash animate-inverse-flash" />
         )}
         
-        {/* フィニッシュ・インパクト演出 */}
+        {/* フィニッシュテキスト表示 */}
         {showFinishText && (
-          <div className="pointer-events-none absolute inset-0 z-[60] flex items-center justify-center">
+          <div className="pointer-events-none absolute inset-0 z-[92] flex items-center justify-center">
             <p 
-              className="text-[180px] font-black select-none animate-finish-impact"
+              className="text-[250px] font-black select-none"
               style={{
-                WebkitTextStroke: '4px black',
+                WebkitTextStroke: '8px black',
                 fontWeight: 900,
-                color: '#FF0000'
+                color: '#FF0000',
+                animation: 'finish-glow 0.6s ease-out'
               }}
             >
-              ドゴォォォォン！！
+              FINISH!!
             </p>
           </div>
         )}
@@ -1383,15 +1400,187 @@ function App() {
           </div>
         )}
 
-        <div className="w-full mx-auto space-y-2 md:space-y-4 flex flex-col md:flex-row gap-2 md:gap-4 pb-40 md:pb-0">
+        {/* PC版レイアウト：フレックスボックス（上・中・下） */}
+        {(() => {
+          if (!myData || !opponentData) return null
+          
+          const mySocketId = socket?.id || ''
+          const isMyTurn = mySocketId === currentTurnId
+          const myHpPercent = (myData.state.hp / myData.state.maxHp) * 100
+          const myMpPercent = (myData.state.mp / 5) * 100
+          const opponentHpPercent = (opponentData.state.hp / opponentData.state.maxHp) * 100
+          const opponentMpPercent = (opponentData.state.mp / 5) * 100
+          const zoneBorderMap: Record<string, string> = {
+            '強攻のゾーン': 'border-red-500',
+            '集中のゾーン': 'border-emerald-500',
+            '乱舞のゾーン': 'border-orange-500',
+            '博打のゾーン': 'border-purple-500',
+            'none': 'border-black',
+          }
+          const myZoneBorder = zoneBorderMap[myData.state.activeZone.type] || 'border-black'
+
+          return (
+            <div className="hidden md:flex flex-col justify-between w-full h-full">
+          <div className="p-4 border-b-4 border-black bg-yellow-50">
+            <div className="w-full">
+              <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <p className="font-black text-sm">🎮 OPPONENT</p>
+                  {opponentData.state.status.poison && (
+                    <span className="bg-purple-600 text-white text-xs font-black px-2 py-1 rounded">☠️ 毒</span>
+                  )}
+                  {opponentData.state.isRiichi && (
+                    <span className="bg-red-600 text-white text-xs font-black px-2 py-1 rounded animate-pulse">🀄 立直</span>
+                  )}
+                </div>
+                <p className="font-black text-xl mb-2">{opponentData.username}</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="flex justify-between text-xs font-bold mb-1">
+                      <span>HP</span>
+                      <span>{opponentData.state.hp}/{opponentData.state.maxHp}</span>
+                    </div>
+                    <div className="h-4 border-2 border-black bg-gray-200">
+                      <div 
+                        className="h-full bg-lime-400 transition-all duration-500"
+                        style={{ width: `${opponentHpPercent}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs font-bold mb-1">
+                      <span>MP</span>
+                      <span>{opponentData.state.mp}/5</span>
+                    </div>
+                    <div className="h-4 border-2 border-black bg-gray-200">
+                      <div 
+                        className="h-full bg-cyan-400 transition-all duration-300"
+                        style={{ width: `${opponentMpPercent}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ===== 中央：バトルログ＆演出 ===== */}
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-6 h-full">
+              <h3 className="font-black text-xl mb-4 border-b-4 border-black pb-2">BATTLE LOG</h3>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {logs.length === 0 ? (
+                  <p className="text-gray-400 font-bold text-sm">待機中...</p>
+                ) : (
+                  logs.map((log, index) => (
+                    <div key={index} className={`font-bold text-sm py-1 border-b-2 border-gray-200 ${getLogColor(log)}`}>
+                      {renderLogWithRainbow(log)}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ===== 下部：自分情報＋ボタン ===== */}
+          <div className="p-4 border-t-4 border-black bg-yellow-50">
+            <div className="space-y-3">
+              {/* 自分ステータス */}
+              <div className={`bg-white border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 transition-all ${
+                `${myZoneBorder} ${isMyTurn ? 'animate-pulse' : ''}`
+              } ${isShaking ? 'animate-shake' : ''}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <p className="font-black text-sm">⚔️ YOU {isMyTurn && '⭐'}</p>
+                    {myData.state.status.poison && (
+                      <span className="bg-purple-600 text-white text-xs font-black px-2 py-1 rounded">☠️ 毒</span>
+                    )}
+                    {myData.state.isRiichi && (
+                      <span className="bg-red-600 text-white text-xs font-black px-2 py-1 rounded animate-pulse">🀄 立直</span>
+                    )}
+                  </div>
+                  {healFlash && (
+                    <span className="text-green-600 font-black text-xs animate-flash">✨ HEAL</span>
+                  )}
+                </div>
+                <p className="font-black text-xl mb-2">{myData.username}</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="flex justify-between text-xs font-bold mb-1">
+                      <span>HP</span>
+                      <span>{myData.state.hp}/{myData.state.maxHp}</span>
+                    </div>
+                    <div className="h-4 border-2 border-black bg-gray-200">
+                      <div 
+                        className={`h-full transition-all duration-500 ${healFlash ? 'animate-flash bg-white' : 'bg-lime-400'}`}
+                        style={{ width: `${myHpPercent}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs font-bold mb-1">
+                      <span>MP</span>
+                      <span>{myData.state.mp}/5</span>
+                    </div>
+                    <div className="h-4 border-2 border-black bg-gray-200">
+                      <div 
+                        className="h-full bg-cyan-400 transition-all duration-300"
+                        style={{ width: `${myMpPercent}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ボタン行 */}
+              <div className="grid grid-cols-3 gap-3">
+                <button
+                  onClick={handleUseSkill}
+                  disabled={isMyTurn === false || isProcessing}
+                  className={`py-4 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-lg ${
+                    isMyTurn && !isProcessing
+                      ? 'bg-red-500 hover:bg-red-400'
+                      : 'bg-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  {isMyTurn === false ? '⏳ 待機' : isProcessing ? '処理中...' : '👆 指を振る'}
+                </button>
+
+                <button
+                  onClick={handleActivateZone}
+                  disabled={isMyTurn === false || isProcessing || myData.state.mp < 5}
+                  className={`py-4 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-lg ${
+                    isMyTurn && !isProcessing && myData.state.mp >= 5
+                      ? 'bg-purple-500 hover:bg-purple-400'
+                      : 'bg-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  {isMyTurn === false ? '待機' : isProcessing ? '中...' : '🌀 立直'}
+                </button>
+
+                <button
+                  onClick={() => setShowMenu(true)}
+                  className="py-4 bg-blue-500 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-400 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-lg"
+                >
+                  ⚙️ メニュー
+                </button>
+              </div>
+            </div>
+          </div>
+            </div>
+          );
+        })()} 
+
+        {/* スマホ版レイアウト（元の3カラム） */}
+        <div className="md:hidden flex flex-col gap-2 p-4 pb-40 w-full mx-auto space-y-2">
           {/* 相手側（スマホ時は上部、PC時は左） */}
-          <div className="w-full md:w-1/3 order-1">
+          <div className="w-full order-1">
             {/* 相手ステータス */}
             <div className="space-y-2">
               <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-3 md:p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <p className="font-black text-xs md:text-sm">OPPONENT</p>
-                  {opponentData.state.status.poison && (
+                  {opponentData?.state.status.poison && (
                     <span className="bg-purple-600 text-white text-xs font-black px-2 py-1 rounded">☠️ 毒</span>
                   )}
                   {opponentData.state.isRiichi && (
