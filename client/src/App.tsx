@@ -319,8 +319,22 @@ function App() {
       setSlowMotion(false)
       setBuffedDamage(null)
       
-      const opponent = data.player1.playerId === myData?.playerId ? data.player2 : data.player1
+      // プレイヤーデータを設定（重要：これがないとホーム画面に戻る）
+      const mySocketId = newSocket.id || ''
+      const me = data.player1.socketId === mySocketId ? data.player1 : data.player2
+      const opponent = data.player1.socketId === mySocketId ? data.player2 : data.player1
+      
+      setMyData(me)
+      setOpponentData(opponent)
+      
       setLogs([`⚔️ バトル開始！ vs ${opponent.username}`])
+    })
+
+    // マッチング成立直後に winner と gameOver をリセット（保険）
+    newSocket.on('match_found', (data: any) => {
+      console.log('Match found confirmation:', data)
+      setWinner(null)
+      setIsGameOver(false)
     })
 
     newSocket.on('battle_update', (data: any) => {
@@ -596,6 +610,13 @@ function App() {
     newSocket.on('game_over', (data: any) => {
       // サーバーから勝敗が確定したときだけ表示
       console.log('Game over:', data)
+      
+      // ガード：ゲーム中でない場合は無視（マッチング直後の誤動作防止）
+      if (!gameStarted) {
+        console.warn('Ignoring game_over event: game not started')
+        return
+      }
+      
       setIsGameOver(true)
       setWinner(data.winner)
       setLogs(prev => [`🏆 ${data.winner} の勝利！`, ...prev])

@@ -662,6 +662,10 @@ io.on('connection', (socket) => {
           roomData: gameData,
         });
 
+        // マッチング確立を通知（winner/gameOverリセット用）
+        io.to(roomId).emit('match_found', { roomId });
+        
+        // ゲームスタート通知
         io.to(roomId).emit('game_start', gameData);
         
         console.log(`📋 Matching confirmed. Waiting for battle_ready_ack from both players in room ${roomId}`);
@@ -1237,6 +1241,9 @@ io.on('connection', (socket) => {
       };
 
       activeGames.set(roomId, gameState);
+
+      // プレイヤーステータスを「playing」に変更（activeGamesに追加済み）
+      console.log(`🎮 Players status changed to 'playing' in room ${roomId}`);
 
       // ターン変更通知
       io.to(roomId).emit('turn_change', {
