@@ -50,6 +50,10 @@ function createPlayerState() {
         riichiBombCount: 0,
         isBroken: false,
         brokenTurns: 0,
+        // 反射・カウンター系の初期化
+        isReflecting: false,
+        isCounter: false,
+        isDestinyBond: false,
     };
 }
 // Helper: weighted random pick according to zone rules
@@ -87,6 +91,15 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
             const comeback = SKILLS.find(skill => skill.id === 119);
             console.log('🔄 HP危機的！起死回生が出現！');
             return comeback;
+        }
+    }
+    // 【道連れ】HP20%以下で抽選可能（5%の確率）
+    if (currentHpPercent <= 0.20) {
+        const destinyBondChance = Math.random();
+        if (destinyBondChance < 0.05) { // 5%の確率で道連れ
+            const destinyBond = SKILLS.find(skill => skill.id === 134);
+            console.log('💀 HP危機的！道連れが出現！');
+            return destinyBond;
         }
     }
     // 【特殊勝利】出禁の超レア抽選（0.15%）
@@ -255,7 +268,44 @@ function applySkillEffect(skill, attacker, defender, riichiFieldBoost = 1.0) {
             // 立直フィールド効果を適用（役のみ、相手が立直中）
             baseDamage = Math.floor(baseDamage * riichiFieldBoost);
             damage = applyDefense(baseDamage);
-            defender.state.hp = Math.max(0, defender.state.hp - damage);
+            // 【反射チェック】ダメージが0より大きい場合のみ反射処理
+            if (damage > 0) {
+                // ミラーコート：ダメージを0にして1.5倍で跳ね返す
+                if (defender.state.isReflecting) {
+                    const reflectDamage = Math.floor(damage * 1.5);
+                    attacker.state.hp = Math.max(0, attacker.state.hp - reflectDamage);
+                    defender.state.isReflecting = false; // 反射状態解除
+                    logs.push(`🛡️✨ ${defender.username}のミラーコート！`);
+                    logs.push(`🔮 REFLECT!! ダメージを跳ね返した！`);
+                    logs.push(`💥 ${attacker.username}に${reflectDamage}の反射ダメージ！`);
+                    resultSkillEffect = 'reflect-success';
+                    damage = 0; // 自分はダメージを受けない
+                    // defenderのHPは変更しない
+                }
+                // カウンター：ダメージを50%軽減し、軽減前の2倍で返す
+                else if (defender.state.isCounter) {
+                    const originalDamage = damage;
+                    const reducedDamage = Math.floor(damage * 0.5);
+                    const counterDamage = Math.floor(originalDamage * 2);
+                    defender.state.hp = Math.max(0, defender.state.hp - reducedDamage);
+                    attacker.state.hp = Math.max(0, attacker.state.hp - counterDamage);
+                    defender.state.isCounter = false; // カウンター状態解除
+                    logs.push(`⚔️🛡️ ${defender.username}のカウンター！`);
+                    logs.push(`🔄 COUNTER!! 攻撃を見切った！`);
+                    logs.push(`💢 ${defender.username}は${reducedDamage}ダメージを受けた`);
+                    logs.push(`⚡ ${attacker.username}に${counterDamage}の反撃ダメージ！`);
+                    resultSkillEffect = 'counter-success';
+                    damage = reducedDamage; // 軽減後のダメージを記録
+                }
+                else {
+                    // 通常のダメージ処理
+                    defender.state.hp = Math.max(0, defender.state.hp - damage);
+                }
+            }
+            else {
+                // ダメージが0の技には反射しない（反射状態も消費しない）
+                defender.state.hp = Math.max(0, defender.state.hp - damage);
+            }
             // ネタ技の特別ログ
             if (skill.id === 115) {
                 logs.push(`🥚 ${attacker.username}の${skill.name}！`);
@@ -484,6 +534,27 @@ function applySkillEffect(skill, attacker, defender, riichiFieldBoost = 1.0) {
                 logs.push(`🏆 一撃必殺！${attacker.username}の勝利！`);
                 defender.state.hp = 0; // 強制的にHP0で勝利確定
                 resultSkillEffect = 'tenpai-ultimate'; // 天和特別演出
+            }
+            // 【反射】ミラーコート：次のターンに受けるダメージを1.5倍で跳ね返す
+            else if (skill.effect === 'mirror_coat') {
+                attacker.state.isReflecting = true;
+                logs.push(`🛡️✨ ${attacker.username}の${skill.name}！`);
+                logs.push(`🔮 次のダメージを跳ね返す構えを取った！`);
+                resultSkillEffect = 'reflect-ready';
+            }
+            // 【反射】カウンター：次のダメージを50%軽減し、軽減前の2倍で返す
+            else if (skill.effect === 'counter') {
+                attacker.state.isCounter = true;
+                logs.push(`⚔️🛡️ ${attacker.username}の${skill.name}！`);
+                logs.push(`🔄 次の攻撃を見切って反撃する構え！`);
+                resultSkillEffect = 'counter-ready';
+            }
+            // 【道連れ】次のターンに倒された時、相手も道連れにする
+            else if (skill.effect === 'destiny_bond') {
+                attacker.state.isDestinyBond = true;
+                logs.push(`💀🔗 ${attacker.username}の${skill.name}！`);
+                logs.push(`⚠️ 自分が倒された時、相手も道連れにする呪いをかけた！`);
+                resultSkillEffect = 'destiny-bond-ready';
             }
             // 立直攻撃（ロン/ツモ）の処理
             else if (skill.effect === 'riichi_attack') {
@@ -1035,6 +1106,34 @@ io.on('connection', (socket) => {
         // Check for game over (only while battle is active and after HP updates)
         // 2秒間のディレイを設けて、クライアント側の演出が完了するのを待つ
         if (!currentGame.isGameOver && defender.state.hp <= 0) {
+            // 【道連れチェック】defenderが道連れ状態で倒された場合
+            if (defender.state.isDestinyBond) {
+                attacker.state.hp = 0; // 相手も強制的に0に
+                currentGame.isGameOver = true;
+                currentGame.winner = null; // 引き分け
+                defender.state.isDestinyBond = false; // 状態解除
+                console.log(`💀 Destiny Bond activated! Both players defeated!`);
+                io.to(currentRoomId).emit('battle_update', {
+                    turn: currentGame.currentTurn,
+                    skillName: '道連れ',
+                    skillPower: 0,
+                    message: `💀🔗 ${defender.username}の道連れ発動！\n\n⚠️ 両者とも倒れた...！`,
+                    skillEffect: 'destiny-bond-activated',
+                    gameState: currentGame,
+                });
+                if (currentRoomId) {
+                    const roomIdForTimeout = currentRoomId; // TSナローイング保持用
+                    setTimeout(() => {
+                        io.to(roomIdForTimeout).emit('game_over', {
+                            winner: null,
+                            gameState: currentGame,
+                            isDraw: true,
+                        });
+                        activeGames.delete(roomIdForTimeout);
+                    }, 3000);
+                }
+                return;
+            }
             currentGame.isGameOver = true;
             currentGame.winner = attacker.username;
             console.log(`🏆 Game Over! ${attacker.username} wins! (waiting 2s for client演出)`);

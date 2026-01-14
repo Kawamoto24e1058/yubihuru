@@ -105,9 +105,9 @@ export interface PlayerState {
   isBuffed?: boolean; // 攻撃力上昇フラグ
   buffTurns?: number; // バフ残りターン
   // 反射・カウンター系
-  isReflecting?: boolean; // ミラーコート待機中
-  isCounter?: boolean; // カウンター待機中
-  isDestinyBond?: boolean; // 道連れ待機中
+  isReflecting: boolean; // ミラーコート待機中
+  isCounter: boolean; // カウンター待機中
+  isDestinyBond: boolean; // 道連れ待機中
 }
 
 /**

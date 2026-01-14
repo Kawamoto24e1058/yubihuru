@@ -88,6 +88,10 @@ function createPlayerState(): PlayerState {
     riichiBombCount: 0,
     isBroken: false,
     brokenTurns: 0,
+    // 反射・カウンター系の初期化
+    isReflecting: false,
+    isCounter: false,
+    isDestinyBond: false,
   };
 }
 
@@ -1281,13 +1285,14 @@ io.on('connection', (socket) => {
         });
         
         if (currentRoomId) {
+          const roomIdForTimeout = currentRoomId; // TSナローイング保持用
           setTimeout(() => {
-            io.to(currentRoomId).emit('game_over', {
+            io.to(roomIdForTimeout).emit('game_over', {
               winner: null,
               gameState: currentGame,
               isDraw: true,
             });
-            activeGames.delete(currentRoomId);
+            activeGames.delete(roomIdForTimeout);
           }, 3000);
         }
         

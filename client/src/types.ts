@@ -88,6 +88,10 @@ export interface PlayerState {
   activeEffect?: 'ink' | 'shake' | 'none'; // メタ要素：インクこぼし、ウィンドウシェイク
   activeEffectTurns?: number; // アクティブ効果の残りターン数
   riichiBombCount?: number; // 数え役満カウント用
+  // 反射・カウンター系
+  isReflecting: boolean; // ミラーコート待機中
+  isCounter: boolean; // カウンター待機中
+  isDestinyBond: boolean; // 道連れ待機中
 }
 
 /**
