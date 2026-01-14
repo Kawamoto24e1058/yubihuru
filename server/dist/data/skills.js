@@ -169,6 +169,7 @@ export const SKILLS = [
     { id: 128, name: '清一色（チンイツ）', type: 'attack', power: 80, description: '一色のみで構成された役満級の大技', effect: 'none' },
     { id: 129, name: '国士無双', type: 'special', power: 250, description: '13種の幺九牌を揃えた役満', effect: 'yakuman' },
     { id: 130, name: '九蓮宝燈', type: 'special', power: 999, description: '幻の役満！一撃必殺', effect: 'chuuren' },
+    { id: 131, name: '天和（テンホウ）', type: 'special', power: 999, description: '究極のレア技！配牌で役満を作る奇跡', effect: 'tenpai', isTenpai: true },
     // ============================================
     // 博打のゾーン限定技（通常リストには含めない）
     // ============================================

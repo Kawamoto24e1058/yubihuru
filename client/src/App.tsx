@@ -68,6 +68,9 @@ function App() {
 
   // 麻雀役システム用
   const [yakumanFreeze, setYakumanFreeze] = useState(false) // 役満フリーズ演出
+  const [tenpaiUltimate, setTenpaiUltimate] = useState(false) // 天和の究極演出
+  const [whiteoutFlash, setWhiteoutFlash] = useState(false) // ホワイトアウト
+  const [mahjongTiles, setMahjongTiles] = useState<Array<{id: number, left: number}>>([]) // 麻雀牌フロー
 
   // ラストアタック・インパクト用
   const [lastAttackGrayscale, setLastAttackGrayscale] = useState(false) // グレースケール
@@ -279,6 +282,35 @@ function App() {
         setTimeout(() => {
           setYakumanFreeze(false)
         }, freezeDuration)
+      }
+      
+      // 天和の究極演出
+      if (data.skillEffect === 'tenpai-ultimate') {
+        setWhiteoutFlash(true)
+        // ホワイトアウト：3秒間
+        setTimeout(() => setWhiteoutFlash(false), 3000)
+        
+        // 0.5秒後に天和テキスト表示開始
+        setTimeout(() => {
+          setTenpaiUltimate(true)
+          // 麻雀牌アニメーション生成
+          const tiles = Array.from({ length: 13 }, (_, i) => ({
+            id: i,
+            left: Math.random() * 100
+          }))
+          setMahjongTiles(tiles)
+        }, 500)
+        
+        // 7秒後に粉砕エフェクト
+        setTimeout(() => {
+          setGlassBreak(true)
+        }, 7000)
+        
+        setTimeout(() => {
+          setGlassBreak(false)
+          setTenpaiUltimate(false)
+          setMahjongTiles([])
+        }, 8000)
       }
       
       // 特殊勝利を検知（出禁 or 数え役満）
@@ -895,6 +927,59 @@ function App() {
               役満
             </p>
           </div>
+        )}
+        
+        {/* ホワイトアウトフラッシュ（天和用） */}
+        {whiteoutFlash && (
+          <div className="pointer-events-none fixed inset-0 z-[85] bg-white animate-pulse" style={{animation: 'whiteout 0.5s ease-out'}} />
+        )}
+        
+        {/* 天和の究極演出 */}
+        {tenpaiUltimate && (
+          <>
+            {/* 黄金の「天和」テキスト */}
+            <div className="pointer-events-none absolute inset-0 z-[82] flex items-center justify-center">
+              <p 
+                className="text-[400px] font-black select-none"
+                style={{
+                  WebkitTextStroke: '4px black',
+                  fontWeight: 900,
+                  color: '#FFD700',
+                  textShadow: '0 0 60px rgba(255, 215, 0, 0.8), 0 0 120px rgba(255, 215, 0, 0.4)',
+                  animation: 'tenpai-appear 1s ease-out'
+                }}
+              >
+                天和
+              </p>
+            </div>
+            
+            {/* 麻雀牌の流れアニメーション */}
+            {mahjongTiles.map((tile) => (
+              <div
+                key={tile.id}
+                className="pointer-events-none fixed z-[81]"
+                style={{
+                  left: `${tile.left}%`,
+                  top: '-80px',
+                  width: '60px',
+                  height: '80px',
+                  animation: `mahjong-fall 7s linear forwards`,
+                  animationDelay: `${tile.id * 0.1}s`,
+                  backgroundColor: '#fff',
+                  border: '2px solid #333',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '20px',
+                  fontWeight: 'bold',
+                  color: '#e74c3c',
+                  borderRadius: '4px'
+                }}
+              >
+                🀄
+              </div>
+            ))}
+          </>
         )}
         
         {/* 相手のインクこぼし演出 */}

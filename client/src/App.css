@@ -5,3 +5,45 @@
   width: 100%;
   height: 100%;
 }
+/* 天和演出アニメーション */
+@keyframes whiteout {
+  0% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes tenpai-appear {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) rotateZ(-30deg);
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotateZ(0deg);
+  }
+}
+
+@keyframes mahjong-fall {
+  0% {
+    top: -80px;
+    opacity: 1;
+    transform: rotateZ(0deg);
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    top: 100vh;
+    opacity: 0;
+    transform: rotateZ(360deg);
+  }
+}

@@ -31,7 +31,7 @@ export interface Skill {
   type: 'attack' | 'heal' | 'buff' | 'special';
   power: number; // ダメージ量、回復量、またはバフの場合は0
   description: string;
-  effect?: 'none' | 'recoil' | 'lifesteal' | 'mp_regen_boost' | 'poison' | 'multi_hit' | 'self_damage' | 'drain' | 'charge' | 'protect' | 'hit_rate' | 'max_hp_boost' | 'max_hp_boost_with_heal' | 'max_hp_boost_with_damage' | 'riichi' | 'riichi_attack' | 'comeback' | 'instant_win' | 'ink_effect' | 'shake_effect' | 'hp_swap' | 'mp_steal_2' | 'broken_finger' | 'food_terror' | 'yakuman' | 'chuuren';
+  effect?: 'none' | 'recoil' | 'lifesteal' | 'mp_regen_boost' | 'poison' | 'multi_hit' | 'self_damage' | 'drain' | 'charge' | 'protect' | 'hit_rate' | 'max_hp_boost' | 'max_hp_boost_with_heal' | 'max_hp_boost_with_damage' | 'riichi' | 'riichi_attack' | 'comeback' | 'instant_win' | 'ink_effect' | 'shake_effect' | 'hp_swap' | 'mp_steal_2' | 'broken_finger' | 'food_terror' | 'yakuman' | 'chuuren' | 'tenpai';
   recoilRatio?: number; // 自傷割合（例: 0.25なら25%）
   lifestealRatio?: number; // 与ダメージに対する回復割合
   mpRegenBonus?: number; // 追加MP回復量
@@ -46,6 +46,7 @@ export interface Skill {
   chargeBonus?: number; // チャージ倍率
   protectRatio?: number; // カット率
   maxHpBoost?: number; // 最大HP増加量
+  isTenpai?: boolean; // 天和フラグ
 }
 
 /**

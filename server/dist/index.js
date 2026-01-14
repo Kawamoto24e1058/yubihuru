@@ -48,7 +48,16 @@ function createPlayerState() {
     };
 }
 // Helper: weighted random pick according to zone rules
-function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 500) {
+function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 500, currentTurn = 1) {
+    // 【天和】究極のレア技：1ターン目のみ、0.01%の確率で出現
+    if (currentTurn === 1) {
+        const tenpaiLuck = Math.random();
+        if (tenpaiLuck < 0.0001) { // 0.01%（1/10000）
+            const tenpai = SKILLS.find(skill => skill.id === 131);
+            console.log('🌟✨ 天和（テンホウ）が発動！究極のレア技！！！');
+            return tenpai;
+        }
+    }
     // 博打のゾーン判定を最初に実行
     if (activeZone.type === '博打のゾーン') {
         const random = Math.random();
@@ -419,6 +428,15 @@ function applySkillEffect(skill, attacker, defender) {
                 logs.push(`🀄💥 ${attacker.username}の${skill.name}！！！！`);
                 logs.push(`⚡ 役満炸裂！ ${defender.username}に${damage}ダメージ！！`);
                 resultSkillEffect = 'yakuman-freeze';
+            }
+            // 【天和】究極のレア技：配牌で役満を作る奇跡
+            else if (skill.effect === 'tenpai') {
+                logs.push(`🌟✨✨✨ ${attacker.username}の${skill.name}！！！！！`);
+                logs.push(`🌟 配牌で既に上がりが成立！`);
+                logs.push(`🌟 天地が味方した瞬間...`);
+                logs.push(`🏆 一撃必殺！${attacker.username}の勝利！`);
+                defender.state.hp = 0; // 強制的にHP0で勝利確定
+                resultSkillEffect = 'tenpai-ultimate'; // 天和特別演出
             }
             // 立直攻撃（ロン/ツモ）の処理
             else if (skill.effect === 'riichi_attack') {
@@ -812,7 +830,7 @@ io.on('connection', (socket) => {
             return;
         }
         // Get random skill from SKILLS array with zone effects and riichi state
-        const selectedSkill = getRandomSkill(attacker.state.activeZone, attacker.state.isRiichi, attacker.state.hp, attacker.state.maxHp);
+        const selectedSkill = getRandomSkill(attacker.state.activeZone, attacker.state.isRiichi, attacker.state.hp, attacker.state.maxHp, currentGame.currentTurn);
         console.log(`🎲 Random skill selected: ${selectedSkill.name} (${selectedSkill.type})`);
         console.log(`   Current zone: ${attacker.state.activeZone.type} (${attacker.state.activeZone.remainingTurns} turns remaining)`);
         if (attacker.state.isRiichi) {
