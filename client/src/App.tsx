@@ -639,6 +639,9 @@ function App() {
       
       // turnIndex を更新
       setTurnIndex(gameState.turnIndex)
+
+      // ターン進行時に演出を強制クリア（残留防止）
+      setSkillEffect(null)
       
       // shakeTurns を更新（画面揺れ管理用）
       setShakeTurns(gameState.shakeTurns ?? 0)
