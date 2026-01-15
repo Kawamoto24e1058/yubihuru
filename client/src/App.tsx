@@ -329,6 +329,10 @@ function App() {
       setSlowMotion(false)
       setBuffedDamage(null)
       
+      // 演出フラグをリセット（ボタンが押せるようにする）
+      setIsProcessing(false)
+      setIsMyTurn(false)
+      
       // プレイヤーデータを設定（重要：これがないとホーム画面に戻る）
       const mySocketId = newSocket.id || ''
       const me = data.player1.socketId === mySocketId ? data.player1 : data.player2
@@ -336,6 +340,15 @@ function App() {
       
       setMyData(me)
       setOpponentData(opponent)
+      
+      // myIndex を確定設定（重要）
+      // 自分が players[0] なら myIndex=0、players[1] なら myIndex=1
+      const myIndexValue = data.player1.socketId === mySocketId ? 0 : 1
+      setMyIndex(myIndexValue)
+      console.log(`myIndex set to ${myIndexValue}`)
+      
+      // turnIndex を初期化（ゲーム開始時は常に 0 = player1）
+      setTurnIndex(0)
       
       setLogs([`⚔️ バトル開始！ vs ${opponent.username}`])
     })
