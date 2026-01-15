@@ -1833,97 +1833,59 @@ function App() {
     )
   }
 
-  // 初期画面（名前入力）
+  const stats = { wins: totalWins, streak: currentStreak }
+
+  // 初期画面（スタート画面全面リニューアル）
   return (
-    <div className={`min-h-screen ${myRiichiState || opponentRiichiState ? 'bg-slate-800' : 'bg-yellow-50'} ${showRiichiLightning ? 'animate-pulse' : ''} flex items-center justify-center p-4 relative`}>
-      {/* 立直時の稲妻エフェクト */}
-      {(myRiichiState || opponentRiichiState) && (
-        <>
-          <style>{`
-            @keyframes lightning {
-              0%, 100% { opacity: 0; }
-              50% { opacity: 1; }
-            }
-            .lightning-flash {
-              position: fixed;
-              top: 0;
-              left: 0;
-              right: 0;
-              bottom: 0;
-              background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.8) 50%, transparent 100%);
-              animation: lightning 0.1s infinite;
-              pointer-events: none;
-              z-index: 10;
-            }
-          `}</style>
-          <div className="lightning-flash"></div>
-        </>
-      )}
-      <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-8 max-w-md w-full relative z-20">
-        <h1 className="text-6xl font-black text-center mb-8 -rotate-3">
-          YUBIFURU
-        </h1>
-        
-        <div className="space-y-6">
-          {isCheckingReconnect ? (
-            <div className="text-center py-8">
-              <p className="font-black text-xl animate-pulse">接続確認中...</p>
+    <div className="start-screen">
+      <img src="/images/title-bg.png" alt="background" className="title-bg" />
+      <img src="/images/title-logo.png" alt="YUBIFURU" className="title-logo" />
+
+      <div className="retro-window title-window">
+        {isCheckingReconnect ? (
+          <div className="stats-display">CONNECTING...</div>
+        ) : (
+          <>
+            {canReconnect && (
+              <div className="press-start-btn" onClick={handleReconnect} role="button" tabIndex={0}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleReconnect() }}>
+                ▶ RESUME BATTLE
+              </div>
+            )}
+
+            <div className="input-group">
+              <label htmlFor="playerName">PLAYER NAME:</label>
+              <input
+                id="playerName"
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleJoin()}
+                placeholder="[ KK ]"
+                maxLength={10}
+              />
             </div>
-          ) : (
-            <>
-              {canReconnect && (
-                <div className="bg-yellow-100 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-4 mb-4">
-                  <p className="font-black text-sm mb-3 text-center">前回のバトルが残っています</p>
-                  <button
-                    onClick={handleReconnect}
-                    className="w-full py-4 bg-green-500 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-green-400 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black text-xl"
-                  >
-                    🔄 前回のバトルに復帰する
-                  </button>
-                </div>
-              )}
 
-              <div>
-                <label className="block font-black text-sm mb-2">PLAYER NAME</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleJoin()}
-                  placeholder="Enter your name..."
-                  className="w-full px-4 py-3 border-4 border-black font-bold focus:outline-none focus:ring-4 focus:ring-yellow-300"
-                  maxLength={20}
-                />
-              </div>
+            <div className="stats-display">
+              WIN: {stats.wins} / STREAK: {stats.streak} 🗡️
+            </div>
 
-              {/* 戦績表示 */}
-              <div 
-                className="bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-4 text-center"
-                style={{
-                  WebkitTextStroke: '1px black'
-                }}
-              >
-                <p 
-                  className="font-black text-lg"
-                  style={{
-                    color: currentStreak >= 3 ? '#ff3333' : '#000000',
-                    textShadow: currentStreak >= 3 ? '0 0 20px rgba(255, 51, 51, 0.6)' : 'none',
-                    animation: currentStreak >= 3 ? 'fire-glow 1.5s ease-in-out infinite' : 'none'
-                  }}
-                >
-                  {currentStreak >= 3 ? '🔥' : ''} 通算：{totalWins}勝 / {currentStreak}連勝中 {currentStreak >= 3 ? '🔥' : ''}
-                </p>
-              </div>
+            <div className="press-start-btn" onClick={handleJoin} role="button" tabIndex={0}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleJoin() }}>
+              ▶ PRESS START
+            </div>
+          </>
+        )}
+      </div>
 
-              <button
-                onClick={handleJoin}
-                className="w-full py-4 bg-blue-500 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-400 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black text-xl"
-              >
-                ⚔️ 新しいバトルを始める
-              </button>
-            </>
-          )}
-        </div>
+      <img src="/images/deco-mahjong-1.png" alt="" className="deco float-1" style={{ top: '40%', left: '10%' }} />
+      <img src="/images/deco-sword-1.png" alt="" className="deco float-2" style={{ top: '60%', left: '15%' }} />
+      <img src="/images/deco-sword-2.png" alt="" className="deco float-3" style={{ top: '40%', right: '10%' }} />
+      <img src="/images/deco-mahjong-2.png" alt="" className="deco float-4" style={{ top: '60%', right: '15%' }} />
+
+      <div className="title-footer">
+        <span>© 2024 DOT-WORKS</span>
+        <span>CREDIT 00</span>
       </div>
     </div>
   )

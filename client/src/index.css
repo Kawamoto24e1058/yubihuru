@@ -436,3 +436,105 @@ select:focus {
   background-size: 100% 4px;
   pointer-events: none;
 }
+
+/* ============================================
+   START SCREEN LAYOUT (image_10.png reference)
+   ============================================ */
+
+.start-screen {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.title-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: -1;
+}
+
+.title-logo {
+  width: 80%;
+  max-width: 600px;
+  margin-bottom: 2rem;
+  image-rendering: pixelated;
+}
+
+.title-window {
+  width: 90%;
+  max-width: 500px;
+  text-align: center;
+}
+
+.input-group {
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.input-group label {
+  font-size: 1.2rem;
+}
+
+.input-group input {
+  font-family: inherit;
+  font-size: 1.2rem;
+  padding: 0.5rem;
+  text-align: center;
+  width: 150px;
+}
+
+.stats-display {
+  font-size: 1rem;
+  margin-bottom: 2rem;
+}
+
+.press-start-btn {
+  font-size: 1.5rem;
+  cursor: pointer;
+  animation: blink 1s steps(2, start) infinite;
+}
+
+@keyframes blink {
+  to { visibility: hidden; }
+}
+
+.deco {
+  position: absolute;
+  width: 64px;
+  height: auto;
+  image-rendering: pixelated;
+  z-index: -1;
+}
+
+.float-1 { animation: float 3s ease-in-out infinite; }
+.float-2 { animation: float 3s ease-in-out infinite 0.5s; }
+.float-3 { animation: float 3s ease-in-out infinite 1s; }
+.float-4 { animation: float 3s ease-in-out infinite 1.5s; }
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20px); }
+}
+
+.title-footer {
+  position: absolute;
+  bottom: 1rem;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 2rem;
+  font-size: 0.8rem;
+  box-sizing: border-box;
+}
