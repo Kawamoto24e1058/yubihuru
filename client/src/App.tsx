@@ -232,19 +232,19 @@ function App() {
     newSocket.on('connect', () => {
       console.log('Connected to server')
       
-      // 🔴 重複防止ガード：既に connect イベントを実行済みなら skip
-      if (hasConnectedRef.current) {
-        console.warn('⚠️ connect event already handled, skipping...')
-        return
-      }
-      hasConnectedRef.current = true
-      
-      // 初回接続時は再接続可否のチェックのみ（自動復帰はしない）
-      const savedId = localStorage.getItem('yubihuru_player_id')
-      if (savedId && !gameStarted) {
-        newSocket.emit('check_reconnect', { playerId: savedId })
+      // 🔴 初回接続時のみ初期化を実行（再接続時はスキップ）
+      if (!hasConnectedRef.current) {
+        hasConnectedRef.current = true
+        
+        // 初回接続時は再接続可否のチェックのみ（自動復帰はしない）
+        const savedId = localStorage.getItem('yubihuru_player_id')
+        if (savedId && !gameStarted) {
+          newSocket.emit('check_reconnect', { playerId: savedId })
+        } else {
+          setIsCheckingReconnect(false)
+        }
       } else {
-        setIsCheckingReconnect(false)
+        console.log('✅ Reconnected - gameState sync will continue normally')
       }
     })
 
@@ -471,6 +471,33 @@ function App() {
       setOpponentData(opponent)
       setCurrentTurnId(data.gameState.currentTurnPlayerId)
       setLogs(prev => [`🔄 バトル画面に同期しました`, ...prev].slice(0, 10))
+    })
+
+    // 【新追加】技発動後のgameState更新 - アニメーションをトリガー
+    newSocket.on('game_state_update', (data: any) => {
+      console.log(`\n🎯 ===== gameState更新受信 =====`);
+      console.log(`   技: ${data.skillName}`);
+      console.log(`   ダメージ: ${data.damage}`);
+      
+      if (data.gameState) {
+        const mySocketId = newSocket.id || ''
+        const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
+        const opponent = data.gameState.player1.socketId === mySocketId ? data.gameState.player2 : data.gameState.player1
+        
+        // gameStateを更新
+        setMyData(me)
+        setOpponentData(opponent)
+        setCurrentTurnId(data.gameState.currentTurnPlayerId)
+        
+        // ターン判定
+        const isMyTurn = data.gameState.currentTurnPlayerId === myPersistentId
+        setIsYourTurn(isMyTurn)
+        
+        // 演出フラグをリセット（次のターン準備）
+        setIsProcessing(false)
+        
+        console.log(`✅ gameState更新完了: ${data.skillName}のアニメーション終了後、次のターンへ`);
+      }
     })
 
     newSocket.on('battle_update', (data: any) => {
@@ -985,14 +1012,22 @@ function App() {
   const handleUseSkill = () => {
     // 🔴 playerIdベースのターン判定に変更
     if (socket && gameStarted && currentTurnId === myPersistentId && !isProcessing) {
-      console.log(`✅ 技発動: playerId=${myPersistentId}, currentTurn=${currentTurnId}`);
+      console.log(`\n✅ ===== 技発動ボタン押下 =====`);
+      console.log(`   myPersistentId: ${myPersistentId}`);
+      console.log(`   currentTurnId: ${currentTurnId}`);
+      console.log(`   isProcessing: ${isProcessing}`);
+      console.log(`   Emitting action_use_skill...`);
+      
       socket.emit('action_use_skill', { playerId: myPersistentId })
       setIsProcessing(true)
+      
+      console.log(`✅ action_use_skill emitted`);
     } else {
-      if (!socket) console.warn('⚠️ Socket not connected');
-      if (!gameStarted) console.warn('⚠️ Game not started');
-      if (currentTurnId !== myPersistentId) console.warn(`⚠️ Not your turn: ${currentTurnId} !== ${myPersistentId}`);
-      if (isProcessing) console.warn('⚠️ Already processing action');
+      console.warn(`\n⚠️ ===== 技発動ボタン押下失敗 =====`);
+      if (!socket) console.warn('❌ Socket not connected');
+      if (!gameStarted) console.warn('❌ Game not started');
+      if (currentTurnId !== myPersistentId) console.warn(`❌ Not your turn: currentTurnId=${currentTurnId}, myPersistentId=${myPersistentId}`);
+      if (isProcessing) console.warn('❌ Already processing action');
     }
   }
 

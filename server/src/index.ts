@@ -1103,7 +1103,9 @@ io.on('connection', (socket) => {
   // Handle action_use_skill event
   socket.on('action_use_skill', (data: any = {}) => {
     const senderPlayerId = data.playerId || '';
-    console.log(`⚔️ 技発動リクエスト: SenderId=${senderPlayerId}, SocketId=${socket.id}`);
+    console.log(`\n⚔️ ===== 技発動リクエスト受信 =====`);
+    console.log(`   SenderId: ${senderPlayerId}`);
+    console.log(`   SocketId: ${socket.id}`);
 
     // Find the game this player is in
     let currentGame: GameState | undefined;
@@ -1129,12 +1131,18 @@ io.on('connection', (socket) => {
     }
 
     // ターンチェック：自分のターンかどうか（playerIdベース）
-    console.log(`📍 ターン判定: currentTurnPlayerId=${currentGame.currentTurnPlayerId}, senderPlayerId=${senderPlayerId}`);
+    console.log(`📍 ターン判定:`);
+    console.log(`   currentTurnPlayerId: ${currentGame.currentTurnPlayerId}`);
+    console.log(`   senderPlayerId: ${senderPlayerId}`);
+    console.log(`   Match: ${currentGame.currentTurnPlayerId === senderPlayerId ? '✅ YES' : '❌ NO'}`);
+    
     if (currentGame.currentTurnPlayerId !== senderPlayerId) {
       console.log(`❌ ${senderPlayerId}は相手のターン中に技を使用しようとしました。現在のターン: ${currentGame.currentTurnPlayerId}`);
       socket.emit('error', { message: 'Not your turn!' });
       return;
     }
+
+    console.log(`✅ ターンチェックOK - 技発動処理開始`);
 
     // Determine attacker and defender
     const isPlayer1 = currentGame.player1.socketId === socket.id;
@@ -1512,6 +1520,18 @@ io.on('connection', (socket) => {
       currentTurnPlayerId: currentGame.currentTurnPlayerId,
       currentTurnPlayerName: nextPlayer.username,
       gameState: currentGame, // 完全なgameStateを送信
+    });
+
+    // 🔴 【重要】gameState更新後、即座に全員へ新しいゲーム状態を送信
+    console.log(`📤 gameState更新を全員へemit:`);
+    console.log(`   技: ${selectedSkill.name}`);
+    console.log(`   ダメージ: ${result.damage}`);
+    console.log(`   次のターン: ${nextPlayer.username}`);
+    
+    io.to(currentRoomId).emit('game_state_update', {
+      gameState: currentGame,
+      skillName: selectedSkill.name,
+      damage: result.damage,
     });
 
     // ウォッチドッグを再開（新しいターンの5秒ウォッチドッグ）
