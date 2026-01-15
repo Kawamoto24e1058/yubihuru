@@ -652,6 +652,8 @@ function App() {
 
       // ターン進行時に演出を強制クリア（残留防止）
       setSkillEffect(null)
+      setFoodImage(null)  // 飯テロ画像も同時にリセット
+      setYakumanFreeze(false)  // 役満フリーズもリセット
       
       // shakeTurns を更新（画面揺れ管理用）
       setShakeTurns(gameState.shakeTurns ?? 0)
@@ -1245,7 +1247,21 @@ function App() {
         
         {/* 役満フリーズ演出 */}
         {yakumanFreeze && (
-          <div className="pointer-events-none absolute inset-0 z-[80] flex items-center justify-center bg-black/60">
+          <div 
+            className="pointer-events-auto absolute inset-0 z-[80] flex items-center justify-center bg-black/60 cursor-pointer transition-opacity"
+            onClick={() => {
+              setYakumanFreeze(false)
+              setSkillEffect(null)
+            }}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                setYakumanFreeze(false)
+                setSkillEffect(null)
+              }
+            }}
+          >
             <p 
               className="text-[300px] font-black select-none animate-yakuman-pulse"
               style={{
@@ -1262,7 +1278,15 @@ function App() {
         {/* 【飯テロ】画像表示オーバーレイ */}
         {foodImage && (
           <div 
-            className="pointer-events-none fixed inset-0 z-[90] flex items-center justify-center bg-black/80 animate-fade-in"
+            className="pointer-events-auto fixed inset-0 z-[90] flex items-center justify-center bg-black/80 animate-fade-in cursor-pointer"
+            onClick={() => setFoodImage(null)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                setFoodImage(null)
+              }
+            }}
             style={{
               animation: 'fadeIn 0.3s ease-in'
             }}
