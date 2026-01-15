@@ -1314,11 +1314,8 @@ io.on('connection', (socket) => {
     console.log(`✨ ${player.username} activated ${payload.zoneType} for ${duration} turns`);
     console.log(`   MP: ${player.state.mp + ZONE_MP_COST} -> ${player.state.mp}`);
 
-    // ターンを交代
-    const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId 
-      ? currentGame.player2 
-      : currentGame.player1;
-    currentGame.currentTurnPlayerId = nextPlayer.socketId;
+    // ★重要1: ゾーン発動直後の状態をクライアントに通知（演出が動く）
+    io.to(currentRoomId).emit('game_state_update', currentGame);
 
     // Send zone_activated event to both players
     io.to(currentRoomId).emit('zone_activated', {
@@ -1330,6 +1327,13 @@ io.on('connection', (socket) => {
       playerState: player.state,
     });
 
+    // ★重要2: ターン交代処理
+    const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId 
+      ? currentGame.player2 
+      : currentGame.player1;
+    currentGame.currentTurnPlayerId = nextPlayer.socketId;
+    currentGame.turnIndex = currentGame.turnIndex === 0 ? 1 : 0;
+
     // ターン変更を通知
     io.to(currentRoomId).emit('turn_change', {
       currentTurnPlayerId: currentGame.currentTurnPlayerId,
@@ -1337,6 +1341,9 @@ io.on('connection', (socket) => {
     });
 
     console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.socketId})`);
+
+    // ゲーム状態の最終同期
+    io.to(currentRoomId).emit('game_state_update', currentGame);
 
     // 立直中なら自動ツモ切りをスケジュール
     scheduleAutoTsumoIfRiichi(currentRoomId);
