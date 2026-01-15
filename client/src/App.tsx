@@ -573,6 +573,7 @@ function App() {
         
         // セーフティ：9秒後に強制リセット
         setTimeout(() => {
+          console.log('✅ 天和演出完全終了 - resetAllEffects実行')
           resetAllEffects()
         }, 9000)
       }
@@ -610,15 +611,27 @@ function App() {
       } else if (data.skillEffect === 'reflect-success') {
         setShowReflectReady(false)
         setShowReflectSuccess(true)
-        setTimeout(() => setShowReflectSuccess(false), 2000)
+        setTimeout(() => {
+          setShowReflectSuccess(false)
+          console.log('✅ ミラーコート演出終了 - isProcessing=false')
+          setIsProcessing(false)
+        }, 2000)
       } else if (data.skillEffect === 'counter-success') {
         setShowCounterReady(false)
         setShowCounterSuccess(true)
-        setTimeout(() => setShowCounterSuccess(false), 2000)
+        setTimeout(() => {
+          setShowCounterSuccess(false)
+          console.log('✅ カウンター演出終了 - isProcessing=false')
+          setIsProcessing(false)
+        }, 2000)
       } else if (data.skillEffect === 'destiny-bond-activated') {
         setShowDestinyBondReady(false)
         setShowDestinyBondActivated(true)
-        setTimeout(() => setShowDestinyBondActivated(false), 3000)
+        setTimeout(() => {
+          setShowDestinyBondActivated(false)
+          console.log('✅ 道連れ演出終了 - isProcessing=false')
+          setIsProcessing(false)
+        }, 3000)
       }
       
       // 技名を即座に表示
@@ -828,8 +841,18 @@ function App() {
       
       // Turn management: wait 2 seconds before enabling next action
       setTimeout(() => {
+        console.log('⏰ 2秒タイマー - isProcessing=false')
         setIsProcessing(false)
       }, 2000)
+      
+      // 🔴 【保険】5秒後のセーフティタイマー：万が一演出がハング時に強制リセット
+      setTimeout(() => {
+        if (isProcessing === true) {
+          console.warn('⚠️ 【セーフティ】5秒経過 - isProcessing=falseに強制リセット');
+          setIsProcessing(false)
+          setLogs(prev => [`⚠️ システムエラー検出・回復しました`, ...prev].slice(0, 10))
+        }
+      }, 5000)
     })
 
     // 強制ターン開始：サーバーから強制的にターンを割り当てる（2秒タイムアウト対策）
@@ -972,6 +995,9 @@ function App() {
     setShowReflectSuccess(false)
     setShowCounterSuccess(false)
     setShowDestinyBondActivated(false)
+    // 🔴 【重要】アクション完了フラグを必ずリセット
+    setIsProcessing(false)
+    console.log('✅ All effects reset + isProcessing=false')
   }
 
   const handleJoin = () => {
