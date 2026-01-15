@@ -163,7 +163,7 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
     return availableSkills[randomIndex];
 }
 // Helper function to apply skill effect
-function applySkillEffect(skill, attacker, defender) {
+function applySkillEffect(skill, attacker, defender, isAttackerRiichi = false, isOpponentRiichi = false) {
     let isPoisonApplied = false;
     let isMultiHit = false;
     let isProtected = false;
@@ -476,6 +476,31 @@ function applySkillEffect(skill, attacker, defender) {
             break;
         }
     }
+    // 【立直システム】
+    // 1. 立直中の役の最低保証：普通の技（威力40以下）を引いた場合、50%の確率で「断幺九（威力40）」へ昇格させる
+    if (isAttackerRiichi && skill.type === 'attack' && skill.power <= 40 && Math.random() < 0.5) {
+        const baseUpgradeDamage = calculateDamage(40); // 断幺九の威力40をダメージに
+        const upgradeDamageIncrease = baseUpgradeDamage - damage;
+        damage = baseUpgradeDamage;
+        defender.state.hp = Math.max(0, defender.state.hp - upgradeDamageIncrease);
+        logs.push(`🀄 立直による役の最低保証！ 断幺九へ昇格！ さらに${upgradeDamageIncrease}ダメージ！`);
+    }
+    // 2. 立直中の裏ドラ判定：技のダメージ計算後、10～50 のランダムダメージを加算
+    if (isAttackerRiichi && damage > 0) {
+        const uraDoraBonus = Math.floor(Math.random() * 41) + 10; // 10～50のランダム値
+        damage += uraDoraBonus;
+        defender.state.hp = Math.max(0, defender.state.hp - uraDoraBonus);
+        logs.push(`🀄 裏ドラ！ ${uraDoraBonus}の追加ダメージ！`);
+    }
+    // 3. フィールド効果：誰かが立直している間、フィールド全体の「役の威力」を 1.5倍
+    if ((isAttackerRiichi || isOpponentRiichi) && skill.type === 'special') {
+        const riichiBuff = Math.floor(damage * 0.5); // 1.5倍 = 元のダメージ + 0.5倍
+        if (riichiBuff > 0) {
+            damage += riichiBuff;
+            defender.state.hp = Math.max(0, defender.state.hp - riichiBuff);
+            logs.push(`🀄 立直フィールド効果！ 役の威力が1.5倍に！ ${riichiBuff}の追加ダメージ！`);
+        }
+    }
     return {
         damage,
         healing,
@@ -724,6 +749,74 @@ io.on('connection', (socket) => {
         });
         console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.socketId})`);
     });
+    // Handle action_riichi event - 立直発動（MP 3 消費）
+    socket.on('action_riichi', () => {
+        console.log(`🀄 ${socket.id} attempting to activate riichi (立直)`);
+        // Find the game this player is in
+        let currentGame;
+        let currentRoomId;
+        activeGames.forEach((game, roomId) => {
+            if (game.player1.socketId === socket.id || game.player2.socketId === socket.id) {
+                currentGame = game;
+                currentRoomId = roomId;
+            }
+        });
+        if (!currentGame || !currentRoomId) {
+            socket.emit('error', { message: 'Game not found' });
+            return;
+        }
+        if (currentGame.isGameOver) {
+            socket.emit('error', { message: 'Game is already over' });
+            return;
+        }
+        // ターンチェック：自分のターンかどうか
+        if (currentGame.currentTurnPlayerId !== socket.id) {
+            console.log(`❌ ${socket.id} tried to activate riichi on opponent's turn`);
+            socket.emit('error', { message: 'Not your turn!' });
+            return;
+        }
+        // Determine which player is activating riichi
+        const isPlayer1 = currentGame.player1.socketId === socket.id;
+        const player = isPlayer1 ? currentGame.player1 : currentGame.player2;
+        // 立直のMPコスト
+        const RIICHI_MP_COST = 3;
+        // Check if already in riichi state
+        if (player.state.isRiichi) {
+            socket.emit('error', { message: 'Already in riichi state!' });
+            console.log(`❌ ${player.username} is already in riichi state`);
+            return;
+        }
+        // Check if player has enough MP
+        if (player.state.mp < RIICHI_MP_COST) {
+            socket.emit('error', { message: `Insufficient MP. Need ${RIICHI_MP_COST} MP to activate riichi.` });
+            console.log(`❌ ${player.username} has insufficient MP (${player.state.mp}/${RIICHI_MP_COST})`);
+            return;
+        }
+        // Deduct MP cost
+        player.state.mp -= RIICHI_MP_COST;
+        // Activate riichi state
+        player.state.isRiichi = true;
+        player.state.riichiBombCount = 0; // パンチ連続カウントをリセット
+        console.log(`🀄 ${player.username} activated riichi! (MP: ${player.state.mp + RIICHI_MP_COST} -> ${player.state.mp})`);
+        console.log(`   立直中: MP自然回復停止、役の最低保証と裏ドラ判定が有効`);
+        // Send riichi_activated event to both players
+        io.to(currentRoomId).emit('riichi_activated', {
+            username: player.username,
+            socketId: player.socketId,
+            playerState: player.state,
+        });
+        // ターンを交代（立直発動もターンを消費）
+        const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId
+            ? currentGame.player2
+            : currentGame.player1;
+        currentGame.currentTurnPlayerId = nextPlayer.socketId;
+        // ターン変更を通知
+        io.to(currentRoomId).emit('turn_change', {
+            currentTurnPlayerId: currentGame.currentTurnPlayerId,
+            currentTurnPlayerName: nextPlayer.username,
+        });
+        console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.socketId})`);
+    });
     // Handle action_use_skill event
     socket.on('action_use_skill', () => {
         console.log(`⚔️ ${socket.id} used a skill`);
@@ -906,7 +999,7 @@ io.on('connection', (socket) => {
             }
         }
         // Apply skill effect
-        let result = applySkillEffect(selectedSkill, attacker, defender);
+        let result = applySkillEffect(selectedSkill, attacker, defender, attacker.state.isRiichi, defender.state.isRiichi);
         const messageParts = [...preMessages];
         if (zoneEffectMessage) {
             messageParts.push(zoneEffectMessage);
@@ -925,8 +1018,8 @@ io.on('connection', (socket) => {
         result.message = messageParts.join('\n');
         // Debug: log HP state right after damage/heal is applied
         console.log(`🧪 HP after action -> ${attacker.username}: ${attacker.state.hp}, ${defender.username}: ${defender.state.hp}`);
-        // MP回復計算（乱舞ゾーン中は0、瞑想バフで加算）
-        let regenAmount = attacker.state.activeZone.type === '乱舞のゾーン' ? 0 : 1;
+        // MP回復計算（乱舞ゾーン中は0、立直中は0、瞑想バフで加算）
+        let regenAmount = attacker.state.activeZone.type === '乱舞のゾーン' ? 0 : attacker.state.isRiichi ? 0 : 1;
         if (attacker.state.status.mpRegenBonus) {
             regenAmount += attacker.state.status.mpRegenBonus.amount;
             attacker.state.status.mpRegenBonus.turns -= 1;
@@ -937,7 +1030,12 @@ io.on('connection', (socket) => {
         if (regenAmount > 0) {
             attacker.state.mp = Math.min(5, attacker.state.mp + regenAmount);
         }
-        console.log(`💧 ${attacker.username} MP: ${attacker.state.mp} (max 5)`);
+        if (attacker.state.isRiichi) {
+            console.log(`💧 ${attacker.username} MP: ${attacker.state.mp} (max 5) - 立直中のため回復停止`);
+        }
+        else {
+            console.log(`💧 ${attacker.username} MP: ${attacker.state.mp} (max 5)`);
+        }
         // ターン経過処理：ゾーンの残りターン数を減らす
         if (attacker.state.activeZone.remainingTurns > 0) {
             attacker.state.activeZone.remainingTurns--;
@@ -1013,6 +1111,16 @@ io.on('connection', (socket) => {
         }
         // Increment turn counter
         currentGame.currentTurn++;
+        // 【立直システム】立直中に役（special技）を出した場合、立直を解除
+        const yakuSkills = ['断幺九', '清一色', '国士無双', '九蓮宝燈', '天和'];
+        if (attacker.state.isRiichi && yakuSkills.includes(selectedSkill.name)) {
+            attacker.state.isRiichi = false;
+            console.log(`🀄 ${attacker.username}が役「${selectedSkill.name}」を出したため、立直状態が解除されました！`);
+            io.to(currentRoomId).emit('riichi_cleared', {
+                username: attacker.username,
+                yakuName: selectedSkill.name,
+            });
+        }
         // ターンを交代
         const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId
             ? currentGame.player2

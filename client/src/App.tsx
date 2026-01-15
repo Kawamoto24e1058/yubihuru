@@ -56,6 +56,11 @@ function App() {
   const [currentRoomId, setCurrentRoomId] = useState<string | null>(null)
   const [myPersistentId, setMyPersistentId] = useState<string | null>(null)
   
+  // 立直システム用
+  const [myRiichiState, setMyRiichiState] = useState(false)
+  const [opponentRiichiState, setOpponentRiichiState] = useState(false)
+  const [showRiichiLightning, setShowRiichiLightning] = useState(false) // 稲妻エフェクト
+  
   // 技名表示用
   const [showImpact, setShowImpact] = useState(false)
   const [impactText, setImpactText] = useState('')
@@ -649,6 +654,39 @@ function App() {
       }
     })
 
+    // 立直イベントハンドラ
+    newSocket.on('riichi_activated', (data: any) => {
+      console.log(`🀄 立直発動: ${data.username}`)
+      setLogs(prev => [`🀄 ${data.username}が立直を発動！`, ...prev].slice(0, 10))
+      
+      // 誰が立直したか判定
+      const mySocketId = newSocket.id || ''
+      if (data.socketId === mySocketId) {
+        setMyRiichiState(true)
+        setMyData(prev => prev ? { ...prev, state: data.playerState } : null)
+      } else {
+        setOpponentRiichiState(true)
+        setOpponentData(prev => prev ? { ...prev, state: data.playerState } : null)
+      }
+
+      // 稲妻エフェクトを一時的に表示
+      setShowRiichiLightning(true)
+      setTimeout(() => setShowRiichiLightning(false), 1500)
+    })
+
+    // 立直解除イベント
+    newSocket.on('riichi_cleared', (data: any) => {
+      console.log(`🀄 立直解除: ${data.username} が役「${data.yakuName}」を出した！`)
+      setLogs(prev => [`🀄 ${data.username}が役「${data.yakuName}」を出して立直が解除！`, ...prev].slice(0, 10))
+      
+      const mySocketId = newSocket.id || ''
+      if (data.socketId === mySocketId) {
+        setMyRiichiState(false)
+      } else {
+        setOpponentRiichiState(false)
+      }
+    })
+
     newSocket.on('game_over', (data: any) => {
       // サーバーから勝敗が確定したときだけ表示
       console.log('Game over:', data)
@@ -832,6 +870,24 @@ function App() {
       if (myData && myData.state.mp < 5) console.warn(`⚠️ Not enough MP: ${myData.state.mp} < 5`)
       if (!isMyTurnByIndex) console.warn(`⚠️ Not your turn by index: turnIndex=${turnIndex}, myIndex=${myIndex}`)
       if (isProcessing) console.warn('⚠️ Already processing action')
+    }
+  }
+
+  // 立直発動
+  const handleRiichi = () => {
+    const isMyTurnByIndex = myIndex !== null && turnIndex === myIndex
+    if (socket && gameStarted && myData && myData.state.mp >= 3 && isMyTurnByIndex && !isProcessing && !myRiichiState) {
+      console.log(`✅ 立直発動: myIndex=${myIndex}, turnIndex=${turnIndex}, MP=${myData.state.mp}, roomId=${currentRoomId}`)
+      socket.emit('action_riichi', { roomId: currentRoomId, playerId: myPersistentId })
+      setIsProcessing(true)
+    } else {
+      if (!socket) console.warn('⚠️ Socket not connected')
+      if (!gameStarted) console.warn('⚠️ Game not started')
+      if (!myData) console.warn('⚠️ MyData not set')
+      if (myData && myData.state.mp < 3) console.warn(`⚠️ Not enough MP: ${myData.state.mp} < 3`)
+      if (!isMyTurnByIndex) console.warn(`⚠️ Not your turn by index: turnIndex=${turnIndex}, myIndex=${myIndex}`)
+      if (isProcessing) console.warn('⚠️ Already processing action')
+      if (myRiichiState) console.warn('⚠️ Already in riichi state')
     }
   }
 
@@ -1485,6 +1541,20 @@ function App() {
               {myIndex !== null && turnIndex === myIndex && !isProcessing ? '🌀 ゾーン展開' : '相手の行動を待っています...'}
               {myIndex !== null && turnIndex === myIndex && !isProcessing && <span className="block text-xs">(MP 5消費)</span>}
             </button>
+
+            {/* 立直ボタン */}
+            <button
+              onClick={handleRiichi}
+              disabled={turnIndex !== myIndex || isProcessing || myData.state.mp < 3 || myIndex === null || myRiichiState}
+              className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-3 font-black text-sm ${
+                myIndex !== null && turnIndex === myIndex && !isProcessing && myData.state.mp >= 3 && !myRiichiState
+                  ? 'bg-red-500 hover:bg-red-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0 animate-pulse'
+                  : 'bg-gray-400 cursor-not-allowed'
+              }`}
+            >
+              {myIndex !== null && turnIndex === myIndex && !isProcessing && !myRiichiState ? '🀄 立直' : myRiichiState ? '🀄 立直中...' : '相手の行動を待っています...'}
+              {myIndex !== null && turnIndex === myIndex && !isProcessing && !myRiichiState && <span className="block text-xs">(MP 3消費)</span>}
+            </button>
           </div>
 
           {/* PC版：下部アクション */}
@@ -1629,8 +1699,31 @@ function App() {
 
   // 初期画面（名前入力）
   return (
-    <div className="min-h-screen bg-yellow-50 flex items-center justify-center p-4">
-      <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-8 max-w-md w-full">
+    <div className={`min-h-screen ${myRiichiState || opponentRiichiState ? 'bg-slate-800' : 'bg-yellow-50'} ${showRiichiLightning ? 'animate-pulse' : ''} flex items-center justify-center p-4 relative`}>
+      {/* 立直時の稲妻エフェクト */}
+      {(myRiichiState || opponentRiichiState) && (
+        <>
+          <style>{`
+            @keyframes lightning {
+              0%, 100% { opacity: 0; }
+              50% { opacity: 1; }
+            }
+            .lightning-flash {
+              position: fixed;
+              top: 0;
+              left: 0;
+              right: 0;
+              bottom: 0;
+              background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.8) 50%, transparent 100%);
+              animation: lightning 0.1s infinite;
+              pointer-events: none;
+              z-index: 10;
+            }
+          `}</style>
+          <div className="lightning-flash"></div>
+        </>
+      )}
+      <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-8 max-w-md w-full relative z-20">
         <h1 className="text-6xl font-black text-center mb-8 -rotate-3">
           YUBIFURU
         </h1>
