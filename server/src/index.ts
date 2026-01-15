@@ -70,6 +70,15 @@ const socketToPlayerId = new Map<string, string>();
 // マッチング確認待ち: roomId -> { player1_ready, player2_ready, timeout }
 const matchingWaitingRooms = new Map<string, { player1_ready: boolean; player2_ready: boolean; timeout: NodeJS.Timeout; roomData: any }>();
 
+// 【飯テロ】画像URLリスト
+const FOOD_IMAGES = [
+  "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=800&q=80", // ピザ
+  "https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=800&q=80", // ケーキ
+  "https://images.unsplash.com/photo-1553621042-f6e147245754?w=800&q=80", // 寿司
+  "https://images.unsplash.com/photo-1594007654729-407eedc4be65?w=800&q=80", // ラーメン
+  "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&q=80"  // ステーキ
+];
+
 // Helper function to create initial player state
 function createPlayerState(): PlayerState {
   return {
@@ -900,7 +909,14 @@ io.on('connection', (socket) => {
       skillEffect: result.skillEffect,
       wasBuffedAttack: result.wasBuffedAttack,
       gameState: currentGame,
-    };
+    } as any;
+
+    // 【飯テロ】画像URLをランダムに選んで追加
+    if (upgradedSkill.effect === 'food_terror') {
+      const foodImageUrl = FOOD_IMAGES[Math.floor(Math.random() * FOOD_IMAGES.length)];
+      battleUpdate.extraImage = foodImageUrl;
+      console.log(`🍱 飯テロ画像URL: ${foodImageUrl}`);
+    }
 
     io.to(currentRoomId).emit('battle_update', battleUpdate);
     io.to(currentRoomId).emit('skill_effect', {

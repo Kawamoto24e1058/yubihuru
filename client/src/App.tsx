@@ -75,6 +75,7 @@ function App() {
   const [inkSplashes, setInkSplashes] = useState<Array<{id: number, x: number, y: number, size: number}>>([])
   const [specialVictoryText, setSpecialVictoryText] = useState<string | null>(null) // 'BAN' or '役満'
   const [skillEffect, setSkillEffect] = useState<string | null>(null)
+  const [foodImage, setFoodImage] = useState<string | null>(null) // 飯テロ画像URL
 
   // フィニッシュ・インパクト演出用
   const [showFinishText, setShowFinishText] = useState(false)
@@ -372,6 +373,15 @@ function App() {
 
       if (data.skillEffect) {
         setSkillEffect(data.skillEffect)
+      }
+
+      // 【飯テロ】画像表示
+      if (data.extraImage) {
+        setFoodImage(data.extraImage)
+        // 3秒後に画像を消す
+        setTimeout(() => {
+          setFoodImage(null)
+        }, 3000)
       }
       
       // 役満フリーズ演出（国士無双・九蓮宝燈）
@@ -1246,6 +1256,50 @@ function App() {
             >
               役満
             </p>
+          </div>
+        )}
+
+        {/* 【飯テロ】画像表示オーバーレイ */}
+        {foodImage && (
+          <div 
+            className="pointer-events-none fixed inset-0 z-[90] flex items-center justify-center bg-black/80 animate-fade-in"
+            style={{
+              animation: 'fadeIn 0.3s ease-in'
+            }}
+          >
+            <div className="relative w-full h-full flex items-center justify-center p-4">
+              <img 
+                src={foodImage} 
+                alt="飯テロ" 
+                className="max-w-2xl max-h-2xl object-cover rounded-lg shadow-2xl animate-scale-up"
+                style={{
+                  animation: 'scaleUp 0.4s ease-out'
+                }}
+              />
+              <div 
+                className="absolute inset-0 flex items-center justify-center text-white text-5xl font-black pointer-events-none"
+                style={{
+                  textShadow: '2px 2px 10px rgba(0, 0, 0, 0.8)',
+                  animation: 'fadeOut 0.5s ease-in 2.5s forwards'
+                }}
+              >
+                🤤
+              </div>
+            </div>
+            <style>{`
+              @keyframes fadeIn {
+                from { opacity: 0; }
+                to { opacity: 1; }
+              }
+              @keyframes fadeOut {
+                from { opacity: 1; }
+                to { opacity: 0; }
+              }
+              @keyframes scaleUp {
+                from { transform: scale(0.8); opacity: 0; }
+                to { transform: scale(1); opacity: 1; }
+              }
+            `}</style>
           </div>
         )}
         
