@@ -238,6 +238,23 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
             console.log(`🌪️ 乱舞のゾーン: 攻撃技のみ抽選 (${attackSkills.length}種類)`);
         }
     }
+    // 技リストが空の場合のフォールバック（絶対に空にしない）
+    if (availableSkills.length === 0) {
+        console.warn('⚠️ フィルタ後の技リストが空です。全技から再抽選します。');
+        availableSkills = SKILLS.filter(skill => skill.id < 200); // ギガインパクト等を除外
+        if (availableSkills.length === 0) {
+            // それでも空なら最低限のフォールバック技を作成
+            availableSkills = [{
+                    id: 0,
+                    name: 'ゆびをふる',
+                    type: 'attack',
+                    power: 10,
+                    description: '基本攻撃',
+                    effect: 'none'
+                }];
+            console.warn('⚠️ SKILLS配列が完全に空です。フォールバック技を使用します。');
+        }
+    }
     // ランダムに1つ選択
     const randomIndex = Math.floor(Math.random() * availableSkills.length);
     let selectedSkill = availableSkills[randomIndex];
@@ -279,6 +296,18 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
             }
             // 19%を超えた場合は通常技のまま
         }
+    }
+    // 最終的な安全チェック：技が選択されていない場合のフォールバック
+    if (!selectedSkill) {
+        console.warn('⚠️ getRandomSkill: 技が選択されませんでした。デフォルト技（パンチ）を返します。');
+        selectedSkill = SKILLS.find(skill => skill.id === 1) || {
+            id: 0,
+            name: 'ゆびをふる',
+            type: 'attack',
+            power: 10,
+            description: '基本攻撃',
+            effect: 'none'
+        };
     }
     return selectedSkill;
 }
@@ -967,8 +996,9 @@ io.on('connection', (socket) => {
     socket.on('action_use_skill', (data = {}) => {
         const senderPlayerId = data.playerId || '';
         console.log(`\n⚔️ ===== 技発動リクエスト受信 =====`);
-        console.log(`   SenderId: ${senderPlayerId}`);
+        console.log(`   SenderId (playerId): ${senderPlayerId}`);
         console.log(`   SocketId: ${socket.id}`);
+        console.log(`   Received data:`, JSON.stringify(data));
         // Find the game this player is in
         let currentGame;
         let currentRoomId;
@@ -983,22 +1013,33 @@ io.on('connection', (socket) => {
             socket.emit('error', { message: 'Game not found' });
             return;
         }
+        console.log(`✅ ゲーム発見: Room ${currentRoomId}`);
+        console.log(`   Player1: ${currentGame.player1.username} (playerId: ${currentGame.player1.playerId}, socketId: ${currentGame.player1.socketId})`);
+        console.log(`   Player2: ${currentGame.player2.username} (playerId: ${currentGame.player2.playerId}, socketId: ${currentGame.player2.socketId})`);
         if (currentGame.isGameOver) {
             console.error(`❌ ゲーム終了済み: ${socket.id}`);
             socket.emit('error', { message: 'Game is already over' });
             return;
         }
         // ターンチェック：自分のターンかどうか（playerIdベース）
-        console.log(`📍 ターン判定:`);
-        console.log(`   currentTurnPlayerId: ${currentGame.currentTurnPlayerId}`);
-        console.log(`   senderPlayerId: ${senderPlayerId}`);
-        console.log(`   Match: ${currentGame.currentTurnPlayerId === senderPlayerId ? '✅ YES' : '❌ NO'}`);
-        if (currentGame.currentTurnPlayerId !== senderPlayerId) {
-            console.log(`❌ ${senderPlayerId}は相手のターン中に技を使用しようとしました。現在のターン: ${currentGame.currentTurnPlayerId}`);
+        console.log(`\n📍 ===== ターン判定 =====`);
+        console.log(`   currentTurnPlayerId: "${currentGame.currentTurnPlayerId}"`);
+        console.log(`   senderPlayerId: "${senderPlayerId}"`);
+        console.log(`   Player1.playerId: "${currentGame.player1.playerId}"`);
+        console.log(`   Player2.playerId: "${currentGame.player2.playerId}"`);
+        // playerId が空文字列の場合は警告
+        if (!senderPlayerId) {
+            console.warn(`⚠️ senderPlayerId が空です。クライアント側でplayerIdを送信していない可能性があります。`);
+        }
+        const isMatch = currentGame.currentTurnPlayerId === senderPlayerId;
+        console.log(`   Match: ${isMatch ? '✅ YES' : '❌ NO'}`);
+        if (!isMatch) {
+            console.log(`❌ ターン不一致: ${senderPlayerId || socket.id}は相手のターン中に技を使用しようとしました。`);
+            console.log(`   現在のターン: ${currentGame.currentTurnPlayerId}`);
             socket.emit('error', { message: 'Not your turn!' });
             return;
         }
-        console.log(`✅ ターンチェックOK - 技発動処理開始`);
+        console.log(`✅ ターンチェックOK - 技発動処理開始\n`);
         // Determine attacker and defender
         const isPlayer1 = currentGame.player1.socketId === socket.id;
         const attacker = isPlayer1 ? currentGame.player1 : currentGame.player2;
@@ -1104,14 +1145,31 @@ io.on('connection', (socket) => {
         // Get random skill from SKILLS array with zone effects and riichi state
         let selectedSkill = null;
         try {
+            console.log(`🎲 技抽選開始...`);
             selectedSkill = getRandomSkill(attacker.state.activeZone, attacker.state.isRiichi, attacker.state.hp, attacker.state.maxHp, currentGame.currentTurn);
+            // 技が選択されなかった場合、デフォルト技（パンチ）を使用
             if (!selectedSkill) {
-                throw new Error('Skill selection failed (empty skill list)');
+                console.warn('⚠️ 技抽選で技が選択されませんでした。デフォルト技（パンチ）を使用します。');
+                selectedSkill = SKILLS.find(skill => skill.id === 1) || null; // パンチ (id: 1)
+                if (!selectedSkill) {
+                    // SKILLSリスト自体が空の場合の最終フォールバック
+                    selectedSkill = {
+                        id: 0,
+                        name: 'ゆびをふる',
+                        type: 'attack',
+                        power: 10,
+                        description: '基本攻撃',
+                        effect: 'none'
+                    };
+                    console.warn('⚠️ SKILLSリストが空です。フォールバック技「ゆびをふる」を使用します。');
+                }
             }
+            console.log(`✅ 技抽選成功: ${selectedSkill.name} (威力: ${selectedSkill.power})`);
         }
         catch (err) {
             const message = err instanceof Error ? err.message : 'Skill selection failed';
             console.error(`❌ 技抽選エラー: ${message}`);
+            // エラー時も確実に全プレイヤーに通知
             io.to(currentRoomId).emit('game_state_update', {
                 gameState: currentGame,
                 currentSkill: null,
@@ -1119,7 +1177,8 @@ io.on('connection', (socket) => {
                 animationStart: false,
                 error: message,
             });
-            socket.emit('error', { message });
+            socket.emit('error', { message: `技抽選に失敗しました: ${message}` });
+            console.log(`📤 エラー通知を全プレイヤーに送信完了`);
             return;
         }
         console.log(`🎲 Random skill selected: ${selectedSkill.name} (${selectedSkill.type})`);
@@ -1349,16 +1408,21 @@ io.on('connection', (socket) => {
             gameState: currentGame, // 完全なgameStateを送信
         });
         // 🔴 【重要】gameState更新後、即座に全員へ新しいゲーム状態を送信
-        console.log(`📤 gameState更新を全員へemit:`);
+        console.log(`\n📤 ===== game_state_update 送信 =====`);
+        console.log(`   Room ID: ${currentRoomId}`);
         console.log(`   技: ${selectedSkill.name}`);
+        console.log(`   威力: ${selectedSkill.power}`);
         console.log(`   ダメージ: ${result.damage}`);
-        console.log(`   次のターン: ${nextPlayer.username}`);
+        console.log(`   次のターン: ${nextPlayer.username} (${nextPlayer.playerId})`);
+        console.log(`   アニメーション: 有効`);
         io.to(currentRoomId).emit('game_state_update', {
             gameState: currentGame,
             currentSkill: selectedSkill.name,
             damage: result.damage,
             animationStart: true,
         });
+        console.log(`✅ Skill executed and state broadcasted`);
+        console.log(`========================================\n`);
         // ウォッチドッグを再開（新しいターンの5秒ウォッチドッグ）
         startWatchdog(currentRoomId);
         console.log(`📊 Turn ${currentGame.currentTurn}:`);
