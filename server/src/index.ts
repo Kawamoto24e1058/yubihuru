@@ -1416,7 +1416,8 @@ io.on('connection', (socket) => {
         currentTurn: 0,
         currentTurnPlayerId: gameData.player1.socketId,
         turnIndex: 0, // player1 from start
-        shakeTurns: 0, // 初期値：揺れなし
+        shakeTurns: 0, //
+        // 初期値：揺れなし
         isGameOver: false,
         winner: null,
         startedAt: Date.now(),
