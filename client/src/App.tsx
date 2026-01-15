@@ -59,8 +59,6 @@ function App() {
   
   // 立直システム用
   const [myRiichiState, setMyRiichiState] = useState(false)
-  const [opponentRiichiState, setOpponentRiichiState] = useState(false)
-  const [showRiichiLightning, setShowRiichiLightning] = useState(false) // 稲妻エフェクト
   
   // 技名表示用
   const [showImpact, setShowImpact] = useState(false)
@@ -730,13 +728,8 @@ function App() {
         setMyRiichiState(true)
         setMyData(prev => prev ? { ...prev, state: data.playerState } : null)
       } else {
-        setOpponentRiichiState(true)
         setOpponentData(prev => prev ? { ...prev, state: data.playerState } : null)
       }
-
-      // 稲妻エフェクトを一時的に表示
-      setShowRiichiLightning(true)
-      setTimeout(() => setShowRiichiLightning(false), 1500)
     })
 
     // 立直解除イベント
@@ -747,8 +740,6 @@ function App() {
       const mySocketId = newSocket.id || ''
       if (data.socketId === mySocketId) {
         setMyRiichiState(false)
-      } else {
-        setOpponentRiichiState(false)
       }
     })
 
