@@ -1166,7 +1166,7 @@ function App() {
   // ローディング画面
   if (isWaiting && !gameStarted) {
     return (
-      <div className="min-h-screen bg-yellow-50 flex items-center justify-center p-4">
+      <div className="min-h-screen flex items-center justify-center p-4">
         <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-12 max-w-md w-full">
           <h2 className="text-4xl font-black text-center mb-4 animate-pulse">
             LOOKING FOR
@@ -1183,7 +1183,7 @@ function App() {
     const isWinner = myData?.username === winner
     
     return (
-      <div className="min-h-screen bg-yellow-50 flex items-center justify-center p-4">
+      <div className="min-h-screen flex items-center justify-center p-4">
         <div className={`bg-white border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-12 max-w-md w-full text-center ${
           isWinner ? 'border-yellow-400 bg-yellow-100' : 'border-gray-400 bg-gray-100'
         }`}>
@@ -1240,7 +1240,7 @@ function App() {
     const myZoneBorder = zoneBorderMap[myData.state.activeZone.type] || 'border-black'
 
     return (
-      <div className={`min-h-screen bg-yellow-50 p-4 transition-all relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${gameState.shakeTurns > 0 ? 'animate-window-shake' : ''} ${lastAttackGrayscale ? 'filter grayscale' : ''} ${slowMotion ? 'animate-slow-motion' : ''}`}>
+      <div className={`min-h-screen p-4 transition-all relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${gameState.shakeTurns > 0 ? 'animate-window-shake' : ''} ${lastAttackGrayscale ? 'filter grayscale' : ''} ${slowMotion ? 'animate-slow-motion' : ''}`}>
         {/* メニューボタン（右上） */}
         <button
           onClick={() => setShowMenu(true)}
@@ -1821,7 +1821,7 @@ function App() {
         </div>
 
         {/* スマホ時のボタンエリア（下部固定） */}
-        <div className="md:hidden fixed bottom-0 left-0 right-0 p-4 bg-yellow-50 border-t-4 border-black space-y-3 max-h-[35vh] overflow-y-auto">
+        <div className="md:hidden fixed bottom-0 left-0 right-0 p-4 border-t-4 border-black space-y-3 max-h-[35vh] overflow-y-auto">
             {/* ターン表示 */}
             {!isMyTurn && (
               <div className="bg-orange-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-2 text-center">
@@ -1953,7 +1953,7 @@ function App() {
 
   // 初期画面（名前入力）
   return (
-    <div className={`min-h-screen ${myRiichiState || opponentRiichiState ? 'bg-slate-800' : 'bg-yellow-50'} ${showRiichiLightning ? 'animate-pulse' : ''} flex items-center justify-center p-4 relative`}>
+    <div className={`min-h-screen ${showRiichiLightning ? 'animate-pulse' : ''} flex items-center justify-center p-4 relative`}>
       {/* 3D背景 */}
       <FallingBackground3D />
       {/* 立直時の稲妻エフェクト */}
