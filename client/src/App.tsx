@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { io, Socket } from 'socket.io-client'
 import './App.css'
 import type { GameStartData, PlayerData } from './types'
+import { FallingBackground3D } from './FallingBackground3D'
 
 // ゾーン効果の説明データ
 const ZONE_DESCRIPTIONS = {
@@ -1835,12 +1836,8 @@ function App() {
   // 初期画面（名前入力）
   return (
     <div className={`min-h-screen ${myRiichiState || opponentRiichiState ? 'bg-slate-800' : 'bg-yellow-50'} ${showRiichiLightning ? 'animate-pulse' : ''} flex items-center justify-center p-4 relative`}>
-      {/* 背景に浮遊する大きな絵文字装飾 */}
-      <div className="floating-deco deco-1">🀄</div>
-      <div className="floating-deco deco-2">⚔️</div>
-      <div className="floating-deco deco-3">🎲</div>
-      <div className="floating-deco deco-4">⚡</div>
-      <div className="floating-deco deco-5">👆</div>
+      {/* 3D背景 */}
+      <FallingBackground3D />
       {/* 立直時の稲妻エフェクト */}
       {(myRiichiState || opponentRiichiState) && (
         <>

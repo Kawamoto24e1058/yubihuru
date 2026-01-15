@@ -17,12 +17,24 @@
     "build": "npm run build --workspaces",
     "install:all": "npm install"
   },
-"keywords": ["game", "websocket", "typescript", "react", "socketio"],
-"author": "",
-"license": "MIT",
-"overrides": {
+  "keywords": [
+    "game",
+    "websocket",
+    "typescript",
+    "react",
+    "socketio"
+  ],
+  "author": "",
+  "license": "MIT",
+  "overrides": {
     "tailwindcss": "3.4.17",
     "postcss": "8.4.49",
     "autoprefixer": "10.4.20"
+  },
+  "dependencies": {
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.5.0",
+    "@types/three": "^0.182.0",
+    "three": "^0.182.0"
   }
 }
