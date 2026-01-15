@@ -1134,29 +1134,46 @@ io.on('connection', (socket) => {
   // Handle action_use_skill event
   socket.on('action_use_skill', (data: any = {}) => {
     const senderPlayerId = data.playerId || '';
+    const senderRoomId = data.roomId || '';
     console.log(`\n⚔️ ===== 技発動リクエスト受信 =====`);
     console.log(`   SenderId (playerId): ${senderPlayerId}`);
+    console.log(`   RoomId: ${senderRoomId}`);
     console.log(`   SocketId: ${socket.id}`);
     console.log(`   Received data:`, JSON.stringify(data));
 
-    // Find the game this player is in
+    // 【修正】roomIdを直接使用してゲームを検索
     let currentGame: GameState | undefined;
     let currentRoomId: string | undefined;
 
-    activeGames.forEach((game, roomId) => {
-      if (game.player1.socketId === socket.id || game.player2.socketId === socket.id) {
-        currentGame = game;
-        currentRoomId = roomId;
+    // 第1段階：送られてきたroomIdで検索
+    if (senderRoomId) {
+      currentGame = activeGames.get(senderRoomId);
+      if (currentGame) {
+        currentRoomId = senderRoomId;
+        console.log(`✅ ゲーム発見（roomId指定）: Room ${currentRoomId}`);
+      } else {
+        console.warn(`⚠️ roomIdで見つかりませんでした: ${senderRoomId}。socket.idで検索します...`);
       }
-    });
+    }
+
+    // 第2段階：roomIdで見つからなかった場合、socket.idで検索（フォールバック）
+    if (!currentGame) {
+      activeGames.forEach((game, roomId) => {
+        if (game.player1.socketId === socket.id || game.player2.socketId === socket.id) {
+          currentGame = game;
+          currentRoomId = roomId;
+          console.log(`✅ ゲーム発見（socket.id検索）: Room ${currentRoomId}`);
+        }
+      });
+    }
 
     if (!currentGame || !currentRoomId) {
-      console.error(`❌ ゲーム見つからず: ${socket.id}`);
+      console.error(`❌ ゲーム見つからず: roomId=${senderRoomId}, socketId=${socket.id}`);
       socket.emit('error', { message: 'Game not found' });
       return;
     }
 
-    console.log(`✅ ゲーム発見: Room ${currentRoomId}`);
+    console.log(`✅ ゲーム確定: Room ${currentRoomId}`);
     console.log(`   Player1: ${currentGame.player1.username} (playerId: ${currentGame.player1.playerId}, socketId: ${currentGame.player1.socketId})`);
     console.log(`   Player2: ${currentGame.player2.username} (playerId: ${currentGame.player2.playerId}, socketId: ${currentGame.player2.socketId})`);
 
@@ -1302,11 +1319,18 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Get random skill from SKILLS array with zone effects and riichi state
+    // Get random skill: room.skills 優先、なければ共通SKILLSから抽選
     let selectedSkill: Skill | null = null;
     try {
       console.log(`🎲 技抽選開始...`);
-      selectedSkill = getRandomSkill(attacker.state.activeZone, attacker.state.isRiichi, attacker.state.hp, attacker.state.maxHp, currentGame.currentTurn);
+      const roomSkills = (currentGame as any).skills as Skill[] | undefined;
+      if (roomSkills && roomSkills.length > 0) {
+        const randomIndex = Math.floor(Math.random() * roomSkills.length);
+        selectedSkill = roomSkills[randomIndex];
+        console.log(`✅ room.skills から抽選: ${selectedSkill.name}`);
+      } else {
+        selectedSkill = getRandomSkill(attacker.state.activeZone, attacker.state.isRiichi, attacker.state.hp, attacker.state.maxHp, currentGame.currentTurn);
+      }
       
       // 技が選択されなかった場合、デフォルト技（パンチ）を使用
       if (!selectedSkill) {
@@ -1438,6 +1462,16 @@ io.on('connection', (socket) => {
     }
 
     result.message = messageParts.join('\n');
+
+    // 技結果をゲーム状態に反映（UI用メタ情報）
+    (currentGame as any).lastSkill = {
+      name: selectedSkill.name,
+      type: selectedSkill.type,
+      power: selectedSkill.power,
+      damage: result.damage,
+      attackerId: attacker.playerId,
+      defenderId: defender.playerId,
+    };
 
     // Debug: log HP state right after damage/heal is applied
     console.log(`🧪 HP after action -> ${attacker.username}: ${attacker.state.hp}, ${defender.username}: ${defender.state.hp}`);

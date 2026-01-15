@@ -1059,10 +1059,11 @@ function App() {
       console.log(`\n✅ ===== 技発動ボタン押下 =====`);
       console.log(`   myPersistentId: ${myPersistentId}`);
       console.log(`   currentTurnId: ${currentTurnId}`);
+      console.log(`   currentRoomId: ${currentRoomId}`);
       console.log(`   isProcessing: ${isProcessing}`);
       console.log(`   Emitting action_use_skill...`);
       
-      socket.emit('action_use_skill', { playerId: myPersistentId })
+      socket.emit('action_use_skill', { roomId: currentRoomId, playerId: myPersistentId })
       setIsProcessing(true)
       
       console.log(`✅ action_use_skill emitted`);
@@ -1078,8 +1079,8 @@ function App() {
   const handleActivateZone = () => {
     // 🔴 playerIdベースのターン判定に変更
     if (socket && gameStarted && myData && myData.state.mp >= 5 && currentTurnId === myPersistentId && !isProcessing) {
-      console.log(`✅ ゾーン発動: playerId=${myPersistentId}, currentTurn=${currentTurnId}, zone=${selectedZoneType}`);
-      socket.emit('action_activate_zone', { zoneType: selectedZoneType, playerId: myPersistentId })
+      console.log(`✅ ゾーン発動: playerId=${myPersistentId}, currentTurn=${currentTurnId}, zone=${selectedZoneType}, roomId=${currentRoomId}`);
+      socket.emit('action_activate_zone', { roomId: currentRoomId, zoneType: selectedZoneType, playerId: myPersistentId })
       setIsProcessing(true)
     } else {
       if (!socket) console.warn('⚠️ Socket not connected');
