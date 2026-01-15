@@ -94,6 +94,7 @@ function App() {
   const [showQuitConfirm, setShowQuitConfirm] = useState(false)
   const [hasActiveGame, setHasActiveGame] = useState(false) // サーバーが進行中ゲーム検知時のフラグ
   const [isYourTurn, setIsYourTurn] = useState(false) // 強制フラグ方式：サーバーから指名された場合のみtrue
+  const [isAnimating, setIsAnimating] = useState(false) // 演出中フラグ（初期状態は必ずfalse）
   const [isCheckingReconnect, setIsCheckingReconnect] = useState(true)
   const [totalWins, setTotalWins] = useState(0) // 通算勝利数
   const [currentStreak, setCurrentStreak] = useState(0) // 連勝数
@@ -321,6 +322,9 @@ function App() {
       console.log('Game started!', data)
       setIsWaiting(false)
       setGameStarted(true)
+      // 初期状態では演出フラグを確実に解除
+      setIsAnimating(false)
+      setIsProcessing(false)
       
       // マッチング成立時、バトル情報を localStorage に保存
       localStorage.setItem('yubihuru_active_battle', JSON.stringify({
@@ -451,11 +455,13 @@ function App() {
         if (isMyTurn) {
           console.log(`🔓 ボタン強制有効化（turnPlayerId一致）`);
           setIsProcessing(false)
+          setIsAnimating(false)
           setShowImpact(false)
         }
         
         // ボタンロック防止：演出中フラグをリセット
         setIsProcessing(false)
+        setIsAnimating(false)
       }
       
       // battle_ready を必ず送信（冗長性）
@@ -505,6 +511,7 @@ function App() {
         if (data.forceUnlock && isMyTurn) {
           console.log(`🔓 デッドロック救済: ボタン強制有効化（turnPlayerId一致）`);
           setIsProcessing(false)
+          setIsAnimating(false)
           setShowImpact(false)
         }
         
@@ -513,6 +520,7 @@ function App() {
         setImpactText(skillName)
         const shouldAnimate = data.animationStart !== false
         setShowImpact(shouldAnimate)
+        setIsAnimating(shouldAnimate)
         
         // アニメーション中はロック、終了後に解除
         setIsProcessing(true)
@@ -520,13 +528,15 @@ function App() {
         setTimeout(() => {
           if (shouldAnimate) setShowImpact(false)
           setIsProcessing(false)
-          console.log('✅ 演出終了 - isProcessing=false')
+          setIsAnimating(false)
+          console.log('✅ 演出終了 - isProcessing=false / isAnimating=false')
         }, animationDuration)
         
         // エラー通知時も必ずロック解除
         if (data.error) {
           console.warn(`⚠️ game_state_update error: ${data.error}`)
           setIsProcessing(false)
+          setIsAnimating(false)
         }
         
         console.log(`✅ gameState更新完了: ${skillName}の演出開始`);
@@ -1076,7 +1086,8 @@ function App() {
       setMyPersistentId(safePlayerId);
     }
 
-    if (socket && gameStarted && safePlayerId && currentTurnId === safePlayerId && !isProcessing) {
+    // デバッグ救済: isYourTurn判定を外し、処理中でなければ押せるようにする
+    if (socket && gameStarted && safePlayerId && !isProcessing) {
       console.log(`\n✅ ===== 技発動ボタン押下 =====`);
       console.log(`   myPersistentId: ${safePlayerId}`);
       console.log(`   currentTurnId: ${currentTurnId}`);
@@ -1093,7 +1104,8 @@ function App() {
       if (!socket) console.warn('❌ Socket not connected');
       if (!gameStarted) console.warn('❌ Game not started');
       if (!safePlayerId) console.warn('❌ playerId is empty (localStorage not set)');
-      if (currentTurnId !== safePlayerId) console.warn(`❌ Not your turn: currentTurnId=${currentTurnId}, myPersistentId=${safePlayerId}`);
+      // デバッグ期間はターン不一致を許容するためメッセージのみ出す
+      if (currentTurnId !== safePlayerId) console.warn(`ℹ️ Not your turn (許容中): currentTurnId=${currentTurnId}, myPersistentId=${safePlayerId}`);
       if (isProcessing) console.warn('❌ Already processing action');
     }
   }
@@ -2070,14 +2082,14 @@ function App() {
             {/* 指を振るボタン */}
             <button
               onClick={handleUseSkill}
-              disabled={!isYourTurn}
+              disabled={isProcessing || isAnimating}
               className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-6 font-black text-lg ${
-                isYourTurn
+                !(isProcessing || isAnimating)
                   ? 'bg-pink-500 hover:bg-pink-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
                   : 'bg-gray-400 cursor-not-allowed'
               }`}
             >
-              {!isYourTurn ? '相手の行動を待っています...' : (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る')}
+              {!(isProcessing || isAnimating) ? (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る') : '相手の行動を待っています...'}
             </button>
 
             {/* 現在のゾーン効果表示 */}
@@ -2152,14 +2164,14 @@ function App() {
               {/* 指を振るボタン */}
               <button
                 onClick={handleUseSkill}
-                disabled={!isYourTurn}
+                disabled={isProcessing || isAnimating}
                 className={`border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-8 font-black text-2xl ${
-                  isYourTurn
+                  !(isProcessing || isAnimating)
                     ? 'bg-pink-500 hover:bg-pink-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
                     : 'bg-gray-400 cursor-not-allowed'
                 }`}
               >
-                {!isYourTurn ? '相手の行動を待っています...' : (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る')}
+                {!(isProcessing || isAnimating) ? (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る') : '相手の行動を待っています...'}
               </button>
 
               {/* ゾーン展開エリア */}
