@@ -74,6 +74,7 @@ function App() {
   // const [opponentShakeEffect, setOpponentShakeEffect] = useState(false)
   const [inkSplashes, setInkSplashes] = useState<Array<{id: number, x: number, y: number, size: number}>>([])
   const [specialVictoryText, setSpecialVictoryText] = useState<string | null>(null) // 'BAN' or '役満'
+  const [skillEffect, setSkillEffect] = useState<string | null>(null)
 
   // フィニッシュ・インパクト演出用
   const [showFinishText, setShowFinishText] = useState(false)
@@ -358,9 +359,20 @@ function App() {
       setIsGameOver(false)
     })
 
+    const handleSkillEffect = (payload: any) => {
+      const effect = payload?.skill?.effect || payload?.skillEffect || null
+      if (effect) {
+        setSkillEffect(effect)
+      }
+    }
+
     newSocket.on('battle_update', (data: any) => {
       console.log('Battle update:', data)
       setLogs(prev => [data.message, ...prev].slice(0, 10))
+
+      if (data.skillEffect) {
+        setSkillEffect(data.skillEffect)
+      }
       
       // 役満フリーズ演出（国士無双・九蓮宝燈）
       if (data.skillEffect === 'yakuman-freeze') {
@@ -606,6 +618,8 @@ function App() {
       }, 2000)
     })
 
+    newSocket.on('skill_effect', handleSkillEffect)
+
     newSocket.on('turn_change', (data: any) => {
       const turnIdx = data.turnIndex ?? turnIndex
       setTurnIndex(turnIdx)
@@ -802,6 +816,13 @@ function App() {
       clearInterval(intervalId)
     }
   }, [socket, isWaiting, gameStarted])
+
+  // skillEffect が入ったら3秒後に自動でリセット（派手な演出の永続防止）
+  useEffect(() => {
+    if (!skillEffect) return
+    const timer = setTimeout(() => setSkillEffect(null), 3000)
+    return () => clearTimeout(timer)
+  }, [skillEffect])
 
   const handleJoin = () => {
     if (socket && name.trim()) {
