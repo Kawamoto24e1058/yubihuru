@@ -336,7 +336,7 @@ const IndexFingerHand: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) 
   
   return (
     <group ref={groupRef} position={position}>
-      <HandModel extendedFinger=\"index\" />
+      <HandModel extendedFinger="index" />
     </group>
   );
 };
@@ -357,7 +357,7 @@ const MiddleFingerHand: React.FC<any> = ({ position, rotationSpeed, fallSpeed })
   
   return (
     <group ref={groupRef} position={position}>
-      <HandModel extendedFinger=\"middle\" />
+      <HandModel extendedFinger="middle" />
     </group>
   );
 };
