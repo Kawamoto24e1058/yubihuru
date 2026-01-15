@@ -47,6 +47,89 @@ const drawChunTexture = (ctx: CanvasRenderingContext2D, size: number, type: 'col
   ctx.fillText('中', size / 2, size / 2);
 };
 
+// --- 落下する剣コンポーネント ---
+const FallingSword: React.FC<any> = ({ 
+  position, 
+  rotationSpeed, 
+  fallSpeed 
+}) => {
+  const groupRef = useRef<THREE.Group>(null!);
+  const [initialY] = useState(position[1]);
+
+  useFrame((_state, delta) => {
+    if (!groupRef.current) return;
+
+    groupRef.current.rotation.x += delta * rotationSpeed[0];
+    groupRef.current.rotation.y += delta * rotationSpeed[1];
+    groupRef.current.rotation.z += delta * rotationSpeed[2];
+
+    groupRef.current.position.y -= delta * fallSpeed;
+
+    if (groupRef.current.position.y < -15) {
+      groupRef.current.position.y = initialY + Math.random() * 5;
+      groupRef.current.position.x = (Math.random() - 0.5) * 20;
+      groupRef.current.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+    }
+  });
+
+  return (
+    <group ref={groupRef} position={position}>
+      {/* 刃（ブレード） */}
+      <mesh position={[0, 1, 0]}>
+        <boxGeometry args={[0.2, 2.5, 0.05]} />
+        <meshStandardMaterial color="#c0c0c0" metalness={0.9} roughness={0.2} />
+      </mesh>
+      {/* 鍔（つば） */}
+      <mesh position={[0, 0, 0]}>
+        <cylinderGeometry args={[0.4, 0.4, 0.1, 8]} />
+        <meshStandardMaterial color="#ffd700" metalness={0.8} roughness={0.3} />
+      </mesh>
+      {/* 柄（つか） */}
+      <mesh position={[0, -0.6, 0]}>
+        <boxGeometry args={[0.15, 1.2, 0.15]} />
+        <meshStandardMaterial color="#8b4513" metalness={0.3} roughness={0.7} />
+      </mesh>
+    </group>
+  );
+};
+
+// --- 落下するサイコロコンポーネント ---
+const FallingDice: React.FC<any> = ({ 
+  position, 
+  rotationSpeed, 
+  fallSpeed 
+}) => {
+  const groupRef = useRef<THREE.Group>(null!);
+  const [initialY] = useState(position[1]);
+
+  useFrame((_state, delta) => {
+    if (!groupRef.current) return;
+
+    groupRef.current.rotation.x += delta * rotationSpeed[0];
+    groupRef.current.rotation.y += delta * rotationSpeed[1];
+    groupRef.current.rotation.z += delta * rotationSpeed[2];
+
+    groupRef.current.position.y -= delta * fallSpeed;
+
+    if (groupRef.current.position.y < -15) {
+      groupRef.current.position.y = initialY + Math.random() * 5;
+      groupRef.current.position.x = (Math.random() - 0.5) * 20;
+      groupRef.current.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+    }
+  });
+
+  const diceColor = Math.random() > 0.5 ? '#ffffff' : '#ff4444';
+
+  return (
+    <group ref={groupRef} position={position}>
+      <mesh>
+        <boxGeometry args={[0.8, 0.8, 0.8]} />
+        <meshStandardMaterial color={diceColor} metalness={0.5} roughness={0.3} />
+      </mesh>
+    </group>
+  );
+};
+
 // --- 落下する麻雀牌コンポーネント ---
 const FallingMahjongTile: React.FC<any> = ({ 
   position, 
@@ -197,6 +280,7 @@ export const FallingBackground3D: React.FC = () => {
         Math.random() * 0.5 + 0.2 
       ],
       fallSpeed: Math.random() * 1.5 + 0.5,
+      type: ['mahjong', 'sword', 'dice'][Math.floor(Math.random() * 3)],
     }));
   }, [count]);
 
@@ -218,9 +302,11 @@ export const FallingBackground3D: React.FC = () => {
         <pointLight position={[-10, 5, -10]} intensity={1.2} color="#ffffff" />
         <Environment preset="city" />
 
-        {items.map((props, i) => (
-          <FallingMahjongTile key={i} {...props} resources={resources} />
-        ))}
+        {items.map((props, i) => {
+          if (props.type === 'sword') return <FallingSword key={i} {...props} />;
+          if (props.type === 'dice') return <FallingDice key={i} {...props} />;
+          return <FallingMahjongTile key={i} {...props} resources={resources} />;
+        })}
       </Canvas>
     </div>
   );
