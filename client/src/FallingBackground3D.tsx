@@ -6,31 +6,22 @@ import * as THREE from 'three';
 // --- 描画ヘルパー: 竹 (索子) ---
 const drawBamboo = (ctx: CanvasRenderingContext2D, x: number, y: number, scale: number, color: string) => {
   ctx.fillStyle = color;
-  const w = 15 * scale;
-  const h = 60 * scale;
+  const w = 12 * scale;
+  const h = 45 * scale;
   // 竹の節を描くため、少し隙間を空けて短冊を2つ描く
-  ctx.fillRect(x - w/2, y - h/2, w, h * 0.45);
-  ctx.fillRect(x - w/2, y + h * 0.05, w, h * 0.45);
+  ctx.fillRect(x - w/2, y - h/2, w, h * 0.4);
+  ctx.fillRect(x - w/2, y + h * 0.05, w, h * 0.4);
 };
 
 // --- 描画ヘルパー: 丸 (筒子) ---
 const drawCircle = (ctx: CanvasRenderingContext2D, x: number, y: number, scale: number, color: string) => {
   ctx.beginPath();
-  ctx.arc(x, y, 25 * scale, 0, Math.PI * 2);
+  ctx.arc(x, y, 20 * scale, 0, Math.PI * 2);
   ctx.fillStyle = color;
   ctx.fill();
-  // 内側の模様（白いバッテン的なもの）
-  ctx.strokeStyle = "rgba(255,255,255,0.8)";
-  ctx.lineWidth = 4 * scale;
-  ctx.beginPath();
-  ctx.moveTo(x - 15*scale, y - 15*scale);
-  ctx.lineTo(x + 15*scale, y + 15*scale);
-  ctx.moveTo(x + 15*scale, y - 15*scale);
-  ctx.lineTo(x - 15*scale, y + 15*scale);
-  ctx.stroke();
   // 縁取り
-  ctx.strokeStyle = "#000000";
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = "rgba(255,255,255,0.5)";
+  ctx.lineWidth = 2 * scale;
   ctx.stroke();
 };
 
@@ -49,54 +40,45 @@ const createRealMahjongTexture = (type: string, value: string | number) => {
 
   // タイプごとの描画
   if (type === 'sou' && value === 9) {
-    // 9索: 3x3の竹
+    // 9索: 3x3の竹 (中央寄せ)
+    const start = size * 0.25;
+    const step = size * 0.25;
     for (let row = 0; row < 3; row++) {
       for (let col = 0; col < 3; col++) {
-        const cx = size * 0.25 + col * (size * 0.25);
-        const cy = size * 0.2 + row * (size * 0.28);
-        // 真ん中の列を赤にしてアクセント
-        const color = col === 1 ? '#cc0000' : '#008800'; 
-        drawBamboo(ctx, cx, cy, 1.5, color); 
+        const cx = start + col * step;
+        const cy = size * 0.22 + row * (size * 0.28);
+        drawBamboo(ctx, cx, cy, 1.6, '#008800');
       }
     }
   } else if (type === 'pin' && value === 7) {
-    // 7筒: 上に斜め3つ、下に2x2
+    // 7筒: 上に斜め3つ、下に2x2 (中央寄せ)
     const green = '#008800';
     const red = '#cc0000';
     // 上3つ (緑)
-    drawCircle(ctx, size*0.2, size*0.25, 1.5, green);
-    drawCircle(ctx, size*0.5, size*0.35, 1.5, green);
-    drawCircle(ctx, size*0.8, size*0.45, 1.5, green);
+    drawCircle(ctx, size*0.25, size*0.2, 1.4, green);
+    drawCircle(ctx, size*0.5, size*0.3, 1.4, green);
+    drawCircle(ctx, size*0.75, size*0.4, 1.4, green);
     // 下4つ (赤)
-    drawCircle(ctx, size*0.35, size*0.65, 1.5, red);
-    drawCircle(ctx, size*0.65, size*0.65, 1.5, red);
-    drawCircle(ctx, size*0.35, size*0.85, 1.5, red);
-    drawCircle(ctx, size*0.65, size*0.85, 1.5, red);
+    drawCircle(ctx, size*0.35, size*0.65, 1.4, red);
+    drawCircle(ctx, size*0.65, size*0.65, 1.4, red);
+    drawCircle(ctx, size*0.35, size*0.85, 1.4, red);
+    drawCircle(ctx, size*0.65, size*0.85, 1.4, red);
 
   } else if (type === 'man' || type === 'ji') {
     // 萬子・字牌は文字描画
-    ctx.font = 'bold 280px serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = (value === '中' || value === '1萬' || value === '萬') ? '#cc0000' : '#000000';
-    if(type === 'ji' && value === '發') ctx.fillStyle = '#008800';
     
     // 萬子の場合は上に数字、下に「萬」
     if (type === 'man') {
       ctx.font = 'bold 160px serif';
       ctx.fillStyle = '#cc0000'; // 萬子は基本赤文字
-      if (value === 1) { // 1萬はでかい
-         ctx.font = 'bold 240px serif';
-         ctx.fillStyle = '#000000'; // 1萬の「一」と「萬」の意匠
-         // 萬の字を描く
-         ctx.fillText('萬', size/2, size * 0.7);
-         ctx.fillText('一', size/2, size * 0.3);
-      } else {
-         ctx.fillStyle = '#cc0000';
-         ctx.fillText('萬', size/2, size * 0.75);
-         ctx.fillText(String(value), size/2, size * 0.35);
-      }
+      ctx.fillText(String(value), size/2, size * 0.35);
+      ctx.fillText('萬', size/2, size * 0.72);
     } else {
+      // 字牌
+      ctx.font = 'bold 320px serif';
+      ctx.fillStyle = (value === '中') ? '#cc0000' : (value === '發') ? '#008800' : '#000000';
       ctx.fillText(String(value), size / 2, size / 2);
     }
   }
@@ -289,10 +271,15 @@ export const FallingBackground3D: React.FC = () => {
     return new Array(count).fill(0).map(() => {
       const r = Math.random();
       let type = 'tile';
-      if (r > 0.55) type = 'sword';
-      if (r > 0.70) type = 'axe';
-      if (r > 0.80) type = 'spear';
-      if (r > 0.90) type = 'shield';
+      
+      // 武器 60% (0.4以上)、牌 40% (0.4未満)
+      if (r >= 0.4) {
+        const weaponR = Math.random();
+        if (weaponR > 0.75) type = 'shield';
+        else if (weaponR > 0.5) type = 'spear';
+        else if (weaponR > 0.25) type = 'axe';
+        else type = 'sword';
+      }
 
       const tileData = tileOptions[Math.floor(Math.random() * tileOptions.length)];
 
