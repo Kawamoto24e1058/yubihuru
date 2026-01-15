@@ -56,6 +56,7 @@ interface GameState {
   currentTurnPlayerId: string; // 現在のターンのプレイヤーID
   turnIndex: 0 | 1; // 0 = player1, 1 = player2
   shakeTurns: number; // 画面揺れが続くターン数（0=揺れなし）
+  riichiPlayerId?: string | null; // 立直中のプレイヤーID（強制解除用）
   isGameOver: boolean;
   winner: string | null;
   startedAt?: number; // ゲーム開始時刻（マッチング直後の保護用）
@@ -995,6 +996,24 @@ io.on('connection', (socket) => {
       console.log(`📳 shakeTurns decremented to ${currentGame.shakeTurns}`);
     }
 
+    // 役が出たら、誰の立直でも強制終了
+    const yakuNames = ['断幺九', '清一色', '国士無双', '九蓮宝燈'];
+    if (yakuNames.includes(upgradedSkill.name)) {
+      const roomId = currentRoomId as string;
+      [currentGame.player1, currentGame.player2].forEach(p => {
+        if (p.state.isRiichi) {
+          p.state.isRiichi = false;
+          p.state.riichiBombCount = 0;
+          io.to(roomId).emit('riichi_cleared', {
+            username: p.username,
+            socketId: p.socketId,
+            yakuName: upgradedSkill.name,
+          });
+        }
+      });
+      currentGame.riichiPlayerId = null;
+    }
+
     io.to(currentRoomId).emit('game_state_update', currentGame);
 
     // 【立直の解除】役が確定した場合、立直を解除
@@ -1380,6 +1399,7 @@ io.on('connection', (socket) => {
     // Activate riichi state
     player.state.isRiichi = true;
     player.state.riichiBombCount = 0; // パンチ連続カウントをリセット
+    currentGame.riichiPlayerId = player.playerId;
 
     console.log(`🀄 ${player.username} activated riichi! (MP: ${player.state.mp + RIICHI_MP_COST} -> ${player.state.mp})`);
     console.log(`   立直中: MP自然回復停止、役の最低保証と裏ドラ判定が有効`);
@@ -1456,6 +1476,7 @@ io.on('connection', (socket) => {
         turnIndex: 0, // player1 from start
         shakeTurns: 0, //
         // 初期値：揺れなし
+        riichiPlayerId: null,
         isGameOver: false,
         winner: null,
         startedAt: Date.now(),
