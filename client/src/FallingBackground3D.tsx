@@ -134,22 +134,36 @@ const Sword: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
   });
   
   return (
-    <group ref={groupRef} position={position} scale={[0.8, 0.8, 0.8]}>
+    <group ref={groupRef} position={position} scale={[0.7, 0.7, 0.7]}>
+      {/* 刃: 先端を尖らせる */}
       <mesh position={[0, 1.8, 0]} castShadow>
-        <boxGeometry args={[0.4, 3.0, 0.1]} />
-        <meshPhysicalMaterial color="#cccccc" metalness={0.9} roughness={0.2} clearcoat={0.5} />
+        <cylinderGeometry args={[0.22, 0.35, 3.2, 4]} />
+        <meshPhysicalMaterial color="#e0e0e0" metalness={1.0} roughness={0.1} clearcoat={1.0} />
       </mesh>
-      <mesh position={[0, 3.5, 0]} castShadow>
-        <coneGeometry args={[0.2, 1, 4]} />
-        <meshPhysicalMaterial color="#bbbbbb" metalness={0.9} roughness={0.3} />
+      {/* 血溝 (溝): 刃の中後方に渝 */}
+      <mesh position={[0, 1.8, 0]} castShadow>
+        <cylinderGeometry args={[0.05, 0.08, 3.0, 2]} />
+        <meshPhysicalMaterial color="#a0a0a0" metalness={0.95} roughness={0.15} />
       </mesh>
-      <mesh position={[0, 0.2, 0]} castShadow>
-        <boxGeometry args={[1.2, 0.15, 0.3]} />
-        <meshPhysicalMaterial color="#aa8800" metalness={0.7} roughness={0.3} />
+      {/* 鍔: 豪華な装飾的な形 */}
+      <mesh position={[0, 0.3, 0]} castShadow>
+        <torusGeometry args={[0.45, 0.12, 8, 20]} />
+        <meshPhysicalMaterial color="#ffd700" metalness={1.0} roughness={0.2} clearcoat={0.8} />
       </mesh>
-      <mesh position={[0, -0.6, 0]} castShadow>
-        <cylinderGeometry args={[0.12, 0.12, 1.5]} />
-        <meshPhysicalMaterial color="#553311" roughness={0.8} />
+      {/* 柄を抜けやすくするためのリング */}
+      <mesh position={[0, -0.1, 0]}>
+        <torusGeometry args={[0.38, 0.08, 6, 12]} />
+        <meshPhysicalMaterial color="#c0a000" metalness={0.9} roughness={0.3} />
+      </mesh>
+      {/* 柄: 革巻き風 */}
+      <mesh position={[0, -0.95, 0]} castShadow>
+        <cylinderGeometry args={[0.1, 0.1, 1.6, 8]} />
+        <meshPhysicalMaterial color="#4a2c1a" roughness={0.9} />
+      </mesh>
+      {/* 柄頭: 重り */}
+      <mesh position={[0, -1.75, 0]} castShadow>
+        <sphereGeometry args={[0.2, 12, 12]} />
+        <meshPhysicalMaterial color="#ffd700" metalness={1.0} roughness={0.2} clearcoat={0.9} />
       </mesh>
     </group>
   );
@@ -169,18 +183,39 @@ const Axe: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
   });
   
   return (
-    <group ref={groupRef} position={position}>
-      <mesh position={[0, 0, 0]} castShadow>
-        <cylinderGeometry args={[0.1, 0.12, 3.5]} />
-        <meshPhysicalMaterial color="#4a3c31" roughness={0.9} />
+    <group ref={groupRef} position={position} scale={[0.8, 0.8, 0.8]}>
+      {/* 柄: 木製 */}
+      <mesh position={[0, 0.2, 0]} castShadow>
+        <cylinderGeometry args={[0.08, 0.12, 3.8, 8]} />
+        <meshPhysicalMaterial color="#5d4037" roughness={0.85} />
       </mesh>
-      <mesh position={[0, 1.2, 0]} castShadow>
-        <boxGeometry args={[1.8, 0.8, 0.1]} />
-        <meshPhysicalMaterial color="#888888" metalness={0.7} roughness={0.4} />
+      {/* 刃: 三日月状 (模擬) */}
+      <mesh position={[0, 1.5, 0]} castShadow>
+        <cylinderGeometry args={[1.0, 0.8, 0.7, 16]} />
+        <meshPhysicalMaterial color="#383838" metalness={0.8} roughness={0.4} />
       </mesh>
-      <mesh position={[0, 1.2, 0]} rotation={[0,0,Math.PI/2]}>
-        <cylinderGeometry args={[0.15, 0.15, 0.9]} />
-        <meshPhysicalMaterial color="#aaaaaa" metalness={0.8} roughness={0.3} />
+      {/* 刃の鋭利な縁 */}
+      <mesh position={[0.9, 1.5, 0]} castShadow>
+        <boxGeometry args={[0.15, 0.8, 0.08]} />
+        <meshPhysicalMaterial color="#e8e8e8" metalness={1.0} roughness={0.08} clearcoat={0.95} />
+      </mesh>
+      <mesh position={[-0.9, 1.5, 0]} castShadow>
+        <boxGeometry args={[0.15, 0.8, 0.08]} />
+        <meshPhysicalMaterial color="#e8e8e8" metalness={1.0} roughness={0.08} clearcoat={0.95} />
+      </mesh>
+      {/* 柄と刃の接合部: 金属補強バンド */}
+      <mesh position={[0, 1.0, 0]}>
+        <torusGeometry args={[0.35, 0.06, 8, 16]} />
+        <meshPhysicalMaterial color="#888888" metalness={0.85} roughness={0.3} />
+      </mesh>
+      <mesh position={[0, 0.75, 0]}>
+        <cylinderGeometry args={[0.35, 0.3, 0.12, 16]} />
+        <meshPhysicalMaterial color="#707070" metalness={0.8} roughness={0.35} />
+      </mesh>
+      {/* 石突き: 柄の下の金属スパイク */}
+      <mesh position={[0, -1.9, 0]} castShadow>
+        <coneGeometry args={[0.2, 0.6, 8]} />
+        <meshPhysicalMaterial color="#555555" metalness={0.9} roughness={0.25} />
       </mesh>
     </group>
   );
