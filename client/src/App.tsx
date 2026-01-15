@@ -93,7 +93,9 @@ function App() {
   const [showMenu, setShowMenu] = useState(false)
   const [showQuitConfirm, setShowQuitConfirm] = useState(false)
   const [hasActiveGame, setHasActiveGame] = useState(false) // サーバーが進行中ゲーム検知時のフラグ
-  const [isYourTurn, setIsYourTurn] = useState(false) // 強制フラグ方式：サーバーから指名された場合のみtrue
+  const [isYourTurn, setIsYourTurn] = useState(false) // turnIndexとmyIndexで算出
+  const [turnIndex, setTurnIndex] = useState<number>(0)
+  const [myIndex, setMyIndex] = useState<number | null>(null)
   const [isAnimating, setIsAnimating] = useState(false) // 演出中フラグ（初期状態は必ずfalse）
   const [isCheckingReconnect, setIsCheckingReconnect] = useState(true)
   const [totalWins, setTotalWins] = useState(0) // 通算勝利数
@@ -303,9 +305,14 @@ function App() {
       const mySocketId = newSocket.id || ''
       const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
       const opponent = data.gameState.player1.socketId === mySocketId ? data.gameState.player2 : data.gameState.player1
+      const myIdx = data.gameState.player1.socketId === mySocketId ? 0 : 1
+      const turnIdx = data.gameState.turnIndex ?? 0
 
       setMyData(me)
       setOpponentData(opponent)
+      setMyIndex(myIdx)
+      setTurnIndex(turnIdx)
+      setIsYourTurn(myIdx === turnIdx)
       setCurrentTurnId(data.gameState.currentTurnPlayerId)
       console.log('✅ Reconnect: Current turn set to:', data.gameState.currentTurnPlayerId)
       setLogs(prev => [`🔁 再接続しました`, ...prev].slice(0, 10))
@@ -378,6 +385,13 @@ function App() {
       
       setMyData(me)
       setOpponentData(opponent)
+
+      // インデックスとターンを同期
+      const myIdx = data.player1.socketId === mySocketId ? 0 : 1
+      const turnIdx = data.turnIndex ?? 0
+      setMyIndex(myIdx)
+      setTurnIndex(turnIdx)
+      setIsYourTurn(myIdx === turnIdx)
       
       // ターンIDを設定（重要：初回ターンプレイヤーを把握）
       if (data.currentTurnPlayerId) {
@@ -395,12 +409,17 @@ function App() {
       // 🔄 手動同期用にroomIdを保存
       setCurrentRoomId(data.roomId)
       
-      // 【強制フラグ方式】サーバーから指名された「isYourTurn」フラグを設定
-      setIsYourTurn(data.isYourTurn || false);
-      if (data.isYourTurn) {
-        console.log(`✅ あなたのターンです！(${data.yourOpponent}と対戦)`);
+      // turnIndex と自分のインデックスを同期
+      const myIdx = typeof data.yourIndex === 'number' ? data.yourIndex : null
+      if (myIdx !== null) setMyIndex(myIdx)
+      const turnIdx = data.turnIndex ?? 0
+      setTurnIndex(turnIdx)
+      const isMine = myIdx !== null ? turnIdx === myIdx : Boolean(data.isYourTurn)
+      setIsYourTurn(isMine)
+      if (isMine) {
+        console.log(`✅ あなたのターンです！(${data.yourOpponent}と対戦)`)
       } else {
-        console.log(`⏳ 相手のターンです。待ってください...(${data.yourOpponent}と対戦)`);
+        console.log(`⏳ 相手のターンです。待ってください...(${data.yourOpponent}と対戦)`)
       }
       
       // 【強制描画】ディレイなしで即座にbattle画面へ遷移（通信揺らぎ対策）
@@ -414,8 +433,8 @@ function App() {
       setWinner(null)
       setIsGameOver(false)
       
-      // 【即座にボタン点灯】自分のターンなら、isYourTurn = true が既に設定されているのでボタンが有効化される
-      console.log('🔓 ボタンロック解除: isProcessing=false, isYourTurn=', data.isYourTurn)
+      // 【即座にボタン点灯】
+      console.log('🔓 ボタンロック解除: isProcessing=false, isYourTurn=', isMine)
       
       // battle_ready を送信してサーバーに準備完了を通知
       newSocket.emit('battle_ready', { roomId: data.roomId })
@@ -436,9 +455,14 @@ function App() {
         const mySocketId = newSocket.id || ''
         const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
         const opponent = data.gameState.player1.socketId === mySocketId ? data.gameState.player2 : data.gameState.player1
+        const myIdx = data.gameState.player1.socketId === mySocketId ? 0 : 1
+        const turnIdx = data.turnIndex ?? data.gameState.turnIndex ?? 0
         
         setMyData(me)
         setOpponentData(opponent)
+        setMyIndex(myIdx)
+        setTurnIndex(turnIdx)
+        setIsYourTurn(myIdx === turnIdx)
         
         // ターンIDを上書き保証
         if (data.currentTurnPlayerId) {
@@ -446,14 +470,9 @@ function App() {
           console.log('✅ Turn ID synced:', data.currentTurnPlayerId)
         }
         
-        // 🔴 不変ID方式：currentTurnPlayerId と myPersistentId を比較
-        const isMyTurn = data.currentTurnPlayerId === myPersistentId
-        setIsYourTurn(isMyTurn)
-        console.log(`📍 Current Turn: ${data.currentTurnPlayerId} | My ID: ${myPersistentId} | Match: ${isMyTurn ? '✅ YES' : '❌ NO'}`)
-        
         // 【デッドロック救済】自分のターンならボタン強制有効化
-        if (isMyTurn) {
-          console.log(`🔓 ボタン強制有効化（turnPlayerId一致）`);
+        if (turnIdx === myIdx) {
+          console.log(`🔓 ボタン強制有効化（turnIndex一致）`)
           setIsProcessing(false)
           setIsAnimating(false)
           setShowImpact(false)
@@ -479,9 +498,14 @@ function App() {
       const mySocketId = newSocket.id || ''
       const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
       const opponent = data.gameState.player1.socketId === mySocketId ? data.gameState.player2 : data.gameState.player1
+      const myIdx = data.gameState.player1.socketId === mySocketId ? 0 : 1
+      const turnIdx = data.gameState.turnIndex ?? 0
       
       setMyData(me)
       setOpponentData(opponent)
+      setMyIndex(myIdx)
+      setTurnIndex(turnIdx)
+      setIsYourTurn(myIdx === turnIdx)
       setCurrentTurnId(data.gameState.currentTurnPlayerId)
       setLogs(prev => [`🔄 バトル画面に同期しました`, ...prev].slice(0, 10))
     })
@@ -497,19 +521,20 @@ function App() {
         const mySocketId = newSocket.id || ''
         const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
         const opponent = data.gameState.player1.socketId === mySocketId ? data.gameState.player2 : data.gameState.player1
+        const myIdx = data.gameState.player1.socketId === mySocketId ? 0 : 1
+        const turnIdx = data.turnIndex ?? data.gameState.turnIndex ?? 0
         
         // gameStateを更新
         setMyData(me)
         setOpponentData(opponent)
+        setMyIndex(myIdx)
+        setTurnIndex(turnIdx)
+        setIsYourTurn(myIdx === turnIdx)
         setCurrentTurnId(data.gameState.currentTurnPlayerId)
         
-        // ターン判定
-        const isMyTurn = data.gameState.currentTurnPlayerId === myPersistentId
-        setIsYourTurn(isMyTurn)
-        
         // 【デッドロック救済】forceUnlock フラグが立っていたら強制有効化
-        if (data.forceUnlock && isMyTurn) {
-          console.log(`🔓 デッドロック救済: ボタン強制有効化（turnPlayerId一致）`);
+        if (data.forceUnlock && turnIdx === myIdx) {
+          console.log(`🔓 デッドロック救済: ボタン強制有効化（turnIndex一致）`)
           setIsProcessing(false)
           setIsAnimating(false)
           setShowImpact(false)
@@ -901,12 +926,13 @@ function App() {
     // 強制ターン開始：サーバーから強制的にターンを割り当てる（2秒タイムアウト対策）
     newSocket.on('force_turn_start', (data: any) => {
       console.log('🚨 Force turn start received:', data)
-      // 🔴 不変ID方式：currentTurnPlayerId と myPersistentId を比較
-      const isMyTurn = data.currentTurnPlayerId === myPersistentId
+      const nextTurnIndex = data.turnIndex ?? turnIndex
+      setTurnIndex(nextTurnIndex)
+      const isMyTurn = myIndex !== null ? nextTurnIndex === myIndex : data.currentTurnPlayerId === myPersistentId
       setIsYourTurn(isMyTurn)
       setIsProcessing(false)
       resetAllEffects()
-      console.log(`✅ Force turn enabled: isYourTurn=${isMyTurn}, currentTurnId=${data.currentTurnPlayerId}, myId=${myPersistentId}`)
+      console.log(`✅ Force turn enabled: isYourTurn=${isMyTurn}, turnIndex=${nextTurnIndex}, myIndex=${myIndex}`)
     })
     newSocket.on('turn_change', (data: any) => {
       // 【ボタンロック強制解放】新しいターン開始時に全演出をリセット
@@ -918,21 +944,22 @@ function App() {
       // ターンIDを再判定・更新
       setCurrentTurnId(data.currentTurnPlayerId)
       
-      // 🔴 不変ID方式：currentTurnPlayerId と myPersistentId を比較
-      const isMyTurn = data.currentTurnPlayerId === myPersistentId
-      setIsYourTurn(isMyTurn)
-      console.log(`🔴 Turn check: currentTurn=${data.currentTurnPlayerId}, myId=${myPersistentId}, isMyTurn=${isMyTurn}`)
-      
-      // gameState が送られてきた場合、プレイヤーデータも更新
+      const turnIdx = data.turnIndex ?? turnIndex
+      setTurnIndex(turnIdx)
       if (data.gameState) {
         const mySocketId = newSocket.id || ''
         const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
         const opponent = data.gameState.player1.socketId === mySocketId ? data.gameState.player2 : data.gameState.player1
-        
+        const myIdx = data.gameState.player1.socketId === mySocketId ? 0 : 1
+        setMyIndex(myIdx)
+        setIsYourTurn(myIdx === turnIdx)
         setMyData(me)
         setOpponentData(opponent)
         console.log('✅ GameState updated from turn_change event')
+      } else if (myIndex !== null) {
+        setIsYourTurn(myIndex === turnIdx)
       }
+      console.log(`🔴 Turn check: turnIndex=${turnIdx}, myIndex=${myIndex}`)
       
       // リマインド送信の場合、ログに表示
       const logMessage = data.isReminder 
@@ -1069,6 +1096,9 @@ function App() {
     setOpponentData(null)
     setLogs([])
     setCurrentTurnId('')
+    setMyIndex(null)
+    setTurnIndex(0)
+    setIsYourTurn(false)
     // バトルから戻る際、保存されたユーザー名を復元
     const savedName = localStorage.getItem('yubihuru_user_name')
     if (savedName) {
@@ -1079,50 +1109,42 @@ function App() {
   }
 
   const handleUseSkill = () => {
-    // 🔴 playerIdベースのターン判定に変更
-    let safePlayerId = myPersistentId;
-    if (!safePlayerId) {
-      safePlayerId = localStorage.getItem('yubihuru_my_player_id') || '';
-      setMyPersistentId(safePlayerId);
-    }
-
-    // デバッグ救済: isYourTurn判定を外し、処理中でなければ押せるようにする
-    if (socket && gameStarted && safePlayerId && !isProcessing) {
-      console.log(`\n✅ ===== 技発動ボタン押下 =====`);
-      console.log(`   myPersistentId: ${safePlayerId}`);
-      console.log(`   currentTurnId: ${currentTurnId}`);
-      console.log(`   currentRoomId: ${currentRoomId}`);
-      console.log(`   isProcessing: ${isProcessing}`);
-      console.log(`   Emitting action_use_skill...`);
+    const isMyTurnByIndex = myIndex !== null && turnIndex === myIndex
+    if (socket && gameStarted && isMyTurnByIndex && !isProcessing) {
+      console.log(`\n✅ ===== 技発動ボタン押下 =====`)
+      console.log(`   myIndex: ${myIndex}`)
+      console.log(`   turnIndex: ${turnIndex}`)
+      console.log(`   currentRoomId: ${currentRoomId}`)
+      console.log(`   isProcessing: ${isProcessing}`)
+      console.log(`   Emitting action_use_skill...`)
       
-      socket.emit('action_use_skill', { roomId: currentRoomId, playerId: safePlayerId })
+      socket.emit('action_use_skill', { roomId: currentRoomId, playerId: myPersistentId })
       setIsProcessing(true)
       
-      console.log(`✅ action_use_skill emitted`);
+      console.log(`✅ action_use_skill emitted`)
     } else {
-      console.warn(`\n⚠️ ===== 技発動ボタン押下失敗 =====`);
-      if (!socket) console.warn('❌ Socket not connected');
-      if (!gameStarted) console.warn('❌ Game not started');
-      if (!safePlayerId) console.warn('❌ playerId is empty (localStorage not set)');
-      // デバッグ期間はターン不一致を許容するためメッセージのみ出す
-      if (currentTurnId !== safePlayerId) console.warn(`ℹ️ Not your turn (許容中): currentTurnId=${currentTurnId}, myPersistentId=${safePlayerId}`);
-      if (isProcessing) console.warn('❌ Already processing action');
+      console.warn(`\n⚠️ ===== 技発動ボタン押下失敗 =====`)
+      if (!socket) console.warn('❌ Socket not connected')
+      if (!gameStarted) console.warn('❌ Game not started')
+      if (myIndex === null) console.warn('❌ myIndex is not set')
+      if (turnIndex !== myIndex) console.warn(`ℹ️ Not your turn: turnIndex=${turnIndex}, myIndex=${myIndex}`)
+      if (isProcessing) console.warn('❌ Already processing action')
     }
   }
 
   const handleActivateZone = () => {
-    // 🔴 playerIdベースのターン判定に変更
-    if (socket && gameStarted && myData && myData.state.mp >= 5 && currentTurnId === myPersistentId && !isProcessing) {
-      console.log(`✅ ゾーン発動: playerId=${myPersistentId}, currentTurn=${currentTurnId}, zone=${selectedZoneType}, roomId=${currentRoomId}`);
+    const isMyTurnByIndex = myIndex !== null && turnIndex === myIndex
+    if (socket && gameStarted && myData && myData.state.mp >= 5 && isMyTurnByIndex && !isProcessing) {
+      console.log(`✅ ゾーン発動: myIndex=${myIndex}, turnIndex=${turnIndex}, zone=${selectedZoneType}, roomId=${currentRoomId}`)
       socket.emit('action_activate_zone', { roomId: currentRoomId, zoneType: selectedZoneType, playerId: myPersistentId })
       setIsProcessing(true)
     } else {
-      if (!socket) console.warn('⚠️ Socket not connected');
-      if (!gameStarted) console.warn('⚠️ Game not started');
-      if (!myData) console.warn('⚠️ MyData not set');
-      if (myData && myData.state.mp < 5) console.warn(`⚠️ Not enough MP: ${myData.state.mp} < 5`);
-      if (currentTurnId !== myPersistentId) console.warn(`⚠️ Not your turn: ${currentTurnId} !== ${myPersistentId}`);
-      if (isProcessing) console.warn('⚠️ Already processing action');
+      if (!socket) console.warn('⚠️ Socket not connected')
+      if (!gameStarted) console.warn('⚠️ Game not started')
+      if (!myData) console.warn('⚠️ MyData not set')
+      if (myData && myData.state.mp < 5) console.warn(`⚠️ Not enough MP: ${myData.state.mp} < 5`)
+      if (!isMyTurnByIndex) console.warn(`⚠️ Not your turn by index: turnIndex=${turnIndex}, myIndex=${myIndex}`)
+      if (isProcessing) console.warn('⚠️ Already processing action')
     }
   }
 
@@ -1910,26 +1932,26 @@ function App() {
               <div className="grid grid-cols-3 gap-3">
                 <button
                   onClick={handleUseSkill}
-                  disabled={!isYourTurn}
+                  disabled={myIndex === null || turnIndex !== myIndex || isProcessing}
                   className={`py-4 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-lg ${
-                    isYourTurn
+                    myIndex !== null && turnIndex === myIndex && !isProcessing
                       ? 'bg-red-500 hover:bg-red-400'
                       : 'bg-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  {!isYourTurn ? '⏳ 待機' : '👆 指を振る'}
+                  {myIndex !== null && turnIndex === myIndex && !isProcessing ? '👆 指を振る' : '⏳ 待機'}
                 </button>
 
                 <button
                   onClick={handleActivateZone}
-                  disabled={!isYourTurn || myData.state.mp < 5}
+                  disabled={myIndex === null || turnIndex !== myIndex || myData.state.mp < 5 || isProcessing}
                   className={`py-4 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-lg ${
-                    isYourTurn && myData.state.mp >= 5
+                    myIndex !== null && turnIndex === myIndex && myData.state.mp >= 5 && !isProcessing
                       ? 'bg-purple-500 hover:bg-purple-400'
                       : 'bg-gray-400 cursor-not-allowed'
                   }`}
                 >
-                  {!isYourTurn ? '待機' : isProcessing ? '中...' : '🌀 立直'}
+                  {myIndex !== null && turnIndex === myIndex ? (isProcessing ? '中...' : '🌀 立直') : '待機'}
                 </button>
 
                 <button
@@ -2068,12 +2090,12 @@ function App() {
           {/* スマホ時のボタンエリア（下部固定） */}
           <div className="order-5 md:hidden fixed bottom-0 left-0 right-0 p-4 bg-yellow-50 border-t-4 border-black space-y-3 max-h-[35vh] overflow-y-auto">
             {/* ターン表示 */}
-            {!isYourTurn && (
+            {!(myIndex !== null && turnIndex === myIndex) && (
               <div className="bg-orange-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-2 text-center">
                 <p className="font-black text-sm animate-pulse">⏳ 相手の行動を待っています...</p>
               </div>
             )}
-            {isProcessing && isYourTurn && (
+            {isProcessing && myIndex !== null && turnIndex === myIndex && (
               <div className="bg-blue-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-2 text-center">
                 <p className="font-black text-sm animate-pulse">⚡ 演出中...</p>
               </div>
@@ -2082,14 +2104,16 @@ function App() {
             {/* 指を振るボタン */}
             <button
               onClick={handleUseSkill}
-              disabled={isProcessing || isAnimating}
+              disabled={myIndex === null || turnIndex !== myIndex || isProcessing || isAnimating}
               className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-6 font-black text-lg ${
-                !(isProcessing || isAnimating)
+                myIndex !== null && turnIndex === myIndex && !(isProcessing || isAnimating)
                   ? 'bg-pink-500 hover:bg-pink-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
                   : 'bg-gray-400 cursor-not-allowed'
               }`}
             >
-              {!(isProcessing || isAnimating) ? (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る') : '相手の行動を待っています...'}
+              {myIndex !== null && turnIndex === myIndex && !(isProcessing || isAnimating)
+                ? (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る')
+                : '相手の行動を待っています...'}
             </button>
 
             {/* 現在のゾーン効果表示 */}
@@ -2113,7 +2137,7 @@ function App() {
               <select
                 value={selectedZoneType}
                 onChange={(e) => setSelectedZoneType(e.target.value as any)}
-                disabled={!isYourTurn}
+                disabled={myIndex === null || turnIndex !== myIndex}
                 className="flex-1 px-2 py-2 border-2 border-black font-bold text-xs bg-white"
               >
                 <option value="強攻のゾーン">🔥 強攻のゾーン</option>
