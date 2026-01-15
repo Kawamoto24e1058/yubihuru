@@ -103,16 +103,16 @@
     0% {
       opacity: 0;
       transform: scale(0.3) rotateZ(-20deg);
-      textShadow: 0 0 10px rgba(255, 0, 0, 0.5);
+      text-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
     }
     50% {
       opacity: 1;
-      textShadow: 0 0 40px rgba(255, 0, 0, 1), 0 0 80px rgba(255, 100, 0, 0.6);
+      text-shadow: 0 0 40px rgba(255, 0, 0, 1), 0 0 80px rgba(255, 100, 0, 0.6);
     }
     100% {
       opacity: 1;
       transform: scale(1) rotateZ(0deg);
-      textShadow: 0 0 20px rgba(255, 0, 0, 0.8), 0 0 40px rgba(255, 100, 0, 0.4);
+      text-shadow: 0 0 20px rgba(255, 0, 0, 0.8), 0 0 40px rgba(255, 100, 0, 0.4);
     }
   }
 
