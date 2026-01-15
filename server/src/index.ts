@@ -623,6 +623,7 @@ io.on('connection', (socket) => {
           },
           currentTurn: 0,
           currentTurnPlayerId: player1.socketId, // player1が最初のターン
+          turnIndex: 0, // player1 from start
           isGameOver: false,
           winner: null,
           startedAt: Date.now(), // マッチング直後の保護用
