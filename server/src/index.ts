@@ -1206,30 +1206,23 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // ターンチェック：playerId一致が原則だが、名前一致でも救済。さらに不一致でも進行を止めないデバッグモード。
-    console.log(`\n📍 ===== ターン判定 =====`);
+    // ターンチェックを一時的に無効化（デバッグ優先で必ず技を実行）
+    console.log(`\n📍 ===== ターン判定（無効化中） =====`);
     console.log(`   currentTurnPlayerId: "${currentGame.currentTurnPlayerId}"`);
     console.log(`   senderPlayerId: "${senderPlayerId}"`);
     console.log(`   Player1.playerId: "${currentGame.player1.playerId}"`);
     console.log(`   Player2.playerId: "${currentGame.player2.playerId}"`);
-    
-    // playerId が空文字列の場合は警告
+
     if (!senderPlayerId) {
       console.warn(`⚠️ senderPlayerId が空です。クライアント側でplayerIdを送信していない可能性があります。`);
     }
-    
+
     const attackerBySocket = currentGame.player1.socketId === socket.id ? currentGame.player1 : currentGame.player2;
     const currentTurnPlayer = currentGame.currentTurnPlayerId === currentGame.player1.playerId ? currentGame.player1 : currentGame.player2;
     const isNameMatch = attackerBySocket && currentTurnPlayer && attackerBySocket.username === currentTurnPlayer.username;
     const isMatch = String(currentGame.currentTurnPlayerId) === String(senderPlayerId) || isNameMatch;
-    console.log(`   Match (id or name): ${isMatch ? '✅ YES' : '❌ NO'}`);
-    
-    if (!isMatch) {
-      console.log(`⚠️ ターン不一致を許容（デバッグ救済）: sender=${senderPlayerId || socket.id}, currentTurn=${currentGame.currentTurnPlayerId}`);
-      // 判定を無効化して継続（必ず技を発動させる）
-    }
-
-    console.log(`✅ ターンチェック通過（救済ロジック） - 技発動処理へ\n`);
+    console.log(`   参考判定 (id or name): ${isMatch ? '✅ YES' : '❌ NO'}`);
+    console.log(`⚠️ ターンチェックをスキップし技を発動（デバッグモード）`);
 
     // Determine attacker and defender
     const isPlayer1 = currentGame.player1.socketId === socket.id;
@@ -1392,6 +1385,7 @@ io.on('connection', (socket) => {
     }
 
     console.log(`🎲 Random skill selected: ${selectedSkill.name} (${selectedSkill.type})`);
+    console.log(`🎲 技決定: ${selectedSkill.name} (id: ${selectedSkill.id}, power: ${selectedSkill.power})`);
     console.log(`   Current zone: ${attacker.state.activeZone.type} (${attacker.state.activeZone.remainingTurns} turns remaining)`);
     if (attacker.state.isRiichi) {
       console.log(`   🀄 立直状態: ${attacker.username}`);
