@@ -205,12 +205,17 @@ export const FallingBackground3D: React.FC = () => {
       position: 'absolute',
       top: 0, left: 0, width: '100vw', height: '100vh',
       zIndex: -1, pointerEvents: 'none',
-      background: 'linear-gradient(to bottom, #111, #000)'
+      background: '#fdf6e3'
     }}>
       <Canvas camera={{ position: [0, 0, 15], fov: 50 }} shadows>
-        <ambientLight intensity={0.5} />
-        <spotLight position={[10, 20, 10]} angle={0.3} penumbra={1} intensity={2} castShadow />
-        <pointLight position={[-10, 5, -10]} intensity={1} color="#ffffff" />
+        <ambientLight intensity={0.8} />
+        <directionalLight 
+          position={[10, 20, 10]} 
+          intensity={1.5} 
+          castShadow 
+          shadow-mapSize={[1024, 1024]}
+        />
+        <pointLight position={[-10, 5, -10]} intensity={1.2} color="#ffffff" />
         <Environment preset="city" />
 
         {items.map((props, i) => (

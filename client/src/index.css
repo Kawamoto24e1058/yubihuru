@@ -88,11 +88,11 @@ html, body {
 body { font-size: 8px; line-height: 1.5; letter-spacing: 1px; }
 
 .retro-window, .login-card {
-  background: rgba(255, 255, 255, 0.85);
-  border: 3px solid #000 !important;
+  background: #ffffff;
+  border: 4px solid #000 !important;
   border-radius: 0 !important;
-  padding: 16px;
-  box-shadow: 8px 8px 0px #000 !important;
+  padding: 24px;
+  box-shadow: 12px 12px 0px #000 !important;
   position: relative;
 }
 
@@ -111,18 +111,27 @@ body { font-size: 8px; line-height: 1.5; letter-spacing: 1px; }
 button, input[type="button"], input[type="submit"] {
   font-family: 'Press Start 2P', cursive;
   font-size: 10px;
-  background-color: #ffcc00 !important;
-  color: #000 !important;
+  background-color: #4285f4 !important;
+  color: #ffffff !important;
   border: 3px solid #000 !important;
-  box-shadow: 5px 5px 0px #000 !important;
-  padding: 6px 12px;
+  box-shadow: 6px 6px 0px #000 !important;
+  padding: 12px 16px;
   cursor: pointer;
   font-weight: 900;
   transition: all 0.1s;
+  width: 100%;
+  box-sizing: border-box;
+  text-align: center;
 }
 
-button:active, input[type="button"], input[type="submit"]:active { transform: translate(4px, 4px); box-shadow: 1px 1px 0px #000 !important; }
-button:hover:not(:active) { background-color: #ffd84d !important; }
+button:active, input[type="button"], input[type="submit"]:active { 
+  transform: translate(4px, 4px); 
+  box-shadow: 2px 2px 0px #000 !important; 
+}
+
+button:hover:not(:active) { 
+  background-color: #3367d6 !important; 
+}
 
 button:disabled {
   background-color: #f0f0f0 !important;
@@ -138,14 +147,15 @@ button:disabled {
 input[type="text"], input[type="password"], input[type="email"] {
   font-family: 'Press Start 2P', cursive;
   font-size: 1rem !important;
-  padding: 0.75rem !important;
+  padding: 1rem !important;
   height: auto;
   text-align: center;
   width: 100%;
   box-sizing: border-box;
   border: 3px solid #000 !important;
-  background-color: rgba(255, 255, 255, 0.9);
+  background-color: #ffffff;
   line-height: 1.2;
+  margin-bottom: 1rem;
 }
 
 input[type="text"]:focus, input[type="password"]:focus, input[type="email"]:focus {
@@ -153,18 +163,51 @@ input[type="text"]:focus, input[type="password"]:focus, input[type="email"]:focu
   box-shadow: 0 0 0 4px #ffcc00 !important;
 }
 
+@layer components {
+  .login-card h1 {
+    font-family: "Times New Roman", "Hiragino Mincho ProN", serif;
+    font-weight: bold;
+    font-size: 3rem;
+    margin-bottom: 1.5rem;
+    letter-spacing: 0.05em;
+    text-align: center;
+  }
+}
+
 /* ============================================
-   FLOATING BACKGROUND DECORATIONS
+   STATS BOX - LOGIN CARD
+   ============================================ */
+
+.stats-box {
+  background: #ffffff;
+  border: 3px solid #000 !important;
+  box-shadow: 4px 4px 0px #000;
+  padding: 1rem;
+  text-align: center;
+  margin-bottom: 1rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.stats-box p {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: bold;
+}
+
+/* ============================================
+   FLOATING BACKGROUND DECORATIONS (HIDDEN)
    ============================================ */
 
 .floating-deco {
   position: absolute;
   font-size: 5rem;
-  opacity: 0.3;
+  opacity: 0;
   z-index: 0;
   animation: floatAnim 6s ease-in-out infinite;
   user-select: none;
   pointer-events: none;
+  display: none;
 }
 
 .deco-1 { top: 10%; left: 5%; animation-delay: 0s; }
