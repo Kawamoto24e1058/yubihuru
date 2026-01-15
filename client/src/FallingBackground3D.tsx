@@ -1,5 +1,5 @@
 // client/src/FallingBackground3D.tsx
-import React, { useRef, useState, useMemo } from 'react';
+import { useRef, useState, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Environment } from '@react-three/drei';
 import * as THREE from 'three';
@@ -11,7 +11,7 @@ const FallingItem = ({ position, rotationSpeed, fallSpeed, type }: any) => {
   const [initialY] = useState(position[1]);
 
   // 毎フレーム実行されるループ（アニメーションの核）
-  useFrame((state, delta) => {
+  useFrame((_state, delta) => {
     if (!ref.current) return;
 
     // 1. ゆっくり回転させる
