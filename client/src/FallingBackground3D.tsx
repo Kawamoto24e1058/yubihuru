@@ -283,8 +283,26 @@ const Shield: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
   );
 };
 
-// --- メインコンポーネント ---
-export const FallingBackground3D: React.FC = () => {
+// --- 手のモデル ---
+const HandModel: React.FC<{ extendedFinger: 'index' | 'middle' }> = ({ extendedFinger }) => {
+  const skinMat = new THREE.MeshPhysicalMaterial({ color: '#ffdbac', roughness: 0.5 });
+  
+  return (
+    <group scale={[0.8, 0.8, 0.8]}>
+      {/* 手のひら */}
+      <mesh material={skinMat} position={[0, 0, 0]} castShadow>
+        <boxGeometry args={[1.0, 1.2, 0.4]} />
+      </mesh>
+      {/* 親指（曲げ） */}
+      <mesh material={skinMat} position={[-0.4, -0.1, 0.2]} rotation={[0, 0.5, 0.5]} castShadow>
+        <cylinderGeometry args={[0.12, 0.12, 0.5]} />
+      </mesh>
+      {/* 4本の指 */}\n      {[0, 1, 2, 3].map((i) => {
+        const isIndex = i === 0;\n        const isMiddle = i === 1;\n        const xPos = -0.3 + i * 0.25;\n        const isExtended = (extendedFinger === 'index' && isIndex) || (extendedFinger === 'middle' && isMiddle);\n        \n        return (\n          <mesh 
+            key={i} 
+            material={skinMat} 
+            position={[xPos, isExtended ? 0.8 : 0.4, isExtended ? 0 : 0.2]} 
+            rotation={[isExtended ? 0 : Math.PI / 2, 0, 0]}\n            castShadow\n          >\n            <cylinderGeometry args={[0.1, 0.1, isExtended ? 0.8 : 0.4]} />\n          </mesh>\n        );\n      })}\n    </group>\n  );\n};\n\n// 人差し指を立てた手\nconst IndexFingerHand: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {\n  const groupRef = useRef<THREE.Group>(null!);\n  useFrame((_state, delta) => {\n    if(!groupRef.current) return;\n    groupRef.current.rotation.x += delta * rotationSpeed[0];\n    groupRef.current.rotation.y += delta * rotationSpeed[1];\n    groupRef.current.position.y -= delta * fallSpeed;\n    if (groupRef.current.position.y < -20) {\n      groupRef.current.position.y = 20;\n      groupRef.current.position.x = (Math.random() - 0.5) * 25;\n    }\n  });\n  \n  return (\n    <group ref={groupRef} position={position}>\n      <HandModel extendedFinger=\"index\" />\n    </group>\n  );\n};\n\n// 中指を立てた手\nconst MiddleFingerHand: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {\n  const groupRef = useRef<THREE.Group>(null!);\n  useFrame((_state, delta) => {\n    if(!groupRef.current) return;\n    groupRef.current.rotation.x += delta * rotationSpeed[0];\n    groupRef.current.rotation.y += delta * rotationSpeed[1];\n    groupRef.current.position.y -= delta * fallSpeed;\n    if (groupRef.current.position.y < -20) {\n      groupRef.current.position.y = 20;\n      groupRef.current.position.x = (Math.random() - 0.5) * 25;\n    }\n  });\n  \n  return (\n    <group ref={groupRef} position={position}>\n      <HandModel extendedFinger=\"middle\" />\n    </group>\n  );\n};\n\n// --- メインコンポーネント ---\nexport const FallingBackground3D: React.FC = () => {
   const count = 40;
 
   const items = useMemo(() => {
@@ -303,13 +321,19 @@ export const FallingBackground3D: React.FC = () => {
       const r = Math.random();
       let type = 'tile';
       
-      // 武器 60% (0.4以上)、牌 40% (0.4未満)
-      if (r >= 0.4) {
+      // 武器 50%, 牌 20%, 人差し指 20%, 中指 10%
+      if (r < 0.5) {
         const weaponR = Math.random();
         if (weaponR > 0.75) type = 'shield';
         else if (weaponR > 0.5) type = 'spear';
         else if (weaponR > 0.25) type = 'axe';
         else type = 'sword';
+      } else if (r < 0.7) {
+        type = 'tile';
+      } else if (r < 0.9) {
+        type = 'index_hand';
+      } else {
+        type = 'middle_hand';
       }
 
       const tileData = tileOptions[Math.floor(Math.random() * tileOptions.length)];
@@ -339,6 +363,8 @@ export const FallingBackground3D: React.FC = () => {
             case 'axe': return <Axe key={i} {...props} />;
             case 'spear': return <Spear key={i} {...props} />;
             case 'shield': return <Shield key={i} {...props} />;
+            case 'index_hand': return <IndexFingerHand key={i} {...props} />;
+            case 'middle_hand': return <MiddleFingerHand key={i} {...props} />;
             default: return <MahjongTile key={i} {...props} />;
           }
         })}
