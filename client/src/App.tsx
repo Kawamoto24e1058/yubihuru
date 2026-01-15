@@ -1055,15 +1055,21 @@ function App() {
 
   const handleUseSkill = () => {
     // 🔴 playerIdベースのターン判定に変更
-    if (socket && gameStarted && currentTurnId === myPersistentId && !isProcessing) {
+    let safePlayerId = myPersistentId;
+    if (!safePlayerId) {
+      safePlayerId = localStorage.getItem('yubihuru_my_player_id') || '';
+      setMyPersistentId(safePlayerId);
+    }
+
+    if (socket && gameStarted && safePlayerId && currentTurnId === safePlayerId && !isProcessing) {
       console.log(`\n✅ ===== 技発動ボタン押下 =====`);
-      console.log(`   myPersistentId: ${myPersistentId}`);
+      console.log(`   myPersistentId: ${safePlayerId}`);
       console.log(`   currentTurnId: ${currentTurnId}`);
       console.log(`   currentRoomId: ${currentRoomId}`);
       console.log(`   isProcessing: ${isProcessing}`);
       console.log(`   Emitting action_use_skill...`);
       
-      socket.emit('action_use_skill', { roomId: currentRoomId, playerId: myPersistentId })
+      socket.emit('action_use_skill', { roomId: currentRoomId, playerId: safePlayerId })
       setIsProcessing(true)
       
       console.log(`✅ action_use_skill emitted`);
@@ -1071,7 +1077,8 @@ function App() {
       console.warn(`\n⚠️ ===== 技発動ボタン押下失敗 =====`);
       if (!socket) console.warn('❌ Socket not connected');
       if (!gameStarted) console.warn('❌ Game not started');
-      if (currentTurnId !== myPersistentId) console.warn(`❌ Not your turn: currentTurnId=${currentTurnId}, myPersistentId=${myPersistentId}`);
+      if (!safePlayerId) console.warn('❌ playerId is empty (localStorage not set)');
+      if (currentTurnId !== safePlayerId) console.warn(`❌ Not your turn: currentTurnId=${currentTurnId}, myPersistentId=${safePlayerId}`);
       if (isProcessing) console.warn('❌ Already processing action');
     }
   }
