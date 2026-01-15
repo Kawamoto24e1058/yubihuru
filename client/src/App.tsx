@@ -105,8 +105,70 @@ function App() {
   const [totalWins, setTotalWins] = useState(0) // 通算勝利数
   const [currentStreak, setCurrentStreak] = useState(0) // 連勝数
   const [shakeTurns, setShakeTurns] = useState(0) // サーバー側のターンベースの画面揺れ管理
+  const [canResume, setCanResume] = useState(false) // オートセーブデータから復帰可能かチェック
 
   const gameState = { turnIndex, shakeTurns }
+
+  // リロード対策：起動時のスクリーン状態を常にstartに
+  useEffect(() => {
+    // ページロード時は必ずstartスクリーンから開始
+    if (gameStarted) {
+      setGameStarted(false)
+    }
+  }, [])
+
+  // 起動時：セーブデータの有無をチェック
+  useEffect(() => {
+    const savedGame = localStorage.getItem('yubihuru_save')
+    if (savedGame) {
+      try {
+        JSON.parse(savedGame)
+        setCanResume(true)
+      } catch (e) {
+        console.error('Failed to parse save data:', e)
+        localStorage.removeItem('yubihuru_save')
+        setCanResume(false)
+      }
+    } else {
+      setCanResume(false)
+    }
+  }, [])
+
+  // オートセーブ：バトル中のステータス変化を監視して保存
+  useEffect(() => {
+    if (!gameStarted || !myData || !opponentData) return
+
+    const saveData = {
+      timestamp: Date.now(),
+      myData: {
+        username: myData.username,
+        hp: myData.state.hp,
+        maxHp: myData.state.maxHp,
+        mp: myData.state.mp,
+      },
+      opponentData: {
+        username: opponentData.username,
+        hp: opponentData.state.hp,
+        maxHp: opponentData.state.maxHp,
+        mp: opponentData.state.mp,
+      },
+      turnIndex,
+      myIndex,
+      selectedZoneType,
+      currentRoomId,
+      myPersistentId,
+    }
+
+    localStorage.setItem('yubihuru_save', JSON.stringify(saveData))
+  }, [gameStarted, myData?.state.hp, myData?.state.mp, opponentData?.state.hp, opponentData?.state.mp, turnIndex])
+
+  // ゲーム終了時：セーブデータをクリア
+  useEffect(() => {
+    if (isGameOver || !gameStarted) {
+      localStorage.removeItem('yubihuru_save')
+      setCanResume(false)
+    }
+  }, [isGameOver, gameStarted])
 
   // 相手のactiveEffectを監視
   useEffect(() => {
@@ -871,6 +933,9 @@ function App() {
     if (socket && name.trim()) {
       // ユーザー名を localStorage に保存
       localStorage.setItem('yubihuru_user_name', name)
+      // 新規開始時はセーブデータを削除
+      localStorage.removeItem('yubihuru_save')
+      setCanResume(false)
       socket.emit('joinGame', { username: name })
       setIsWaiting(true)
     }
@@ -881,6 +946,56 @@ function App() {
     if (socket && savedId) {
       socket.emit('reconnect', { playerId: savedId })
       setIsWaiting(true)
+    }
+  }
+
+  const resumeGame = () => {
+    const savedGame = localStorage.getItem('yubihuru_save')
+    if (!savedGame) return
+
+    try {
+      const gameData = JSON.parse(savedGame)
+      // セーブデータから状態を復元
+      setGameStarted(true)
+      setMyData({
+        username: gameData.myData.username,
+        socketId: '',
+        state: {
+          hp: gameData.myData.hp,
+          maxHp: gameData.myData.maxHp,
+          mp: gameData.myData.mp,
+          activeEffect: 'none',
+          activeEffectTurns: 0,
+          activeZone: { type: 'none', remainingTurns: 0 },
+          status: { poison: null, mpRegenBonus: null },
+          isRiichi: false,
+        },
+      } as PlayerData)
+      setOpponentData({
+        username: gameData.opponentData.username,
+        socketId: '',
+        state: {
+          hp: gameData.opponentData.hp,
+          maxHp: gameData.opponentData.maxHp,
+          mp: gameData.opponentData.mp,
+          activeEffect: 'none',
+          activeEffectTurns: 0,
+          activeZone: { type: 'none', remainingTurns: 0 },
+          status: { poison: null, mpRegenBonus: null },
+          isRiichi: false,
+        },
+      } as PlayerData)
+      setTurnIndex(gameData.turnIndex)
+      setMyIndex(gameData.myIndex)
+      setSelectedZoneType(gameData.selectedZoneType)
+      setCurrentRoomId(gameData.currentRoomId)
+      setMyPersistentId(gameData.myPersistentId)
+      setIsMyTurn(gameData.myIndex === gameData.turnIndex)
+      setIsProcessing(false)
+    } catch (e) {
+      console.error('Failed to resume game:', e)
+      localStorage.removeItem('yubihuru_save')
+      setCanResume(false)
     }
   }
 
@@ -901,6 +1016,9 @@ function App() {
       setName(savedName)
     }
     setIsProcessing(false)
+    // セーブデータをクリア（復帰ボタンは表示されなくなる）
+    localStorage.removeItem('yubihuru_save')
+    setCanResume(false)
     // IDは残す（再接続可能にする）
   }
 
@@ -1883,6 +2001,15 @@ function App() {
                     🔄 前回のバトルに復帰する
                   </button>
                 </div>
+              )}
+
+              {canResume && (
+                <button
+                  onClick={resumeGame}
+                  className="resume-btn w-full py-4 bg-orange-500 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-orange-400 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black text-xl mb-4"
+                >
+                  ⚡ バトルに復帰する (RESUME)
+                </button>
               )}
 
               <div>
