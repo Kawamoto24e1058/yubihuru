@@ -25,7 +25,7 @@ const drawCircle = (ctx: CanvasRenderingContext2D, x: number, y: number, scale: 
   ctx.stroke();
 };
 
-// --- テクスチャ生成関数 ---
+// --- テクスチャ生成関数 (中央基準の座標系で描画) ---
 const createRealMahjongTexture = (type: string, value: string | number) => {
   const size = 512;
   const canvas = document.createElement('canvas');
@@ -34,66 +34,55 @@ const createRealMahjongTexture = (type: string, value: string | number) => {
   const ctx = canvas.getContext('2d');
   if (!ctx) return new THREE.CanvasTexture(canvas);
 
-  // 背景（白）
+  // 背景（完全な白）
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, size, size);
 
-  // タイプごとの描画
+  // 中心を起点にして描画
+  ctx.save();
+  ctx.translate(size / 2, size / 2);
+
   if (type === 'sou' && value === 9) {
-    // 9索: 3x3の竹 (中央寄せ)
-    const start = size * 0.25;
-    const step = size * 0.25;
-    for (let row = 0; row < 3; row++) {
-      for (let col = 0; col < 3; col++) {
-        const cx = start + col * step;
-        const cy = size * 0.22 + row * (size * 0.28);
-        drawBamboo(ctx, cx, cy, 1.6, '#008800');
+    // 9索: 3x3の竹を中央に集約
+    const spacing = 95;
+    for (let row = -1; row <= 1; row++) {
+      for (let col = -1; col <= 1; col++) {
+        drawBamboo(ctx, col * spacing, row * spacing, 2.0, '#008800');
       }
     }
   } else if (type === 'pin' && value === 7) {
-    // 7筒: 上に斜め3つ、下に2x2 (中央寄せ)
-    const green = '#008800';
+    // 7筒: 特徴的な配置を中央に
     const red = '#cc0000';
-    // 上3つ (緑)
-    drawCircle(ctx, size*0.25, size*0.2, 1.4, green);
-    drawCircle(ctx, size*0.5, size*0.3, 1.4, green);
-    drawCircle(ctx, size*0.75, size*0.4, 1.4, green);
-    // 下4つ (赤)
-    drawCircle(ctx, size*0.35, size*0.65, 1.4, red);
-    drawCircle(ctx, size*0.65, size*0.65, 1.4, red);
-    drawCircle(ctx, size*0.35, size*0.85, 1.4, red);
-    drawCircle(ctx, size*0.65, size*0.85, 1.4, red);
-
+    const green = '#008800';
+    drawCircle(ctx, -110, -140, 1.6, green);
+    drawCircle(ctx, 0, -90, 1.6, green);
+    drawCircle(ctx, 110, -40, 1.6, green);
+    drawCircle(ctx, -70, 60, 1.6, red);
+    drawCircle(ctx, 70, 60, 1.6, red);
+    drawCircle(ctx, -70, 160, 1.5, red);
+    drawCircle(ctx, 70, 160, 1.5, red);
   } else if (type === 'man' || type === 'ji') {
-    // 萬子・字牌は文字描画
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    
-    // 萬子の場合は上に数字、下に「萬」
     if (type === 'man') {
-      ctx.font = 'bold 160px serif';
-      ctx.fillStyle = '#cc0000'; // 萬子は基本赤文字
-      ctx.fillText(String(value), size/2, size * 0.35);
-      ctx.fillText('萬', size/2, size * 0.72);
+      ctx.fillStyle = '#cc0000';
+      ctx.font = 'bold 180px serif';
+      ctx.fillText(String(value), 0, -100);
+      ctx.fillText('萬', 0, 100);
     } else {
-      // 字牌
-      ctx.font = 'bold 320px serif';
+      ctx.font = 'bold 380px serif';
       ctx.fillStyle = (value === '中') ? '#cc0000' : (value === '發') ? '#008800' : '#000000';
-      ctx.fillText(String(value), size / 2, size / 2);
+      ctx.fillText(String(value), 0, 0);
     }
   }
-
-  // 彫り込みのエッジ効果
-  ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(20, 20, size - 40, size - 40);
+  ctx.restore();
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 };
 
-// --- コンポーネント: 麻雀牌 ---
+// --- コンポーネント: 麻雀牌 (マテリアル配列で正面のみテクスチャ) ---
 const MahjongTile: React.FC<any> = ({ position, rotationSpeed, fallSpeed, tileType, tileValue }) => {
   const groupRef = useRef<THREE.Group>(null!);
   const texture = useMemo(() => createRealMahjongTexture(tileType, tileValue), [tileType, tileValue]);
@@ -110,14 +99,21 @@ const MahjongTile: React.FC<any> = ({ position, rotationSpeed, fallSpeed, tileTy
     }
   });
 
+  // マテリアル配列: 側面4つは白、正面はテクスチャ、背面は黄色
+  const materials = useMemo(() => [
+    new THREE.MeshPhysicalMaterial({ color: '#ffffff', metalness: 0.05, roughness: 0.3, clearcoat: 0.8 }), // 右
+    new THREE.MeshPhysicalMaterial({ color: '#ffffff', metalness: 0.05, roughness: 0.3, clearcoat: 0.8 }), // 左
+    new THREE.MeshPhysicalMaterial({ color: '#ffffff', metalness: 0.05, roughness: 0.3, clearcoat: 0.8 }), // 上
+    new THREE.MeshPhysicalMaterial({ color: '#ffffff', metalness: 0.05, roughness: 0.3, clearcoat: 0.8 }), // 下
+    new THREE.MeshPhysicalMaterial({ map: texture, metalness: 0.1, roughness: 0.2, clearcoat: 1.0 }),      // 正面
+    new THREE.MeshPhysicalMaterial({ color: '#f0c040', metalness: 0.0, roughness: 0.3 })                    // 背面 (黄色)
+  ], [texture]);
+
   return (
     <group ref={groupRef} position={position}>
-      <RoundedBox args={[1.6, 2.2, 1.2]} radius={0.1} smoothness={4}>
-        <meshPhysicalMaterial color="#ffffff" map={texture} metalness={0.1} roughness={0.2} clearcoat={1.0} />
-      </RoundedBox>
-      <mesh position={[0, 0, -0.61]}>
-         <boxGeometry args={[1.58, 2.18, 0.1]} />
-         <meshPhysicalMaterial color="#f0c040" metalness={0.0} roughness={0.3} />
+      <mesh castShadow>
+        <boxGeometry args={[1.6, 2.2, 1.2]} />
+        <primitive object={materials} attach="material" />
       </mesh>
     </group>
   );
