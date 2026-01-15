@@ -1493,7 +1493,7 @@ io.on('connection', (socket) => {
                 player1: gameData.player1,
                 player2: gameData.player2,
                 currentTurn: 0,
-                currentTurnPlayerId: gameData.player1.socketId,
+                currentTurnPlayerId: gameData.player1.playerId, // 🔁 プレイヤーIDで統一
                 isGameOver: false,
                 winner: null,
                 startedAt: Date.now(),
