@@ -640,6 +640,12 @@ function App() {
       }
     })
 
+    // 立直中の自動ツモ切りをサーバーから要求された場合に実行
+    newSocket.on('force_auto_skill', () => {
+      console.log('🀄 force_auto_skill received - auto executing action_use_skill')
+      handleUseSkill()
+    })
+
     newSocket.on('zone_activated', (data: any) => {
       setLogs(prev => [`🌀 ${data.username} が ${data.zoneType} ゾーン発動！`, ...prev].slice(0, 10))
       setZoneBanner(`ZONE ACTIVATED: ${data.zoneType}`)
@@ -1478,16 +1484,18 @@ function App() {
             {/* 指を振るボタン */}
             <button
               onClick={handleUseSkill}
-              disabled={turnIndex !== myIndex || isProcessing || myIndex === null}
+              disabled={turnIndex !== myIndex || isProcessing || myIndex === null || myData.state.isRiichi}
               className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-6 font-black text-lg ${
-                myIndex !== null && turnIndex === myIndex && !isProcessing
+                myIndex !== null && turnIndex === myIndex && !isProcessing && !myData.state.isRiichi
                   ? 'bg-pink-500 hover:bg-pink-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
                   : 'bg-gray-400 cursor-not-allowed'
               }`}
             >
-              {myIndex !== null && turnIndex === myIndex && !isProcessing
-                ? (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る')
-                : '相手の行動を待っています...'}
+              {myData.state.isRiichi
+                ? '🀄 立直中...（AUTO）'
+                : myIndex !== null && turnIndex === myIndex && !isProcessing
+                  ? (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る')
+                  : '相手の行動を待っています...'}
             </button>
 
             {/* 現在のゾーン効果表示 */}
@@ -1576,16 +1584,18 @@ function App() {
               {/* 指を振るボタン */}
               <button
                 onClick={handleUseSkill}
-                disabled={myIndex === null || turnIndex !== myIndex || isProcessing}
+                disabled={myIndex === null || turnIndex !== myIndex || isProcessing || myData.state.isRiichi}
                 className={`border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-8 font-black text-2xl ${
-                  myIndex !== null && turnIndex === myIndex && !isProcessing
+                  myIndex !== null && turnIndex === myIndex && !isProcessing && !myData.state.isRiichi
                     ? 'bg-pink-500 hover:bg-pink-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
                     : 'bg-gray-400 cursor-not-allowed'
                 }`}
               >
-                {myIndex !== null && turnIndex === myIndex && !isProcessing
-                  ? (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る')
-                  : '相手の行動を待っています...'}
+                {myData.state.isRiichi
+                  ? '🀄 立直中...（AUTO）'
+                  : myIndex !== null && turnIndex === myIndex && !isProcessing
+                    ? (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る')
+                    : '相手の行動を待っています...'}
               </button>
 
               {/* ゾーン展開エリア */}

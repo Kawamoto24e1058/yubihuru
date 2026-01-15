@@ -595,6 +595,29 @@ function applySkillEffect(
 io.on('connection', (socket) => {
   console.log(`✅ User connected: ${socket.id}`);
 
+  // 立直中の自動ツモ切り（AUTO発動）をスケジュールする
+  const scheduleAutoTsumoIfRiichi = (roomId: string) => {
+    const game = activeGames.get(roomId);
+    if (!game || game.isGameOver) return;
+
+    const currentId = game.currentTurnPlayerId;
+    const currentPlayer = game.player1.socketId === currentId ? game.player1 : game.player2;
+    if (!currentPlayer.state.isRiichi) return;
+
+    setTimeout(() => {
+      const latest = activeGames.get(roomId);
+      if (!latest || latest.isGameOver) return;
+      // ターンが進んでいたら中断
+      if (latest.currentTurnPlayerId !== currentId) return;
+
+      const autoSocket = io.sockets.sockets.get(currentId);
+      if (!autoSocket) return;
+
+      console.log(`🀄 AUTO ツモ切り発動: ${currentPlayer.username}`);
+      autoSocket.emit('force_auto_skill');
+    }, 2000);
+  };
+
   socket.on('joinGame', (payload: { username: string }) => {
     console.log(`🎮 ${payload.username} (${socket.id}) joining game...`);
 
@@ -871,6 +894,9 @@ io.on('connection', (socket) => {
     });
 
     console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.socketId})`);
+
+    // 立直中なら自動ツモ切りをスケジュール
+    scheduleAutoTsumoIfRiichi(currentRoomId);
   });
 
   // Handle action_riichi event - 立直発動（MP 3 消費）
@@ -956,6 +982,9 @@ io.on('connection', (socket) => {
     });
 
     console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.socketId})`);
+
+    // 立直中なら自動ツモ切りをスケジュール
+    scheduleAutoTsumoIfRiichi(currentRoomId);
   });
 
   // Handle action_use_skill event
@@ -1343,6 +1372,9 @@ io.on('connection', (socket) => {
     console.log(`   ${attacker.username}: HP ${attacker.state.hp}, MP ${attacker.state.mp}`);
     console.log(`   ${defender.username}: HP ${defender.state.hp}, MP ${defender.state.mp}`);
     console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.socketId})`);
+
+    // 立直中なら自動ツモ切りをスケジュール
+    scheduleAutoTsumoIfRiichi(currentRoomId);
   });
 
   // マッチング準備完了を受け取る
