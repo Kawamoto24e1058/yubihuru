@@ -98,6 +98,7 @@ export interface GameState {
   players: [PlayerState, PlayerState];
   currentTurn: number;
   activeZone: Zone | null;
+  shakeTurns: number; // 画面揺れが続くターン数（0=揺れなし）
   isGameOver: boolean;
   winner: string | null;
 }

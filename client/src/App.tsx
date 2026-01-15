@@ -102,8 +102,9 @@ function App() {
   const [isCheckingReconnect, setIsCheckingReconnect] = useState(true)
   const [totalWins, setTotalWins] = useState(0) // 通算勝利数
   const [currentStreak, setCurrentStreak] = useState(0) // 連勝数
+  const [shakeTurns, setShakeTurns] = useState(0) // サーバー側のターンベースの画面揺れ管理
 
-  const gameState = { turnIndex }
+  const gameState = { turnIndex, shakeTurns }
 
   // 相手のactiveEffectを監視
   useEffect(() => {
@@ -625,6 +626,9 @@ function App() {
       
       // turnIndex を更新
       setTurnIndex(gameState.turnIndex)
+      
+      // shakeTurns を更新（画面揺れ管理用）
+      setShakeTurns(gameState.shakeTurns ?? 0)
       
       if (myIndex !== null) {
         if (gameState.turnIndex === myIndex) {
