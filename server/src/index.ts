@@ -564,14 +564,32 @@ function applySkillEffect(
     }
   }
 
-  // 【立直システム】
-  // 役（断幺九, 清一色, 国士無双, 九蓮宝燈）の場合、ダメージを1.5倍にする
-  const yakuSkillIds = [127, 128, 129, 130]; // 断幺九, 清一色, 国士無双, 九蓮宝燈
-  if (isAttackerRiichi && yakuSkillIds.includes(skill.id) && damage > 0) {
-    const yakuBonus = Math.floor(damage * 0.5); // 1.5倍 = 元のダメージ + 0.5倍
-    damage += yakuBonus;
-    defender.state.hp = Math.max(0, defender.state.hp - yakuBonus);
-    logs.push(`🀄 役が確定！ダメージが1.5倍に！ ${yakuBonus}の追加ダメージ！`);
+  // 【立直システム】排他的なダメージ計算
+  const YAKU_NAMES = ['断幺九', '清一色', '国士無双', '九蓮宝燈'];
+  const isYaku = YAKU_NAMES.includes(skill.name);
+
+  // 立直中の計算ロジック
+  if (isAttackerRiichi && damage > 0) {
+    if (isYaku) {
+      // ケースA: 役の場合
+      // ・ダメージを 1.5倍 にする
+      // ・「裏ドラ（追加ダメージ）」は加算しない
+      const finalDamage = Math.floor(damage * 1.5);
+      const yakuBonus = finalDamage - damage;
+      damage = finalDamage;
+      defender.state.hp = Math.max(0, defender.state.hp - yakuBonus);
+      console.log(`🀄 役ボーナス適用: 1.5倍 -> ${finalDamage}`);
+      logs.push(`🀄 役が確定！ダメージが1.5倍に！ ${yakuBonus}の追加ダメージ！`);
+    } else {
+      // ケースB: 通常技の場合
+      // ・ダメージ倍率はかけない（1.0倍）
+      // ・「裏ドラ（ランダム追加ダメージ 10〜50）」を加算する
+      const uraDora = Math.floor(Math.random() * 41) + 10;
+      damage += uraDora;
+      defender.state.hp = Math.max(0, defender.state.hp - uraDora);
+      console.log(`🀄 裏ドラ適用: +${uraDora} -> ${damage}`);
+      logs.push(`🀄 裏ドラが発動！ さらに${uraDora}ダメージ！`);
+    }
   }
 
   return { 
