@@ -54,6 +54,7 @@ interface GameState {
   };
   currentTurn: number;
   currentTurnPlayerId: string; // 現在のターンのプレイヤーID
+  turnIndex: 0 | 1; // 0 = player1, 1 = player2
   isGameOver: boolean;
   winner: string | null;
   startedAt?: number; // ゲーム開始時刻（マッチング直後の保護用）
@@ -1200,6 +1201,13 @@ io.on('connection', (socket) => {
       currentTurnPlayerName: nextPlayer.username,
     });
 
+    // ターンインデックスをトグル（0 ↔ 1）
+    currentGame.turnIndex = currentGame.turnIndex === 0 ? 1 : 0;
+    console.log(`🔄 ターン交代: ${currentGame.turnIndex}`);
+
+    // 更新した gameState を全員に通知
+    io.to(currentRoomId).emit('game_state_update', currentGame);
+
     console.log(`📊 Turn ${currentGame.currentTurn}:`);
     console.log(`   ${attacker.username}: HP ${attacker.state.hp}, MP ${attacker.state.mp}`);
     console.log(`   ${defender.username}: HP ${defender.state.hp}, MP ${defender.state.mp}`);
@@ -1239,6 +1247,7 @@ io.on('connection', (socket) => {
         player2: gameData.player2,
         currentTurn: 0,
         currentTurnPlayerId: gameData.player1.socketId,
+        turnIndex: 0, // player1 from start
         isGameOver: false,
         winner: null,
         startedAt: Date.now(),

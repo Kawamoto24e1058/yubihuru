@@ -621,6 +621,20 @@ function App() {
       setLogs(prev => [`🔄 ${data.currentTurnPlayerName}のターン`, ...prev].slice(0, 10))
     })
 
+    // game_state_update イベントハンドラ - turnIndex が更新された時
+    newSocket.on('game_state_update', (gameState: any) => {
+      console.log(`📊 game_state_update received:`, gameState)
+      
+      // turnIndex を更新
+      setTurnIndex(gameState.turnIndex)
+      
+      // 自分のターンでなくなっていれば、isProcessing をリセット
+      if (myIndex !== null && gameState.turnIndex !== myIndex) {
+        setIsProcessing(false)
+        console.log(`⏸️ Not your turn anymore. isProcessing reset.`)
+      }
+    })
+
     newSocket.on('zone_activated', (data: any) => {
       setLogs(prev => [`🌀 ${data.username} が ${data.zoneType} ゾーン発動！`, ...prev].slice(0, 10))
       setZoneBanner(`ZONE ACTIVATED: ${data.zoneType}`)
@@ -1408,7 +1422,7 @@ function App() {
             {/* 指を振るボタン */}
             <button
               onClick={handleUseSkill}
-              disabled={myIndex === null || turnIndex !== myIndex || isProcessing}
+              disabled={turnIndex !== myIndex || isProcessing || myIndex === null}
               className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-6 font-black text-lg ${
                 myIndex !== null && turnIndex === myIndex && !isProcessing
                   ? 'bg-pink-500 hover:bg-pink-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
@@ -1461,7 +1475,7 @@ function App() {
             {/* ゾーン展開ボタン */}
             <button
               onClick={handleActivateZone}
-              disabled={myIndex === null || turnIndex !== myIndex || isProcessing || myData.state.mp < 5}
+              disabled={turnIndex !== myIndex || isProcessing || myData.state.mp < 5 || myIndex === null}
               className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-3 font-black text-sm ${
                 myIndex !== null && turnIndex === myIndex && !isProcessing && myData.state.mp >= 5
                   ? 'bg-purple-400 hover:bg-purple-300 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
