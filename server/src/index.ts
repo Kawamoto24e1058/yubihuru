@@ -553,31 +553,13 @@ function applySkillEffect(
   }
 
   // 【立直システム】
-  // 1. 立直中の役の最低保証：普通の技（威力40以下）を引いた場合、50%の確率で「断幺九（威力40）」へ昇格させる
-  if (isAttackerRiichi && skill.type === 'attack' && skill.power <= 40 && Math.random() < 0.5) {
-    const baseUpgradeDamage = calculateDamage(40); // 断幺九の威力40をダメージに
-    const upgradeDamageIncrease = baseUpgradeDamage - damage;
-    damage = baseUpgradeDamage;
-    defender.state.hp = Math.max(0, defender.state.hp - upgradeDamageIncrease);
-    logs.push(`🀄 立直による役の最低保証！ 断幺九へ昇格！ さらに${upgradeDamageIncrease}ダメージ！`);
-  }
-
-  // 2. 立直中の裏ドラ判定：技のダメージ計算後、10～50 のランダムダメージを加算
-  if (isAttackerRiichi && damage > 0) {
-    const uraDoraBonus = Math.floor(Math.random() * 41) + 10; // 10～50のランダム値
-    damage += uraDoraBonus;
-    defender.state.hp = Math.max(0, defender.state.hp - uraDoraBonus);
-    logs.push(`🀄 裏ドラ！ ${uraDoraBonus}の追加ダメージ！`);
-  }
-
-  // 3. フィールド効果：誰かが立直している間、フィールド全体の「役の威力」を 1.5倍
-  if ((isAttackerRiichi || isOpponentRiichi) && skill.type === 'special') {
-    const riichiBuff = Math.floor(damage * 0.5); // 1.5倍 = 元のダメージ + 0.5倍
-    if (riichiBuff > 0) {
-      damage += riichiBuff;
-      defender.state.hp = Math.max(0, defender.state.hp - riichiBuff);
-      logs.push(`🀄 立直フィールド効果！ 役の威力が1.5倍に！ ${riichiBuff}の追加ダメージ！`);
-    }
+  // 役（断幺九, 清一色, 国士無双, 九蓮宝燈）の場合、ダメージを1.5倍にする
+  const yakuSkillIds = [127, 128, 129, 130]; // 断幺九, 清一色, 国士無双, 九蓮宝燈
+  if (isAttackerRiichi && yakuSkillIds.includes(skill.id) && damage > 0) {
+    const yakuBonus = Math.floor(damage * 0.5); // 1.5倍 = 元のダメージ + 0.5倍
+    damage += yakuBonus;
+    defender.state.hp = Math.max(0, defender.state.hp - yakuBonus);
+    logs.push(`🀄 役が確定！ダメージが1.5倍に！ ${yakuBonus}の追加ダメージ！`);
   }
 
   return { 
@@ -752,7 +734,7 @@ io.on('connection', (socket) => {
     // 【立直中の役昇格ロジック】
     // 立直中かつ弱い技（威力40以下）が出た場合、確率で役に昇格
     let upgradedSkill = selectedSkill;
-    let wasUpgraded = false;
+    let riichiResolved = false; // 役が確定したかどうか
     if (attacker.state.isRiichi && selectedSkill.power <= 40) {
       const upgradeRoll = Math.random();
       
@@ -761,7 +743,7 @@ io.on('connection', (socket) => {
         const chuuren = SKILLS.find(skill => skill.id === 130);
         if (chuuren) {
           upgradedSkill = chuuren;
-          wasUpgraded = true;
+          riichiResolved = true;
           console.log(`🀄✨ 立直昇格: 九蓮宝燈！（1%）`);
         }
       } else if (upgradeRoll < 0.04) {
@@ -769,7 +751,7 @@ io.on('connection', (socket) => {
         const kokushi = SKILLS.find(skill => skill.id === 129);
         if (kokushi) {
           upgradedSkill = kokushi;
-          wasUpgraded = true;
+          riichiResolved = true;
           console.log(`🀄✨ 立直昇格: 国士無双！（3%）`);
         }
       } else if (upgradeRoll < 0.09) {
@@ -777,7 +759,7 @@ io.on('connection', (socket) => {
         const chinItsu = SKILLS.find(skill => skill.id === 128);
         if (chinItsu) {
           upgradedSkill = chinItsu;
-          wasUpgraded = true;
+          riichiResolved = true;
           console.log(`🀄✨ 立直昇格: 清一色！（5%）`);
         }
       } else if (upgradeRoll < 0.19) {
@@ -785,18 +767,11 @@ io.on('connection', (socket) => {
         const tanYao = SKILLS.find(skill => skill.id === 127);
         if (tanYao) {
           upgradedSkill = tanYao;
-          wasUpgraded = true;
+          riichiResolved = true;
           console.log(`🀄✨ 立直昇格: 断幺九！（10%）`);
         }
       } else {
         console.log(`🀄 立直中だが昇格せず（~81%）`);
-      }
-      
-      // 昇格した場合は立直を解除（あがり）
-      if (wasUpgraded) {
-        attacker.state.isRiichi = false;
-        attacker.state.riichiBombCount = 0;
-        console.log(`🀄 立直解除: 役が確定したため立直状態を解除`);
       }
     }
 
@@ -988,16 +963,6 @@ io.on('connection', (socket) => {
 
     currentGame.currentTurn++;
 
-    const yakuSkills = ['断幺九', '清一色', '国士無双', '九蓮宝燈', '天和'];
-    if (attacker.state.isRiichi && yakuSkills.includes(upgradedSkill.name)) {
-      attacker.state.isRiichi = false;
-      console.log(`🀄 ${attacker.username}が役「${upgradedSkill.name}」を出したため、立直状態が解除されました！`);
-      io.to(currentRoomId).emit('riichi_cleared', {
-        username: attacker.username,
-        yakuName: upgradedSkill.name,
-      });
-    }
-
     const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId 
       ? currentGame.player2 
       : currentGame.player1;
@@ -1031,6 +996,18 @@ io.on('connection', (socket) => {
     }
 
     io.to(currentRoomId).emit('game_state_update', currentGame);
+
+    // 【立直の解除】役が確定した場合、立直を解除
+    if (riichiResolved) {
+      attacker.state.isRiichi = false;
+      attacker.state.riichiBombCount = 0;
+      console.log(`🀄 立直解除: 役が確定したため立直状態を解除`);
+      io.to(currentRoomId).emit('riichi_cleared', {
+        username: attacker.username,
+        socketId: attacker.socketId,
+        yakuName: upgradedSkill.name,
+      });
+    }
 
     console.log(`📊 Turn ${currentGame.currentTurn}:`);
     console.log(`   ${attacker.username}: HP ${attacker.state.hp}, MP ${attacker.state.mp}`);
