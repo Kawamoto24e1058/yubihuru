@@ -648,9 +648,15 @@ function App() {
       
       if (myIndex !== null) {
         if (gameState.turnIndex === myIndex) {
+          // ★自分のターンになった時は、すべての操作ロックフラグを強制解除
           setIsProcessing(false)
           setIsAnimating(false)
-          console.log(`▶️ Your turn. isProcessing/isAnimating reset.`)
+          setShowImpact(false)
+          setIsUltraSkill(false)
+          setShowFinishText(false)
+          setDamageFlash(false)
+          setShieldEffect(false)
+          console.log(`▶️ Your turn. All operation locks cleared.`)
         } else {
           setIsProcessing(false)
           console.log(`⏸️ Not your turn anymore. isProcessing reset.`)
