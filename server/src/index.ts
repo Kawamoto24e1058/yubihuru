@@ -888,39 +888,49 @@ io.on('connection', (socket) => {
     }
 
     if (!currentGame.isGameOver && defender.state.hp <= 0) {
-      currentGame.isGameOver = true;
-      currentGame.winner = attacker.username;
-
-      console.log(`🏆 Game Over! ${attacker.username} wins! (waiting 2s for client演出)`);
+      console.log(`🏆 Game Over! ${attacker.username} wins! (delaying 4s for attack演出)`);
 
       const roomIdForTimeout = currentRoomId;
+      const winnerName = attacker.username;
+      const gameStateSnapshot = currentGame; // setTimeoutコールバック内での参照用
+      
+      // まずはHP が0の状態でgame_state_updateを送信（攻撃演出を再生させる）
+      io.to(roomIdForTimeout).emit('game_state_update', gameStateSnapshot);
+      
+      // 4秒後に改めてisGameOverを設定してgame_overを送信
       setTimeout(() => {
+        gameStateSnapshot.isGameOver = true;
+        gameStateSnapshot.winner = winnerName;
         io.to(roomIdForTimeout).emit('game_over', {
-          winner: attacker.username,
-          gameState: currentGame,
+          winner: winnerName,
+          gameState: gameStateSnapshot,
         });
-
         activeGames.delete(roomIdForTimeout);
-      }, 2000);
+      }, 4000);
 
       return;
     }
 
     if (!currentGame.isGameOver && attacker.state.hp <= 0) {
-      currentGame.isGameOver = true;
-      currentGame.winner = defender.username;
-
-      console.log(`🏆 Game Over! ${defender.username} wins! (waiting 2s for client演出)`);
+      console.log(`🏆 Game Over! ${defender.username} wins! (delaying 4s for attack演出)`);
 
       const roomIdForTimeout = currentRoomId;
+      const winnerName = defender.username;
+      const gameStateSnapshot = currentGame; // setTimeoutコールバック内での参照用
+      
+      // まずはHP が0の状態でgame_state_updateを送信（攻撃演出を再生させる）
+      io.to(roomIdForTimeout).emit('game_state_update', gameStateSnapshot);
+      
+      // 4秒後に改めてisGameOverを設定してgame_overを送信
       setTimeout(() => {
+        gameStateSnapshot.isGameOver = true;
+        gameStateSnapshot.winner = winnerName;
         io.to(roomIdForTimeout).emit('game_over', {
-          winner: defender.username,
-          gameState: currentGame,
+          winner: winnerName,
+          gameState: gameStateSnapshot,
         });
-
         activeGames.delete(roomIdForTimeout);
-      }, 2000);
+      }, 4000);
 
       return;
     }

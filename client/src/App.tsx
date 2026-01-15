@@ -1350,7 +1350,7 @@ function App() {
           </div>
         )}
 
-        <div className="w-full mx-auto space-y-2 md:space-y-4 flex flex-col md:flex-row gap-2 md:gap-4 pb-40 md:pb-0">
+        <div className="w-full max-w-7xl mx-auto space-y-2 md:space-y-4 flex flex-col md:flex-row gap-2 md:gap-4 pb-40 md:pb-0">
           {/* 相手側（スマホ時は上部、PC時は左） */}
           <div className="w-full md:w-1/3 order-1">
             {/* 相手ステータス */}
@@ -1687,8 +1687,10 @@ function App() {
               {myIndex !== null && turnIndex === myIndex && !isProcessing && !myRiichiState
                 ? '🀄 立直'
                 : myRiichiState
-                  ? '🀄 立直中...'
-                  : '相手の行動を待っています...'}
+                  ? '🀄 立直中...(自分の立直状態)'
+                  : opponentRiichiState
+                    ? '相手は立直中...(通常操作可能)'
+                    : '相手の行動を待っています...'}
               {myIndex !== null && turnIndex === myIndex && !isProcessing && !myRiichiState && (
                 <span className="block text-xs">(MP 3消費)</span>
               )}
