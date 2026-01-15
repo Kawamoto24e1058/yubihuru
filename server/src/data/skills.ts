@@ -143,7 +143,7 @@ export const SKILLS: Skill[] = [
   // ============================================
   // コンボ技：立直システム
   // ============================================
-  { id: 111, name: '立直（リーチ）', type: 'buff', power: 0, description: '一撃必殺の準備！', effect: 'riichi' },
+  // { id: 111, name: '立直（リーチ）', type: 'buff', power: 0, description: '一撃必殺の準備！', effect: 'riichi' }, // 削除: 立直は専用ボタンでのみ発動
   { id: 112, name: 'ロン', type: 'special', power: 300, description: '立直からの一撃必殺！相手の攻撃を逆手に取る', effect: 'riichi_attack' },
   { id: 113, name: 'ツモ', type: 'special', power: 300, description: '立直からの一撃必殺！完璧な引きで決める', effect: 'riichi_attack' },
 

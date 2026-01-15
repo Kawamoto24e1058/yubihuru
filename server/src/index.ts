@@ -749,8 +749,59 @@ io.on('connection', (socket) => {
       console.log(`   🀄 立直状態: ${attacker.username}`);
     }
 
+    // 【立直中の役昇格ロジック】
+    // 立直中かつ弱い技（威力40以下）が出た場合、確率で役に昇格
+    let upgradedSkill = selectedSkill;
+    let wasUpgraded = false;
+    if (attacker.state.isRiichi && selectedSkill.power <= 40) {
+      const upgradeRoll = Math.random();
+      
+      if (upgradeRoll < 0.01) {
+        // 1%: 九蓮宝燈（威力999, rainbow）
+        const chuuren = SKILLS.find(skill => skill.id === 130);
+        if (chuuren) {
+          upgradedSkill = chuuren;
+          wasUpgraded = true;
+          console.log(`🀄✨ 立直昇格: 九蓮宝燈！（1%）`);
+        }
+      } else if (upgradeRoll < 0.04) {
+        // 3%: 国士無双（威力130, flash）
+        const kokushi = SKILLS.find(skill => skill.id === 129);
+        if (kokushi) {
+          upgradedSkill = kokushi;
+          wasUpgraded = true;
+          console.log(`🀄✨ 立直昇格: 国士無双！（3%）`);
+        }
+      } else if (upgradeRoll < 0.09) {
+        // 5%: 清一色（威力80, blue）
+        const chinItsu = SKILLS.find(skill => skill.id === 128);
+        if (chinItsu) {
+          upgradedSkill = chinItsu;
+          wasUpgraded = true;
+          console.log(`🀄✨ 立直昇格: 清一色！（5%）`);
+        }
+      } else if (upgradeRoll < 0.19) {
+        // 10%: 断幺九（威力40, yellow）
+        const tanYao = SKILLS.find(skill => skill.id === 127);
+        if (tanYao) {
+          upgradedSkill = tanYao;
+          wasUpgraded = true;
+          console.log(`🀄✨ 立直昇格: 断幺九！（10%）`);
+        }
+      } else {
+        console.log(`🀄 立直中だが昇格せず（~81%）`);
+      }
+      
+      // 昇格した場合は立直を解除（あがり）
+      if (wasUpgraded) {
+        attacker.state.isRiichi = false;
+        attacker.state.riichiBombCount = 0;
+        console.log(`🀄 立直解除: 役が確定したため立直状態を解除`);
+      }
+    }
+
     const punchSkills = ['パンチ', 'ストレート', 'ジャブ', 'アッパーカット', 'フック', 'ボディブロー', 'ダッシュパンチ'];
-    const isPunch = punchSkills.includes(selectedSkill.name);
+    const isPunch = punchSkills.includes(upgradedSkill.name);
     
     if (attacker.state.isRiichi && isPunch) {
       if (!attacker.state.riichiBombCount) {
@@ -767,8 +818,8 @@ io.on('connection', (socket) => {
         
         io.to(currentRoomId).emit('battle_update', {
           turn: currentGame.currentTurn,
-          skillName: selectedSkill.name,
-          skillPower: selectedSkill.power,
+          skillName: upgradedSkill.name,
+          skillPower: upgradedSkill.power,
           message: `🀄💥 ${attacker.username}は立直からのパンチ技を3回連続！\n\n🏆 数え役満成立！${attacker.username}の勝利！`,
           gameState: currentGame,
         });
@@ -797,7 +848,7 @@ io.on('connection', (socket) => {
       }
     }
 
-    let result = applySkillEffect(selectedSkill, attacker, defender, attacker.state.isRiichi, defender.state.isRiichi);
+    let result = applySkillEffect(upgradedSkill, attacker, defender, attacker.state.isRiichi, defender.state.isRiichi);
     const messageParts = [...preMessages];
     if (zoneEffectMessage) {
       messageParts.push(zoneEffectMessage);
@@ -862,9 +913,9 @@ io.on('connection', (socket) => {
         socketId: defender.socketId,
         state: defender.state,
       },
-      skill: selectedSkill,
-      skillName: selectedSkill.name,
-      skillPower: selectedSkill.power,
+      skill: upgradedSkill,
+      skillName: upgradedSkill.name,
+      skillPower: upgradedSkill.power,
       damage: result.damage,
       healing: result.healing,
       message: result.message,
@@ -875,14 +926,14 @@ io.on('connection', (socket) => {
 
     io.to(currentRoomId).emit('battle_update', battleUpdate);
     io.to(currentRoomId).emit('skill_effect', {
-      skill: selectedSkill,
+      skill: upgradedSkill,
       attacker: { username: attacker.username, socketId: attacker.socketId },
       defender: { username: defender.username, socketId: defender.socketId },
       turn: currentGame.currentTurn,
     });
 
     // 【画面揺れ】shake_effect が発動した場合、shakeTurns を 4 に設定
-    if (selectedSkill.effect === 'shake_effect') {
+    if (upgradedSkill.effect === 'shake_effect') {
       currentGame.shakeTurns = 4;
       console.log(`📳 shake_effect detected: shakeTurns set to 4`);
     }
@@ -938,12 +989,12 @@ io.on('connection', (socket) => {
     currentGame.currentTurn++;
 
     const yakuSkills = ['断幺九', '清一色', '国士無双', '九蓮宝燈', '天和'];
-    if (attacker.state.isRiichi && yakuSkills.includes(selectedSkill.name)) {
+    if (attacker.state.isRiichi && yakuSkills.includes(upgradedSkill.name)) {
       attacker.state.isRiichi = false;
-      console.log(`🀄 ${attacker.username}が役「${selectedSkill.name}」を出したため、立直状態が解除されました！`);
+      console.log(`🀄 ${attacker.username}が役「${upgradedSkill.name}」を出したため、立直状態が解除されました！`);
       io.to(currentRoomId).emit('riichi_cleared', {
         username: attacker.username,
-        yakuName: selectedSkill.name,
+        yakuName: upgradedSkill.name,
       });
     }
 
