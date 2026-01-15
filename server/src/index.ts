@@ -106,7 +106,8 @@ function createPlayerState(): PlayerState {
 
 // Helper: weighted random pick according to zone rules
 function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean = false, attackerHp: number = 500, maxHp: number = 500, currentTurn: number = 1): Skill {
-  // 【天和】究極のレア技：1ターン目のみ、0.01%の確率で出現
+  // 【天和】究極のレア技：ゲーム開始直後の1ターン目のみ、0.01%の確率で出現
+  // ※ currentTurn は累計ターン数（1から開始）
   if (currentTurn === 1) {
     const tenpaiLuck = Math.random();
     if (tenpaiLuck < 0.0001) { // 0.01%（1/10000）
@@ -176,8 +177,11 @@ function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean
     return chinItsu!;
   }
 
-  // 通常技リスト（ギガインパクトと何もしないを除外 - id 200, 201）
-  let availableSkills = SKILLS.filter(skill => skill.id < 200);
+  // 通常技リスト（ギガインパクト、何もしない、天和を除外 - id 200, 201, 131）
+  // 天和（id:131）は1ターン目の特殊抽選でのみ出現
+  let availableSkills = SKILLS.filter(skill => 
+    skill.id < 200 && skill.id !== 131 // 天和を除外
+  );
 
   // 立直状態の場合、ロン/ツモを追加
   if (isRiichi) {
