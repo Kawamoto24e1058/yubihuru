@@ -1023,10 +1023,8 @@ function App() {
     }
     return log
   }
-        <div className="floating-emoji e1" style={{ top: '10%', left: '10%' }}>🀄</div>
-        <div className="floating-emoji e2" style={{ top: '20%', right: '15%' }}>⚔️</div>
-        <div className="floating-emoji e3" style={{ bottom: '15%', left: '20%' }}>🎲</div>
-        <div className="floating-emoji e4" style={{ bottom: '10%', right: '10%' }}>👆</div>
+
+  const renderZoneDisplay = (zoneType: string, isActive: boolean) => {
     if (zoneType === 'none' || !isActive) return null
     
     const zoneKey = zoneType as keyof typeof ZONE_DESCRIPTIONS
@@ -1056,6 +1054,9 @@ function App() {
             <br />
             OPPONENT...
           </h2>
+        </div>
+      </div>
+    )
   }
 
   // ゲーム終了画面（サーバーからの確定情報を使用）
@@ -1834,6 +1835,11 @@ function App() {
   // 初期画面（名前入力）
   return (
     <div className={`min-h-screen ${myRiichiState || opponentRiichiState ? 'bg-slate-800' : 'bg-yellow-50'} ${showRiichiLightning ? 'animate-pulse' : ''} flex items-center justify-center p-4 relative`}>
+      {/* 浮遊する絵文字デコレーション */}
+      <div className="floating-emoji e1" style={{ top: '10%', left: '10%' }}>🀄</div>
+      <div className="floating-emoji e2" style={{ top: '20%', right: '15%' }}>⚔️</div>
+      <div className="floating-emoji e3" style={{ bottom: '15%', left: '20%' }}>🎲</div>
+      <div className="floating-emoji e4" style={{ bottom: '10%', right: '10%' }}>👆</div>
       {/* 立直時の稲妻エフェクト */}
       {(myRiichiState || opponentRiichiState) && (
         <>
