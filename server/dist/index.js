@@ -109,7 +109,15 @@ function startWatchdog(roomId) {
                 gameState: game, // 完全なgameStateを送信
                 isReminder: true, // リマインド フラグ
             });
+            // 【デッドロック救済】game_state_updateで強制的にボタン有効化を指示
+            io.to(roomId).emit('game_state_update', {
+                gameState: game,
+                currentTurnPlayerId: game.currentTurnPlayerId,
+                forceUnlock: true, // ボタン強制有効化フラグ
+                message: `${currentPlayerName}のターン（再通知）`,
+            });
             console.log(`✅ Turn re-synced (reminder): ${currentPlayerName} (${game.currentTurnPlayerId})`);
+            console.log(`🔓 デッドロック救済: ボタン強制有効化を指示`);
         }
     }, 5000); // 5秒のウォッチドッグ
     watchdogTimers.set(roomId, timer);
@@ -811,6 +819,17 @@ io.on('connection', (socket) => {
                 console.log(`✅ Player2 (${player2.username}): isYourTurn = false`);
                 // ゲームスタート通知
                 io.to(roomId).emit('game_start', gameData);
+                // 【強制ターン開始】マッチング直後、初期ターンプレイヤーを確実にセットして全員に通知
+                console.log(`\n⚡ ===== 強制ターン開始ロジック =====`);
+                gameState.currentTurnPlayerId = player1.playerId;
+                console.log(`✅ 初期ターンを確定: ${player1.username} (${player1.playerId})`);
+                io.to(roomId).emit('game_state_update', {
+                    gameState: gameState,
+                    currentTurnPlayerId: gameState.currentTurnPlayerId,
+                    message: `${player1.username}のターンです！`,
+                });
+                console.log(`📤 game_state_update(初期ターン) 送信完了`);
+                console.log(`========================================\n`);
                 // 【握手プロセス】通信揺らぎ対策：300msおきに最新のgameStateを5回送信
                 let shakehandCount = 0;
                 const shakehandInterval = setInterval(() => {

@@ -447,6 +447,13 @@ function App() {
         setIsYourTurn(isMyTurn)
         console.log(`📍 Current Turn: ${data.currentTurnPlayerId} | My ID: ${myPersistentId} | Match: ${isMyTurn ? '✅ YES' : '❌ NO'}`)
         
+        // 【デッドロック救済】自分のターンならボタン強制有効化
+        if (isMyTurn) {
+          console.log(`🔓 ボタン強制有効化（turnPlayerId一致）`);
+          setIsProcessing(false)
+          setShowImpact(false)
+        }
+        
         // ボタンロック防止：演出中フラグをリセット
         setIsProcessing(false)
       }
@@ -478,6 +485,7 @@ function App() {
       console.log(`\n🎯 ===== gameState更新受信 =====`);
       console.log(`   技: ${data.skillName}`);
       console.log(`   ダメージ: ${data.damage}`);
+      console.log(`   forceUnlock: ${data.forceUnlock}`);
       
       if (data.gameState) {
         const mySocketId = newSocket.id || ''
@@ -492,6 +500,13 @@ function App() {
         // ターン判定
         const isMyTurn = data.gameState.currentTurnPlayerId === myPersistentId
         setIsYourTurn(isMyTurn)
+        
+        // 【デッドロック救済】forceUnlock フラグが立っていたら強制有効化
+        if (data.forceUnlock && isMyTurn) {
+          console.log(`🔓 デッドロック救済: ボタン強制有効化（turnPlayerId一致）`);
+          setIsProcessing(false)
+          setShowImpact(false)
+        }
         
         // 技演出開始
         const skillName = data.currentSkill || data.skillName || '技'
