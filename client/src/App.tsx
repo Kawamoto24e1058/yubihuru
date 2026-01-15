@@ -1532,9 +1532,9 @@ function App() {
                 <div>
                   <button
                     onClick={handleRiichi}
-                    disabled={myIndex === null || turnIndex !== myIndex || isProcessing || myData.state.mp < 3 || myRiichiState}
+                    disabled={myIndex === null || turnIndex !== myIndex || isProcessing || myData.state.mp < 5 || myRiichiState}
                     className={`w-full h-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-4 font-black text-xl ${
-                      myIndex !== null && turnIndex === myIndex && !isProcessing && myData.state.mp >= 3 && !myRiichiState
+                      myIndex !== null && turnIndex === myIndex && !isProcessing && myData.state.mp >= 5 && !myRiichiState
                         ? 'bg-red-500 hover:bg-red-400 active:scale-90 active:shadow-none animate-pulse'
                         : 'bg-gray-400 cursor-not-allowed'
                     }`}
@@ -1545,7 +1545,7 @@ function App() {
                         ? '🀄 立直中...'
                         : '相手の行動を待っています...'}
                     {myIndex !== null && turnIndex === myIndex && !isProcessing && !myRiichiState && (
-                      <span className="block text-xs mt-2">(MP 3消費)</span>
+                      <span className="block text-xs mt-2">(MP 5消費)</span>
                     )}
                   </button>
                 </div>
@@ -1688,15 +1688,15 @@ function App() {
             {/* 立直ボタン */}
             <button
               onClick={handleRiichi}
-              disabled={turnIndex !== myIndex || isProcessing || myData.state.mp < 3 || myIndex === null || myRiichiState}
+              disabled={turnIndex !== myIndex || isProcessing || myData.state.mp < 5 || myIndex === null || myRiichiState}
               className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-3 font-black text-sm ${
-                myIndex !== null && turnIndex === myIndex && !isProcessing && myData.state.mp >= 3 && !myRiichiState
+                myIndex !== null && turnIndex === myIndex && !isProcessing && myData.state.mp >= 5 && !myRiichiState
                   ? 'bg-red-500 hover:bg-red-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0 animate-pulse'
                   : 'bg-gray-400 cursor-not-allowed'
               }`}
             >
               {myIndex !== null && turnIndex === myIndex && !isProcessing && !myRiichiState ? '🀄 立直' : myRiichiState ? '🀄 立直中...' : '相手の行動を待っています...'}
-              {myIndex !== null && turnIndex === myIndex && !isProcessing && !myRiichiState && <span className="block text-xs">(MP 3消費)</span>}
+              {myIndex !== null && turnIndex === myIndex && !isProcessing && !myRiichiState && <span className="block text-xs">(MP 5消費)</span>}
             </button>
           </div>
 

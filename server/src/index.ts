@@ -1342,7 +1342,7 @@ io.on('connection', (socket) => {
     scheduleAutoTsumoIfRiichi(currentRoomId);
   });
 
-  // Handle action_riichi event - 立直発動（MP 3 消費）
+  // Handle action_riichi event - 立直発動（MP 5 消費）
   socket.on('action_riichi', () => {
     console.log(`🀄 ${socket.id} attempting to activate riichi (立直)`);
 
@@ -1379,7 +1379,7 @@ io.on('connection', (socket) => {
     const player = isPlayer1 ? currentGame.player1 : currentGame.player2;
 
     // 立直のMPコスト
-    const RIICHI_MP_COST = 3;
+    const RIICHI_MP_COST = 5;
 
     // Check if already in riichi state
     if (player.state.isRiichi) {
