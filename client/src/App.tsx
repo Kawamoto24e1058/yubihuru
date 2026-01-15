@@ -136,6 +136,9 @@ function App() {
   // 試合終了・リセット時の演出フラグ掃除
   useEffect(() => {
     if (!gameStarted) {
+      console.log('🔄 Game ended - clearing all effects')
+      
+      // 1. Reactの演出Stateをリセット
       setSpecialVictoryText(null)
       setVictoryResult(null)
       setOpponentInkEffect(false)
@@ -150,6 +153,24 @@ function App() {
       setGlassBreak(false)
       setSlowMotion(false)
       setBuffedDamage(null)
+      setSkillEffect(null)
+      setFoodImage(null)
+      setScreenShake(false)
+      setDamageFlash(false)
+      setHealFlash(false)
+      setPoisonFlash(false)
+      setShieldEffect(false)
+      setYakumanFreeze(false)
+      setTenpaiUltimate(false)
+      setWhiteoutFlash(false)
+      setMahjongTiles([])
+      setIsShaking(false)
+      
+      // 2. DOMに直接ついたクラスがあれば削除（念のため）
+      document.body.classList.remove('flash', 'rainbow', 'shake', 'animate-pulse', 'animate-shake')
+      document.documentElement.style.animation = 'none'
+      
+      console.log('✅ All effects cleared')
     }
 
     if (isGameOver) {
