@@ -132,7 +132,69 @@ button:disabled {
 }
 
 /* ============================================
-   FLOATING EMOJI DECORATIONS
+   INPUT FIELDS - LARGE SIZE
+   ============================================ */
+
+input[type="text"], input[type="password"], input[type="email"] {
+  font-family: 'Press Start 2P', cursive;
+  font-size: 2rem !important;
+  padding: 1rem !important;
+  height: 60px;
+  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
+  border: 3px solid #000 !important;
+  background-color: #fff;
+  line-height: 1.2;
+}
+
+input[type="text"]:focus, input[type="password"]:focus, input[type="email"]:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px #ffcc00 !important;
+}
+
+/* ============================================
+   FLOATING BACKGROUND DECORATIONS
+   ============================================ */
+
+.floating-deco {
+  position: absolute;
+  font-size: 5rem;
+  opacity: 0.3;
+  z-index: 0;
+  animation: floatAnim 6s ease-in-out infinite;
+  user-select: none;
+  pointer-events: none;
+}
+
+.deco-1 { top: 10%; left: 5%; animation-delay: 0s; }
+.deco-2 { top: 20%; right: 10%; animation-delay: 1s; }
+.deco-3 { bottom: 15%; left: 15%; animation-delay: 2s; }
+.deco-4 { bottom: 10%; right: 5%; animation-delay: 3s; }
+.deco-5 { 
+  top: 50%; 
+  left: 50%; 
+  transform: translate(-50%, -50%); 
+  opacity: 0.1; 
+  font-size: 15rem;
+}
+
+@keyframes floatAnim {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-30px) rotate(10deg); }
+}
+
+.deco-5 {
+  animation-name: floatAnimCenter;
+}
+
+@keyframes floatAnimCenter {
+  0%, 100% { transform: translate(-50%, -50%) translateY(0) rotate(0deg); }
+  50% { transform: translate(-50%, -50%) translateY(-30px) rotate(10deg); }
+}
+
+/* ============================================
+   FLOATING EMOJI DECORATIONS (OLD - SMALL)
    ============================================ */
 
 .floating-emoji {

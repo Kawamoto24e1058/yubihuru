@@ -1835,11 +1835,12 @@ function App() {
   // 初期画面（名前入力）
   return (
     <div className={`min-h-screen ${myRiichiState || opponentRiichiState ? 'bg-slate-800' : 'bg-yellow-50'} ${showRiichiLightning ? 'animate-pulse' : ''} flex items-center justify-center p-4 relative`}>
-      {/* 浮遊する絵文字デコレーション */}
-      <div className="floating-emoji e1" style={{ top: '10%', left: '10%' }}>🀄</div>
-      <div className="floating-emoji e2" style={{ top: '20%', right: '15%' }}>⚔️</div>
-      <div className="floating-emoji e3" style={{ bottom: '15%', left: '20%' }}>🎲</div>
-      <div className="floating-emoji e4" style={{ bottom: '10%', right: '10%' }}>👆</div>
+      {/* 背景に浮遊する大きな絵文字装飾 */}
+      <div className="floating-deco deco-1">🀄</div>
+      <div className="floating-deco deco-2">⚔️</div>
+      <div className="floating-deco deco-3">🎲</div>
+      <div className="floating-deco deco-4">⚡</div>
+      <div className="floating-deco deco-5">👆</div>
       {/* 立直時の稲妻エフェクト */}
       {(myRiichiState || opponentRiichiState) && (
         <>
@@ -1863,7 +1864,7 @@ function App() {
           <div className="lightning-flash"></div>
         </>
       )}
-      <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-8 max-w-md w-full relative z-20">
+      <div className="login-card bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-8 max-w-md w-full relative z-20">
         <h1 className="text-6xl font-black text-center mb-8 -rotate-3">
           YUBIFURU
         </h1>
