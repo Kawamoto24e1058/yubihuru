@@ -633,10 +633,15 @@ function App() {
       // turnIndex を更新
       setTurnIndex(gameState.turnIndex)
       
-      // 自分のターンでなくなっていれば、isProcessing をリセット
-      if (myIndex !== null && gameState.turnIndex !== myIndex) {
-        setIsProcessing(false)
-        console.log(`⏸️ Not your turn anymore. isProcessing reset.`)
+      if (myIndex !== null) {
+        if (gameState.turnIndex === myIndex) {
+          setIsProcessing(false)
+          setIsAnimating(false)
+          console.log(`▶️ Your turn. isProcessing/isAnimating reset.`)
+        } else {
+          setIsProcessing(false)
+          console.log(`⏸️ Not your turn anymore. isProcessing reset.`)
+        }
       }
     })
 
@@ -1671,6 +1676,26 @@ function App() {
                 </div>
               </div>
             </div>
+
+            {/* 立直ボタン（PC） */}
+            <button
+              onClick={handleRiichi}
+              disabled={myIndex === null || turnIndex !== myIndex || isProcessing || myData.state.mp < 3 || myRiichiState}
+              className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-4 font-black text-xl ${
+                myIndex !== null && turnIndex === myIndex && !isProcessing && myData.state.mp >= 3 && !myRiichiState
+                  ? 'bg-red-500 hover:bg-red-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0 animate-pulse'
+                  : 'bg-gray-400 cursor-not-allowed'
+              }`}
+            >
+              {myIndex !== null && turnIndex === myIndex && !isProcessing && !myRiichiState
+                ? '🀄 立直'
+                : myRiichiState
+                  ? '🀄 立直中...'
+                  : '相手の行動を待っています...'}
+              {myIndex !== null && turnIndex === myIndex && !isProcessing && !myRiichiState && (
+                <span className="block text-xs">(MP 3消費)</span>
+              )}
+            </button>
           </div>
         </div>
 

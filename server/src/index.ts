@@ -595,8 +595,379 @@ function applySkillEffect(
 io.on('connection', (socket) => {
   console.log(`✅ User connected: ${socket.id}`);
 
+  // 共通：技発動処理（手動/自動どちらもここで実行）
+  function processUseSkill(actingSocketId: string, roomIdHint?: string, options: { isAuto?: boolean } = {}) {
+    const actingSocket = io.sockets.sockets.get(actingSocketId);
+    console.log(`⚔️ ${actingSocketId} used a skill${options.isAuto ? ' (auto)' : ''}`);
+
+    // 対象ゲームを特定
+    let currentGame: GameState | undefined;
+    let currentRoomId: string | undefined;
+
+    if (roomIdHint) {
+      const hinted = activeGames.get(roomIdHint);
+      if (hinted && (hinted.player1.socketId === actingSocketId || hinted.player2.socketId === actingSocketId)) {
+        currentGame = hinted;
+        currentRoomId = roomIdHint;
+      }
+    }
+
+    if (!currentGame || !currentRoomId) {
+      activeGames.forEach((game, roomId) => {
+        if (game.player1.socketId === actingSocketId || game.player2.socketId === actingSocketId) {
+          currentGame = game;
+          currentRoomId = roomId;
+        }
+      });
+    }
+
+    if (!currentGame || !currentRoomId) {
+      actingSocket?.emit('error', { message: 'Game not found' });
+      return;
+    }
+
+    if (currentGame.isGameOver) {
+      actingSocket?.emit('error', { message: 'Game is already over' });
+      return;
+    }
+
+    // ターンチェック
+    if (currentGame.currentTurnPlayerId !== actingSocketId) {
+      console.log(`❌ ${actingSocketId} tried to use skill on opponent's turn`);
+      actingSocket?.emit('error', { message: 'Not your turn!' });
+      return;
+    }
+
+    const isPlayer1 = currentGame.player1.socketId === actingSocketId;
+    const attacker = isPlayer1 ? currentGame.player1 : currentGame.player2;
+    const defender = isPlayer1 ? currentGame.player2 : currentGame.player1;
+
+    if (!defender || !defender.state) {
+      console.warn(`⚠️ Defender missing for socket ${actingSocketId}`);
+      actingSocket?.emit('error', { message: 'Opponent not found' });
+      return;
+    }
+
+    // ターン開始時の状態異常処理（毒など）
+    const preMessages: string[] = [];
+    if (attacker.state.status.poison) {
+      const poisonDamage = attacker.state.status.poison.damagePerTurn;
+      attacker.state.hp = Math.max(0, attacker.state.hp - poisonDamage);
+      attacker.state.status.poison.turns -= 1;
+      preMessages.push(`☠️ 毒のダメージで${poisonDamage}を受けた！`);
+      if (attacker.state.status.poison.turns <= 0) {
+        attacker.state.status.poison = null;
+        preMessages.push('☠️ 毒が解除された！');
+      }
+      if (attacker.state.hp <= 0) {
+        currentGame.isGameOver = true;
+        currentGame.winner = defender.username;
+        io.to(currentRoomId).emit('game_over', {
+          winner: defender.username,
+          gameState: currentGame,
+        });
+        activeGames.delete(currentRoomId);
+        return;
+      }
+    }
+
+    // 【指が折れる】行動不能チェック
+    if (attacker.state.isBroken && attacker.state.brokenTurns && attacker.state.brokenTurns > 0) {
+      const messageParts: string[] = [];
+      messageParts.push(`🦴 ${attacker.username}は指が折れている！このターンは行動不能！`);
+
+      attacker.state.brokenTurns--;
+      if (attacker.state.brokenTurns === 0) {
+        attacker.state.isBroken = false;
+        messageParts.push(`🦴 ${attacker.username}の指が回復した！`);
+      }
+
+      let regenAmount = attacker.state.activeZone.type === '乱舞のゾーン' ? 0 : 1;
+      if (attacker.state.status.mpRegenBonus) {
+        regenAmount += attacker.state.status.mpRegenBonus.amount;
+        attacker.state.status.mpRegenBonus.turns -= 1;
+        if (attacker.state.status.mpRegenBonus.turns <= 0) {
+          attacker.state.status.mpRegenBonus = null;
+        }
+      }
+      if (regenAmount > 0) {
+        attacker.state.mp = Math.min(5, attacker.state.mp + regenAmount);
+      }
+
+      if (attacker.state.activeZone.remainingTurns > 0) {
+        attacker.state.activeZone.remainingTurns--;
+        if (attacker.state.activeZone.remainingTurns === 0) {
+          attacker.state.activeZone.type = 'none';
+          io.to(currentRoomId).emit('zone_expired', {
+            username: attacker.username,
+            socketId: attacker.socketId,
+          });
+        }
+      }
+
+      if (attacker.state.activeEffectTurns && attacker.state.activeEffectTurns > 0) {
+        attacker.state.activeEffectTurns--;
+        if (attacker.state.activeEffectTurns === 0) attacker.state.activeEffect = 'none';
+      }
+      if (defender.state.activeEffectTurns && defender.state.activeEffectTurns > 0) {
+        defender.state.activeEffectTurns--;
+        if (defender.state.activeEffectTurns === 0) defender.state.activeEffect = 'none';
+      }
+
+      currentGame.currentTurn++;
+      const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId 
+        ? currentGame.player2 
+        : currentGame.player1;
+      currentGame.currentTurnPlayerId = nextPlayer.socketId;
+
+      const battleUpdate = {
+        turn: currentGame.currentTurn,
+        attacker: { username: attacker.username, socketId: attacker.socketId, state: attacker.state },
+        defender: { username: defender.username, socketId: defender.socketId, state: defender.state },
+        skillName: '行動不能',
+        skillPower: 0,
+        damage: 0,
+        healing: 0,
+        message: messageParts.join('\n'),
+        gameState: currentGame,
+      };
+      io.to(currentRoomId).emit('battle_update', battleUpdate);
+
+      io.to(currentRoomId).emit('turn_change', {
+        currentTurnPlayerId: currentGame.currentTurnPlayerId,
+        currentTurnPlayerName: nextPlayer.username,
+      });
+
+      return;
+    }
+
+    const selectedSkill = getRandomSkill(attacker.state.activeZone, attacker.state.isRiichi, attacker.state.hp, attacker.state.maxHp, currentGame.currentTurn);
+    console.log(`🎲 Random skill selected: ${selectedSkill.name} (${selectedSkill.type})`);
+    console.log(`   Current zone: ${attacker.state.activeZone.type} (${attacker.state.activeZone.remainingTurns} turns remaining)`);
+    if (attacker.state.isRiichi) {
+      console.log(`   🀄 立直状態: ${attacker.username}`);
+    }
+
+    const punchSkills = ['パンチ', 'ストレート', 'ジャブ', 'アッパーカット', 'フック', 'ボディブロー', 'ダッシュパンチ'];
+    const isPunch = punchSkills.includes(selectedSkill.name);
+    
+    if (attacker.state.isRiichi && isPunch) {
+      if (!attacker.state.riichiBombCount) {
+        attacker.state.riichiBombCount = 0;
+      }
+      attacker.state.riichiBombCount++;
+      console.log(`🀄 パンチ連続カウント: ${attacker.state.riichiBombCount}/3`);
+      
+      if (attacker.state.riichiBombCount >= 3) {
+        currentGame.isGameOver = true;
+        currentGame.winner = attacker.username;
+        
+        console.log(`🏆 数え役満成立！${attacker.username}の勝利！`);
+        
+        io.to(currentRoomId).emit('battle_update', {
+          turn: currentGame.currentTurn,
+          skillName: selectedSkill.name,
+          skillPower: selectedSkill.power,
+          message: `🀄💥 ${attacker.username}は立直からのパンチ技を3回連続！\n\n🏆 数え役満成立！${attacker.username}の勝利！`,
+          gameState: currentGame,
+        });
+        
+        io.to(currentRoomId).emit('game_over', {
+          winner: attacker.username,
+          gameState: currentGame,
+        });
+        
+        activeGames.delete(currentRoomId);
+        return;
+      }
+    } else {
+      if (attacker.state.riichiBombCount && attacker.state.riichiBombCount > 0) {
+        console.log(`🀄 パンチ連続カウント: リセット`);
+        attacker.state.riichiBombCount = 0;
+      }
+    }
+
+    let zoneEffectMessage = '';
+    if (attacker.state.activeZone.type !== 'none') {
+      if (attacker.state.activeZone.type === '強攻のゾーン') {
+        zoneEffectMessage = `💥 ゾーン効果: 高威力技が出現！`;
+      } else if (attacker.state.activeZone.type === '集中のゾーン') {
+        zoneEffectMessage = `🎯 ゾーン効果: 支援技が出現！`;
+      }
+    }
+
+    let result = applySkillEffect(selectedSkill, attacker, defender, attacker.state.isRiichi, defender.state.isRiichi);
+    const messageParts = [...preMessages];
+    if (zoneEffectMessage) {
+      messageParts.push(zoneEffectMessage);
+    }
+    messageParts.push(result.message);
+
+    if (attacker.state.activeZone.type === '強攻のゾーン') {
+      const selfDamageChance = Math.random();
+      if (selfDamageChance < 0.2) {
+        const selfDamage = Math.floor(result.damage * 0.2) || 10;
+        attacker.state.hp = Math.max(0, attacker.state.hp - selfDamage);
+        messageParts.push(`💢 強攻の反動！ ${attacker.username}は${selfDamage}ダメージを受けた！`);
+        console.log(`💢 強攻の反動: ${attacker.username} -${selfDamage} HP`);
+      }
+    }
+
+    result.message = messageParts.join('\n');
+
+    console.log(`🧪 HP after action -> ${attacker.username}: ${attacker.state.hp}, ${defender.username}: ${defender.state.hp}`);
+
+    let regenAmount = attacker.state.activeZone.type === '乱舞のゾーン' ? 0 : attacker.state.isRiichi ? 0 : 1;
+    if (attacker.state.status.mpRegenBonus) {
+      regenAmount += attacker.state.status.mpRegenBonus.amount;
+      attacker.state.status.mpRegenBonus.turns -= 1;
+      if (attacker.state.status.mpRegenBonus.turns <= 0) {
+        attacker.state.status.mpRegenBonus = null;
+      }
+    }
+    if (regenAmount > 0) {
+      attacker.state.mp = Math.min(5, attacker.state.mp + regenAmount);
+    }
+    if (attacker.state.isRiichi) {
+      console.log(`💧 ${attacker.username} MP: ${attacker.state.mp} (max 5) - 立直中のため回復停止`);
+    } else {
+      console.log(`💧 ${attacker.username} MP: ${attacker.state.mp} (max 5)`);
+    }
+
+    if (attacker.state.activeZone.remainingTurns > 0) {
+      attacker.state.activeZone.remainingTurns--;
+      console.log(`⏱️ Zone turns remaining: ${attacker.state.activeZone.remainingTurns}`);
+      
+      if (attacker.state.activeZone.remainingTurns === 0) {
+        attacker.state.activeZone.type = 'none';
+        console.log(`🔄 ${attacker.username} zone expired!`);
+        
+        io.to(currentRoomId).emit('zone_expired', {
+          username: attacker.username,
+          socketId: attacker.socketId,
+        });
+      }
+    }
+
+    const battleUpdate = {
+      turn: currentGame.currentTurn,
+      attacker: {
+        username: attacker.username,
+        socketId: attacker.socketId,
+        state: attacker.state,
+      },
+      defender: {
+        username: defender.username,
+        socketId: defender.socketId,
+        state: defender.state,
+      },
+      skill: selectedSkill,
+      skillName: selectedSkill.name,
+      skillPower: selectedSkill.power,
+      damage: result.damage,
+      healing: result.healing,
+      message: result.message,
+      skillEffect: result.skillEffect,
+      wasBuffedAttack: result.wasBuffedAttack,
+      gameState: currentGame,
+    };
+
+    io.to(currentRoomId).emit('battle_update', battleUpdate);
+    io.to(currentRoomId).emit('skill_effect', {
+      skill: selectedSkill,
+      attacker: { username: attacker.username, socketId: attacker.socketId },
+      defender: { username: defender.username, socketId: defender.socketId },
+      turn: currentGame.currentTurn,
+    });
+
+    if (!currentGame.isGameOver && defender.state.hp <= 0) {
+      currentGame.isGameOver = true;
+      currentGame.winner = attacker.username;
+
+      console.log(`🏆 Game Over! ${attacker.username} wins! (waiting 2s for client演出)`);
+
+      const roomIdForTimeout = currentRoomId;
+      setTimeout(() => {
+        io.to(roomIdForTimeout).emit('game_over', {
+          winner: attacker.username,
+          gameState: currentGame,
+        });
+
+        activeGames.delete(roomIdForTimeout);
+      }, 2000);
+
+      return;
+    }
+
+    if (!currentGame.isGameOver && attacker.state.hp <= 0) {
+      currentGame.isGameOver = true;
+      currentGame.winner = defender.username;
+
+      console.log(`🏆 Game Over! ${defender.username} wins! (waiting 2s for client演出)`);
+
+      const roomIdForTimeout = currentRoomId;
+      setTimeout(() => {
+        io.to(roomIdForTimeout).emit('game_over', {
+          winner: defender.username,
+          gameState: currentGame,
+        });
+
+        activeGames.delete(roomIdForTimeout);
+      }, 2000);
+
+      return;
+    }
+
+    currentGame.currentTurn++;
+
+    const yakuSkills = ['断幺九', '清一色', '国士無双', '九蓮宝燈', '天和'];
+    if (attacker.state.isRiichi && yakuSkills.includes(selectedSkill.name)) {
+      attacker.state.isRiichi = false;
+      console.log(`🀄 ${attacker.username}が役「${selectedSkill.name}」を出したため、立直状態が解除されました！`);
+      io.to(currentRoomId).emit('riichi_cleared', {
+        username: attacker.username,
+        yakuName: selectedSkill.name,
+      });
+    }
+
+    const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId 
+      ? currentGame.player2 
+      : currentGame.player1;
+    currentGame.currentTurnPlayerId = nextPlayer.socketId;
+
+    if (attacker.state.activeEffectTurns && attacker.state.activeEffectTurns > 0) {
+      attacker.state.activeEffectTurns--;
+      if (attacker.state.activeEffectTurns === 0) {
+        attacker.state.activeEffect = 'none';
+      }
+    }
+    if (defender.state.activeEffectTurns && defender.state.activeEffectTurns > 0) {
+      defender.state.activeEffectTurns--;
+      if (defender.state.activeEffectTurns === 0) {
+        defender.state.activeEffect = 'none';
+      }
+    }
+
+    io.to(currentRoomId).emit('turn_change', {
+      currentTurnPlayerId: currentGame.currentTurnPlayerId,
+      currentTurnPlayerName: nextPlayer.username,
+    });
+
+    currentGame.turnIndex = currentGame.turnIndex === 0 ? 1 : 0;
+    console.log(`🔄 ターン交代: ${currentGame.turnIndex}`);
+
+    io.to(currentRoomId).emit('game_state_update', currentGame);
+
+    console.log(`📊 Turn ${currentGame.currentTurn}:`);
+    console.log(`   ${attacker.username}: HP ${attacker.state.hp}, MP ${attacker.state.mp}`);
+    console.log(`   ${defender.username}: HP ${defender.state.hp}, MP ${defender.state.mp}`);
+    console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.socketId})`);
+
+    scheduleAutoTsumoIfRiichi(currentRoomId);
+  }
+
   // 立直中の自動ツモ切り（AUTO発動）をスケジュールする
-  const scheduleAutoTsumoIfRiichi = (roomId: string) => {
+  function scheduleAutoTsumoIfRiichi(roomId: string) {
     const game = activeGames.get(roomId);
     if (!game || game.isGameOver) return;
 
@@ -610,13 +981,12 @@ io.on('connection', (socket) => {
       // ターンが進んでいたら中断
       if (latest.currentTurnPlayerId !== currentId) return;
 
-      const autoSocket = io.sockets.sockets.get(currentId);
-      if (!autoSocket) return;
-
       console.log(`🀄 AUTO ツモ切り発動: ${currentPlayer.username}`);
-      autoSocket.emit('force_auto_skill');
+
+      // 自動で技を実行し、ターン反転と同期を行う
+      processUseSkill(currentId, roomId, { isAuto: true });
     }, 2000);
-  };
+  }
 
   socket.on('joinGame', (payload: { username: string }) => {
     console.log(`🎮 ${payload.username} (${socket.id}) joining game...`);
@@ -989,392 +1359,7 @@ io.on('connection', (socket) => {
 
   // Handle action_use_skill event
   socket.on('action_use_skill', () => {
-    console.log(`⚔️ ${socket.id} used a skill`);
-
-    // Find the game this player is in
-    let currentGame: GameState | undefined;
-    let currentRoomId: string | undefined;
-
-    activeGames.forEach((game, roomId) => {
-      if (game.player1.socketId === socket.id || game.player2.socketId === socket.id) {
-        currentGame = game;
-        currentRoomId = roomId;
-      }
-    });
-
-    if (!currentGame || !currentRoomId) {
-      socket.emit('error', { message: 'Game not found' });
-      return;
-    }
-
-    if (currentGame.isGameOver) {
-      socket.emit('error', { message: 'Game is already over' });
-      return;
-    }
-
-    // ターンチェック：自分のターンかどうか
-    if (currentGame.currentTurnPlayerId !== socket.id) {
-      console.log(`❌ ${socket.id} tried to use skill on opponent's turn`);
-      socket.emit('error', { message: 'Not your turn!' });
-      return;
-    }
-
-    // Determine attacker and defender
-    const isPlayer1 = currentGame.player1.socketId === socket.id;
-    const attacker = isPlayer1 ? currentGame.player1 : currentGame.player2;
-    const defender = isPlayer1 ? currentGame.player2 : currentGame.player1;
-
-    // Safety: ensure opponent exists before proceeding
-    if (!defender || !defender.state) {
-      console.warn(`⚠️ Defender missing for socket ${socket.id}`);
-      socket.emit('error', { message: 'Opponent not found' });
-      return;
-    }
-
-    // ターン開始時の状態異常処理（毒など）
-    const preMessages: string[] = [];
-    if (attacker.state.status.poison) {
-      const poisonDamage = attacker.state.status.poison.damagePerTurn;
-      attacker.state.hp = Math.max(0, attacker.state.hp - poisonDamage);
-      attacker.state.status.poison.turns -= 1;
-      preMessages.push(`☠️ 毒のダメージで${poisonDamage}を受けた！`);
-      if (attacker.state.status.poison.turns <= 0) {
-        attacker.state.status.poison = null;
-        preMessages.push('☠️ 毒が解除された！');
-      }
-      // 毒で戦闘不能になった場合は即終了
-      if (attacker.state.hp <= 0) {
-        currentGame.isGameOver = true;
-        currentGame.winner = defender.username;
-        io.to(currentRoomId).emit('game_over', {
-          winner: defender.username,
-          gameState: currentGame,
-        });
-        activeGames.delete(currentRoomId);
-        return;
-      }
-    }
-
-    // 【指が折れる】行動不能チェック（威力0としてターン消費）
-    if (attacker.state.isBroken && attacker.state.brokenTurns && attacker.state.brokenTurns > 0) {
-      const messageParts: string[] = [];
-      messageParts.push(`🦴 ${attacker.username}は指が折れている！このターンは行動不能！`);
-
-      // 行動不能ターンを進める
-      attacker.state.brokenTurns--;
-      if (attacker.state.brokenTurns === 0) {
-        attacker.state.isBroken = false;
-        messageParts.push(`🦴 ${attacker.username}の指が回復した！`);
-      }
-
-      // MP回復（乱舞ゾーン中は0、ボーナス適用）
-      let regenAmount = attacker.state.activeZone.type === '乱舞のゾーン' ? 0 : 1;
-      if (attacker.state.status.mpRegenBonus) {
-        regenAmount += attacker.state.status.mpRegenBonus.amount;
-        attacker.state.status.mpRegenBonus.turns -= 1;
-        if (attacker.state.status.mpRegenBonus.turns <= 0) {
-          attacker.state.status.mpRegenBonus = null;
-        }
-      }
-      if (regenAmount > 0) {
-        attacker.state.mp = Math.min(5, attacker.state.mp + regenAmount);
-      }
-
-      // ゾーン残りターンを進める（ターンは経過する）
-      if (attacker.state.activeZone.remainingTurns > 0) {
-        attacker.state.activeZone.remainingTurns--;
-        if (attacker.state.activeZone.remainingTurns === 0) {
-          attacker.state.activeZone.type = 'none';
-          io.to(currentRoomId).emit('zone_expired', {
-            username: attacker.username,
-            socketId: attacker.socketId,
-          });
-        }
-      }
-
-      // メタ演出の残りターンも進める
-      if (attacker.state.activeEffectTurns && attacker.state.activeEffectTurns > 0) {
-        attacker.state.activeEffectTurns--;
-        if (attacker.state.activeEffectTurns === 0) attacker.state.activeEffect = 'none';
-      }
-      if (defender.state.activeEffectTurns && defender.state.activeEffectTurns > 0) {
-        defender.state.activeEffectTurns--;
-        if (defender.state.activeEffectTurns === 0) defender.state.activeEffect = 'none';
-      }
-
-      // ターンカウントと交代
-      currentGame.currentTurn++;
-      const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId 
-        ? currentGame.player2 
-        : currentGame.player1;
-      currentGame.currentTurnPlayerId = nextPlayer.socketId;
-
-      // 行動不能の battle_update を送信
-      const battleUpdate = {
-        turn: currentGame.currentTurn,
-        attacker: { username: attacker.username, socketId: attacker.socketId, state: attacker.state },
-        defender: { username: defender.username, socketId: defender.socketId, state: defender.state },
-        skillName: '行動不能',
-        skillPower: 0,
-        damage: 0,
-        healing: 0,
-        message: messageParts.join('\n'),
-        gameState: currentGame,
-      };
-      io.to(currentRoomId).emit('battle_update', battleUpdate);
-
-      io.to(currentRoomId).emit('turn_change', {
-        currentTurnPlayerId: currentGame.currentTurnPlayerId,
-        currentTurnPlayerName: nextPlayer.username,
-      });
-
-      return;
-    }
-
-    // Get random skill from SKILLS array with zone effects and riichi state
-    const selectedSkill = getRandomSkill(attacker.state.activeZone, attacker.state.isRiichi, attacker.state.hp, attacker.state.maxHp, currentGame.currentTurn);
-    console.log(`🎲 Random skill selected: ${selectedSkill.name} (${selectedSkill.type})`);
-    console.log(`   Current zone: ${attacker.state.activeZone.type} (${attacker.state.activeZone.remainingTurns} turns remaining)`);
-    if (attacker.state.isRiichi) {
-      console.log(`   🀄 立直状態: ${attacker.username}`);
-    }
-
-    // 【特殊勝利】数え役満：立直状態でパンチ系技を3回連続成功
-    const punchSkills = ['パンチ', 'ストレート', 'ジャブ', 'アッパーカット', 'フック', 'ボディブロー', 'ダッシュパンチ'];
-    const isPunch = punchSkills.includes(selectedSkill.name);
-    
-    if (attacker.state.isRiichi && isPunch) {
-      if (!attacker.state.riichiBombCount) {
-        attacker.state.riichiBombCount = 0;
-      }
-      attacker.state.riichiBombCount++;
-      console.log(`🀄 パンチ連続カウント: ${attacker.state.riichiBombCount}/3`);
-      
-      if (attacker.state.riichiBombCount >= 3) {
-        // 数え役満成立！即勝利
-        currentGame.isGameOver = true;
-        currentGame.winner = attacker.username;
-        
-        console.log(`🏆 数え役満成立！${attacker.username}の勝利！`);
-        
-        io.to(currentRoomId).emit('battle_update', {
-          turn: currentGame.currentTurn,
-          skillName: selectedSkill.name,
-          skillPower: selectedSkill.power,
-          message: `🀄💥 ${attacker.username}は立直からのパンチ技を3回連続！\n\n🏆 数え役満成立！${attacker.username}の勝利！`,
-          gameState: currentGame,
-        });
-        
-        io.to(currentRoomId).emit('game_over', {
-          winner: attacker.username,
-          gameState: currentGame,
-        });
-        
-        activeGames.delete(currentRoomId);
-        return;
-      }
-    } else {
-      // パンチ以外の技が出たらカウントリセット
-      if (attacker.state.riichiBombCount && attacker.state.riichiBombCount > 0) {
-        console.log(`🀄 パンチ連続カウント: リセット`);
-        attacker.state.riichiBombCount = 0;
-      }
-    }
-
-    // ゾーン効果によるログメッセージ生成
-    let zoneEffectMessage = '';
-    if (attacker.state.activeZone.type !== 'none') {
-      if (attacker.state.activeZone.type === '強攻のゾーン') {
-        zoneEffectMessage = `💥 ゾーン効果: 高威力技が出現！`;
-      } else if (attacker.state.activeZone.type === '集中のゾーン') {
-        zoneEffectMessage = `🎯 ゾーン効果: 支援技が出現！`;
-      }
-    }
-
-    // Apply skill effect
-    let result = applySkillEffect(selectedSkill, attacker, defender, attacker.state.isRiichi, defender.state.isRiichi);
-    const messageParts = [...preMessages];
-    if (zoneEffectMessage) {
-      messageParts.push(zoneEffectMessage);
-    }
-    messageParts.push(result.message);
-
-    // 強攻のゾーン：20%の確率で自傷ダメージ
-    if (attacker.state.activeZone.type === '強攻のゾーン') {
-      const selfDamageChance = Math.random();
-      if (selfDamageChance < 0.2) {
-        const selfDamage = Math.floor(result.damage * 0.2) || 10; // 与えたダメージの20%、または最低10
-        attacker.state.hp = Math.max(0, attacker.state.hp - selfDamage);
-        messageParts.push(`💢 強攻の反動！ ${attacker.username}は${selfDamage}ダメージを受けた！`);
-        console.log(`💢 強攻の反動: ${attacker.username} -${selfDamage} HP`);
-      }
-    }
-
-    result.message = messageParts.join('\n');
-
-    // Debug: log HP state right after damage/heal is applied
-    console.log(`🧪 HP after action -> ${attacker.username}: ${attacker.state.hp}, ${defender.username}: ${defender.state.hp}`);
-
-    // MP回復計算（乱舞ゾーン中は0、立直中は0、瞑想バフで加算）
-    let regenAmount = attacker.state.activeZone.type === '乱舞のゾーン' ? 0 : attacker.state.isRiichi ? 0 : 1;
-    if (attacker.state.status.mpRegenBonus) {
-      regenAmount += attacker.state.status.mpRegenBonus.amount;
-      attacker.state.status.mpRegenBonus.turns -= 1;
-      if (attacker.state.status.mpRegenBonus.turns <= 0) {
-        attacker.state.status.mpRegenBonus = null;
-      }
-    }
-    if (regenAmount > 0) {
-      attacker.state.mp = Math.min(5, attacker.state.mp + regenAmount);
-    }
-    if (attacker.state.isRiichi) {
-      console.log(`💧 ${attacker.username} MP: ${attacker.state.mp} (max 5) - 立直中のため回復停止`);
-    } else {
-      console.log(`💧 ${attacker.username} MP: ${attacker.state.mp} (max 5)`);
-    }
-
-    // ターン経過処理：ゾーンの残りターン数を減らす
-    if (attacker.state.activeZone.remainingTurns > 0) {
-      attacker.state.activeZone.remainingTurns--;
-      console.log(`⏱️ Zone turns remaining: ${attacker.state.activeZone.remainingTurns}`);
-      
-      // remainingTurnsが0になったらゾーンを解除
-      if (attacker.state.activeZone.remainingTurns === 0) {
-        attacker.state.activeZone.type = 'none';
-        console.log(`🔄 ${attacker.username} zone expired!`);
-        
-        // ゾーン解除通知を送信
-        io.to(currentRoomId).emit('zone_expired', {
-          username: attacker.username,
-          socketId: attacker.socketId,
-        });
-      }
-    }
-
-    // Send battle_update event to both players
-    const battleUpdate = {
-      turn: currentGame.currentTurn,
-      attacker: {
-        username: attacker.username,
-        socketId: attacker.socketId,
-        state: attacker.state,
-      },
-      defender: {
-        username: defender.username,
-        socketId: defender.socketId,
-        state: defender.state,
-      },
-      skill: selectedSkill,
-      skillName: selectedSkill.name,
-      skillPower: selectedSkill.power,
-      damage: result.damage,
-      healing: result.healing,
-      message: result.message,
-      skillEffect: result.skillEffect,
-      wasBuffedAttack: result.wasBuffedAttack,
-      gameState: currentGame,
-    };
-
-    io.to(currentRoomId).emit('battle_update', battleUpdate);
-
-    // Check for game over (only while battle is active and after HP updates)
-    // 2秒間のディレイを設けて、クライアント側の演出が完了するのを待つ
-    if (!currentGame.isGameOver && defender.state.hp <= 0) {
-      currentGame.isGameOver = true;
-      currentGame.winner = attacker.username;
-
-      console.log(`🏆 Game Over! ${attacker.username} wins! (waiting 2s for client演出)`);
-
-      // 2秒待機してから最終的な勝利イベントを送信
-      const roomIdForTimeout = currentRoomId;
-      setTimeout(() => {
-        io.to(roomIdForTimeout).emit('game_over', {
-          winner: attacker.username,
-          gameState: currentGame,
-        });
-
-        // Remove game from active games
-        activeGames.delete(roomIdForTimeout);
-      }, 2000);
-
-      return;
-    }
-
-    // Check if attacker also died (from special moves like 自爆)
-    if (!currentGame.isGameOver && attacker.state.hp <= 0) {
-      currentGame.isGameOver = true;
-      currentGame.winner = defender.username;
-
-      console.log(`🏆 Game Over! ${defender.username} wins! (waiting 2s for client演出)`);
-
-      // 2秒待機してから最終的な勝利イベントを送信
-      const roomIdForTimeout = currentRoomId;
-      setTimeout(() => {
-        io.to(roomIdForTimeout).emit('game_over', {
-          winner: defender.username,
-          gameState: currentGame,
-        });
-
-        activeGames.delete(roomIdForTimeout);
-      }, 2000);
-
-      return;
-    }
-
-    // Increment turn counter
-    currentGame.currentTurn++;
-
-    // 【立直システム】立直中に役（special技）を出した場合、立直を解除
-    const yakuSkills = ['断幺九', '清一色', '国士無双', '九蓮宝燈', '天和'];
-    if (attacker.state.isRiichi && yakuSkills.includes(selectedSkill.name)) {
-      attacker.state.isRiichi = false;
-      console.log(`🀄 ${attacker.username}が役「${selectedSkill.name}」を出したため、立直状態が解除されました！`);
-      io.to(currentRoomId).emit('riichi_cleared', {
-        username: attacker.username,
-        yakuName: selectedSkill.name,
-      });
-    }
-
-    // ターンを交代
-    const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId 
-      ? currentGame.player2 
-      : currentGame.player1;
-    currentGame.currentTurnPlayerId = nextPlayer.socketId;
-
-    // 【メタ要素】activeEffectの期間を減らす
-    if (attacker.state.activeEffectTurns && attacker.state.activeEffectTurns > 0) {
-      attacker.state.activeEffectTurns--;
-      if (attacker.state.activeEffectTurns === 0) {
-        attacker.state.activeEffect = 'none';
-      }
-    }
-    if (defender.state.activeEffectTurns && defender.state.activeEffectTurns > 0) {
-      defender.state.activeEffectTurns--;
-      if (defender.state.activeEffectTurns === 0) {
-        defender.state.activeEffect = 'none';
-      }
-    }
-
-    // ターン変更を通知
-    io.to(currentRoomId).emit('turn_change', {
-      currentTurnPlayerId: currentGame.currentTurnPlayerId,
-      currentTurnPlayerName: nextPlayer.username,
-    });
-
-    // ターンインデックスをトグル（0 ↔ 1）
-    currentGame.turnIndex = currentGame.turnIndex === 0 ? 1 : 0;
-    console.log(`🔄 ターン交代: ${currentGame.turnIndex}`);
-
-    // 更新した gameState を全員に通知
-    io.to(currentRoomId).emit('game_state_update', currentGame);
-
-    console.log(`📊 Turn ${currentGame.currentTurn}:`);
-    console.log(`   ${attacker.username}: HP ${attacker.state.hp}, MP ${attacker.state.mp}`);
-    console.log(`   ${defender.username}: HP ${defender.state.hp}, MP ${defender.state.mp}`);
-    console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.socketId})`);
-
-    // 立直中なら自動ツモ切りをスケジュール
-    scheduleAutoTsumoIfRiichi(currentRoomId);
+    processUseSkill(socket.id);
   });
 
   // マッチング準備完了を受け取る
