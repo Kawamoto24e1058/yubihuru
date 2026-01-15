@@ -893,7 +893,8 @@ io.on('connection', (socket) => {
     });
     // Handle action_activate_zone event
     socket.on('action_activate_zone', (payload) => {
-        console.log(`🌀 ${socket.id} activating zone: ${payload.zoneType}`);
+        const senderPlayerId = payload.playerId || '';
+        console.log(`🌀 ゾーン発動リクエスト: SenderId=${senderPlayerId}, SocketId=${socket.id}, zoneType=${payload.zoneType}`);
         // Find the game this player is in
         let currentGame;
         let currentRoomId;
@@ -904,16 +905,19 @@ io.on('connection', (socket) => {
             }
         });
         if (!currentGame || !currentRoomId) {
+            console.error(`❌ ゲーム見つからず: ${socket.id}`);
             socket.emit('error', { message: 'Game not found' });
             return;
         }
         if (currentGame.isGameOver) {
+            console.error(`❌ ゲーム終了済み: ${socket.id}`);
             socket.emit('error', { message: 'Game is already over' });
             return;
         }
-        // ターンチェック：自分のターンかどうか
-        if (currentGame.currentTurnPlayerId !== socket.id) {
-            console.log(`❌ ${socket.id} tried to activate zone on opponent's turn`);
+        // ターンチェック：自分のターンかどうか（playerIdベース）
+        console.log(`📍 ターン判定: currentTurnPlayerId=${currentGame.currentTurnPlayerId}, senderPlayerId=${senderPlayerId}`);
+        if (currentGame.currentTurnPlayerId !== senderPlayerId) {
+            console.log(`❌ ${senderPlayerId}は相手のターン中にゾーンを発動しようとしました。現在のターン: ${currentGame.currentTurnPlayerId}`);
             socket.emit('error', { message: 'Not your turn!' });
             return;
         }
@@ -925,7 +929,7 @@ io.on('connection', (socket) => {
         // Check if player has enough MP (MP上限5)
         if (player.state.mp < ZONE_MP_COST) {
             socket.emit('error', { message: `Insufficient MP. Need ${ZONE_MP_COST} MP to activate zone.` });
-            console.log(`❌ ${player.username} has insufficient MP (${player.state.mp}/${ZONE_MP_COST})`);
+            console.log(`❌ ${player.username}のMP不足 (${player.state.mp}/${ZONE_MP_COST})`);
             return;
         }
         // Deduct MP cost
@@ -936,7 +940,7 @@ io.on('connection', (socket) => {
             type: payload.zoneType,
             remainingTurns: duration,
         };
-        console.log(`✨ ${player.username} activated ${payload.zoneType} for ${duration} turns`);
+        console.log(`✨ ${player.username}が${payload.zoneType}を${duration}ターン発動`);
         console.log(`   MP: ${player.state.mp + ZONE_MP_COST} -> ${player.state.mp}`);
         // ターンを交代
         const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.playerId
@@ -957,11 +961,12 @@ io.on('connection', (socket) => {
             currentTurnPlayerId: currentGame.currentTurnPlayerId,
             currentTurnPlayerName: nextPlayer.username,
         });
-        console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.socketId})`);
+        console.log(`🔄 ターン交代: ${nextPlayer.username} (${nextPlayer.socketId})`);
     });
     // Handle action_use_skill event
-    socket.on('action_use_skill', () => {
-        console.log(`⚔️ ${socket.id} used a skill`);
+    socket.on('action_use_skill', (data = {}) => {
+        const senderPlayerId = data.playerId || '';
+        console.log(`⚔️ 技発動リクエスト: SenderId=${senderPlayerId}, SocketId=${socket.id}`);
         // Find the game this player is in
         let currentGame;
         let currentRoomId;
@@ -972,16 +977,19 @@ io.on('connection', (socket) => {
             }
         });
         if (!currentGame || !currentRoomId) {
+            console.error(`❌ ゲーム見つからず: ${socket.id}`);
             socket.emit('error', { message: 'Game not found' });
             return;
         }
         if (currentGame.isGameOver) {
+            console.error(`❌ ゲーム終了済み: ${socket.id}`);
             socket.emit('error', { message: 'Game is already over' });
             return;
         }
-        // ターンチェック：自分のターンかどうか
-        if (currentGame.currentTurnPlayerId !== socket.id) {
-            console.log(`❌ ${socket.id} tried to use skill on opponent's turn`);
+        // ターンチェック：自分のターンかどうか（playerIdベース）
+        console.log(`📍 ターン判定: currentTurnPlayerId=${currentGame.currentTurnPlayerId}, senderPlayerId=${senderPlayerId}`);
+        if (currentGame.currentTurnPlayerId !== senderPlayerId) {
+            console.log(`❌ ${senderPlayerId}は相手のターン中に技を使用しようとしました。現在のターン: ${currentGame.currentTurnPlayerId}`);
             socket.emit('error', { message: 'Not your turn!' });
             return;
         }

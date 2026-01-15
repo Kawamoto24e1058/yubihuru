@@ -475,6 +475,7 @@ function App() {
 
     newSocket.on('battle_update', (data: any) => {
       console.log('Battle update:', data)
+      console.log(`🎯 技発動: ${data.skillName}, ダメージ: ${data.damage}, バフ攻撃: ${data.wasBuffedAttack}`)
       setLogs(prev => [data.message, ...prev].slice(0, 10))
       
       // 役満フリーズ演出（国士無双・九蓮宝燈）
@@ -601,16 +602,21 @@ function App() {
       // バフ付き攻撃の場合、ダメージを記録して後で巨大化表示
       if (data.wasBuffedAttack && data.damage > 0) {
         setBuffedDamage(data.damage)
+        console.log(`💥 バフ付き攻撃ダメージ表示: ${data.damage}`)
         setTimeout(() => setBuffedDamage(null), 1200)
       }
 
       if (data.wasBuffedAttack && data.damage && data.damage > 0) {
         setBuffedDamage(data.damage)
+        console.log(`💥 バフ付き攻撃ダメージ表示: ${data.damage}`)
         setTimeout(() => setBuffedDamage(null), 900)
       }
       
-      // ドラ該当時は金縁表示
-      // (削除: ドラ機能は廃止)
+      // 通常ダメージの即座表示（skillName付きで）
+      if (data.damage && data.damage > 0 && !data.wasBuffedAttack) {
+        console.log(`⚔️ 通常ダメージ表示: ${data.skillName} で ${data.damage} ダメージ`)
+        // skill nameは既にsetImpactTextで表示されているため追加表示なし
+      }
       
       // パワー150以上で超必殺演出（虹色）
       if (data.skillPower && data.skillPower >= 150) {
@@ -977,18 +983,32 @@ function App() {
   }
 
   const handleUseSkill = () => {
-    const mySocketId = socket?.id || ''
-    if (socket && gameStarted && mySocketId === currentTurnId && !isProcessing) {
-      socket.emit('action_use_skill')
+    // 🔴 playerIdベースのターン判定に変更
+    if (socket && gameStarted && currentTurnId === myPersistentId && !isProcessing) {
+      console.log(`✅ 技発動: playerId=${myPersistentId}, currentTurn=${currentTurnId}`);
+      socket.emit('action_use_skill', { playerId: myPersistentId })
       setIsProcessing(true)
+    } else {
+      if (!socket) console.warn('⚠️ Socket not connected');
+      if (!gameStarted) console.warn('⚠️ Game not started');
+      if (currentTurnId !== myPersistentId) console.warn(`⚠️ Not your turn: ${currentTurnId} !== ${myPersistentId}`);
+      if (isProcessing) console.warn('⚠️ Already processing action');
     }
   }
 
   const handleActivateZone = () => {
-    const mySocketId = socket?.id || ''
-    if (socket && gameStarted && myData && myData.state.mp >= 5 && mySocketId === currentTurnId && !isProcessing) {
-      socket.emit('action_activate_zone', { zoneType: selectedZoneType })
+    // 🔴 playerIdベースのターン判定に変更
+    if (socket && gameStarted && myData && myData.state.mp >= 5 && currentTurnId === myPersistentId && !isProcessing) {
+      console.log(`✅ ゾーン発動: playerId=${myPersistentId}, currentTurn=${currentTurnId}, zone=${selectedZoneType}`);
+      socket.emit('action_activate_zone', { zoneType: selectedZoneType, playerId: myPersistentId })
       setIsProcessing(true)
+    } else {
+      if (!socket) console.warn('⚠️ Socket not connected');
+      if (!gameStarted) console.warn('⚠️ Game not started');
+      if (!myData) console.warn('⚠️ MyData not set');
+      if (myData && myData.state.mp < 5) console.warn(`⚠️ Not enough MP: ${myData.state.mp} < 5`);
+      if (currentTurnId !== myPersistentId) console.warn(`⚠️ Not your turn: ${currentTurnId} !== ${myPersistentId}`);
+      if (isProcessing) console.warn('⚠️ Already processing action');
     }
   }
 
