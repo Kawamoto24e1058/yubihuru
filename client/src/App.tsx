@@ -71,7 +71,8 @@ function App() {
 
   // 嫌がらせ演出用
   const [opponentInkEffect, setOpponentInkEffect] = useState(false)
-  const [opponentShakeEffect, setOpponentShakeEffect] = useState(false)
+  // 画面揺れは gameState.shakeTurns で管理（サーバー側のターン数に基づく）
+  // const [opponentShakeEffect, setOpponentShakeEffect] = useState(false)
   const [inkSplashes, setInkSplashes] = useState<Array<{id: number, x: number, y: number, size: number}>>([])
   const [specialVictoryText, setSpecialVictoryText] = useState<string | null>(null) // 'BAN' or '役満'
 
@@ -127,15 +128,6 @@ function App() {
         setInkSplashes([])
       }, duration)
       return () => clearTimeout(timer)
-    } else if (opponentData.state.activeEffect === 'shake') {
-      setOpponentShakeEffect(true)
-      
-      // 効果期間終了時に消す
-      const duration = (opponentData.state.activeEffectTurns ?? 2) * 2000 + 1000
-      const timer = setTimeout(() => {
-        setOpponentShakeEffect(false)
-      }, duration)
-      return () => clearTimeout(timer)
     }
   }, [opponentData?.state.activeEffect, opponentData?.state.activeEffectTurns])
 
@@ -145,7 +137,6 @@ function App() {
       setSpecialVictoryText(null)
       setVictoryResult(null)
       setOpponentInkEffect(false)
-      setOpponentShakeEffect(false)
       setInkSplashes([])
       setYakumanFreeze(false)
       setLastAttackGrayscale(false)
@@ -164,7 +155,6 @@ function App() {
         setSpecialVictoryText(null)
         setVictoryResult(null)
         setOpponentInkEffect(false)
-        setOpponentShakeEffect(false)
         setInkSplashes([])
         setYakumanFreeze(false)
         setLastAttackGrayscale(false)
@@ -325,7 +315,6 @@ function App() {
       setSpecialVictoryText(null)
       setVictoryResult(null)
       setOpponentInkEffect(false)
-      setOpponentShakeEffect(false)
       setInkSplashes([])
       setYakumanFreeze(false)
       setLastAttackGrayscale(false)
@@ -1067,7 +1056,7 @@ function App() {
     const myZoneBorder = zoneBorderMap[myData.state.activeZone.type] || 'border-black'
 
     return (
-      <div className={`min-h-screen bg-yellow-50 p-4 transition-all relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${opponentShakeEffect ? 'animate-window-shake' : ''} ${lastAttackGrayscale ? 'filter grayscale' : ''} ${slowMotion ? 'animate-slow-motion' : ''}`}>
+      <div className={`min-h-screen bg-yellow-50 p-4 transition-all relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${gameState.shakeTurns > 0 ? 'animate-window-shake' : ''} ${lastAttackGrayscale ? 'filter grayscale' : ''} ${slowMotion ? 'animate-slow-motion' : ''}`}>
         {/* メニューボタン（右上） */}
         <button
           onClick={() => setShowMenu(true)}

@@ -55,6 +55,7 @@ interface GameState {
   currentTurn: number;
   currentTurnPlayerId: string; // 現在のターンのプレイヤーID
   turnIndex: 0 | 1; // 0 = player1, 1 = player2
+  shakeTurns: number; // 画面揺れが続くターン数（0=揺れなし）
   isGameOver: boolean;
   winner: string | null;
   startedAt?: number; // ゲーム開始時刻（マッチング直後の保護用）
@@ -880,6 +881,12 @@ io.on('connection', (socket) => {
       turn: currentGame.currentTurn,
     });
 
+    // 【画面揺れ】shake_effect が発動した場合、shakeTurns を 4 に設定
+    if (selectedSkill.effect === 'shake_effect') {
+      currentGame.shakeTurns = 4;
+      console.log(`📳 shake_effect detected: shakeTurns set to 4`);
+    }
+
     if (!currentGame.isGameOver && defender.state.hp <= 0) {
       currentGame.isGameOver = true;
       currentGame.winner = attacker.username;
@@ -955,6 +962,12 @@ io.on('connection', (socket) => {
 
     currentGame.turnIndex = currentGame.turnIndex === 0 ? 1 : 0;
     console.log(`🔄 ターン交代: ${currentGame.turnIndex}`);
+
+    // shakeTurns をデクリメント（0より大きければ）
+    if (currentGame.shakeTurns > 0) {
+      currentGame.shakeTurns--;
+      console.log(`📳 shakeTurns decremented to ${currentGame.shakeTurns}`);
+    }
 
     io.to(currentRoomId).emit('game_state_update', currentGame);
 
@@ -1047,6 +1060,7 @@ io.on('connection', (socket) => {
           currentTurn: 0,
           currentTurnPlayerId: player1.socketId, // player1が最初のターン
           turnIndex: 0, // player1 from start
+          shakeTurns: 0, // 初期値：揺れなし
           isGameOver: false,
           winner: null,
           startedAt: Date.now(), // マッチング直後の保護用
@@ -1345,6 +1359,9 @@ io.on('connection', (socket) => {
       : currentGame.player1;
     currentGame.currentTurnPlayerId = nextPlayer.socketId;
 
+    // turnIndexを反転
+    currentGame.turnIndex = currentGame.turnIndex === 0 ? 1 : 0;
+
     // ターン変更を通知
     io.to(currentRoomId).emit('turn_change', {
       currentTurnPlayerId: currentGame.currentTurnPlayerId,
@@ -1352,6 +1369,9 @@ io.on('connection', (socket) => {
     });
 
     console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.socketId})`);
+
+    // game_state_updateを送信してターン交代を同期
+    io.to(currentRoomId).emit('game_state_update', currentGame);
 
     // 立直中なら自動ツモ切りをスケジュール
     scheduleAutoTsumoIfRiichi(currentRoomId);
