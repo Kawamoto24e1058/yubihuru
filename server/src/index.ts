@@ -568,8 +568,12 @@ function applySkillEffect(
   const YAKU_NAMES = ['断幺九', '清一色', '国士無双', '九蓮宝燈'];
   const isYaku = YAKU_NAMES.includes(skill.name);
 
-  // 立直中の計算ロジック
-  if (isAttackerRiichi && damage > 0) {
+  // 特殊技（起死回生、天和など）は立直ボーナスをスキップ
+  const SPECIAL_SKILLS_SKIP_RIICHI = ['起死回生', '天和', '出禁', '九蓮宝燈'];
+  const shouldSkipRiichiBonus = SPECIAL_SKILLS_SKIP_RIICHI.includes(skill.name);
+
+  // 立直中の計算ロジック（特殊技以外）
+  if (isAttackerRiichi && damage > 0 && !shouldSkipRiichiBonus) {
     if (isYaku) {
       // ケースA: 役の場合
       // ・ダメージを 1.5倍 にする
