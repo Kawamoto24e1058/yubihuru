@@ -493,10 +493,28 @@ function App() {
         const isMyTurn = data.gameState.currentTurnPlayerId === myPersistentId
         setIsYourTurn(isMyTurn)
         
-        // 演出フラグをリセット（次のターン準備）
-        setIsProcessing(false)
+        // 技演出開始
+        const skillName = data.currentSkill || data.skillName || '技'
+        setImpactText(skillName)
+        const shouldAnimate = data.animationStart !== false
+        setShowImpact(shouldAnimate)
         
-        console.log(`✅ gameState更新完了: ${data.skillName}のアニメーション終了後、次のターンへ`);
+        // アニメーション中はロック、終了後に解除
+        setIsProcessing(true)
+        const animationDuration = shouldAnimate ? 2500 : 0
+        setTimeout(() => {
+          if (shouldAnimate) setShowImpact(false)
+          setIsProcessing(false)
+          console.log('✅ 演出終了 - isProcessing=false')
+        }, animationDuration)
+        
+        // エラー通知時も必ずロック解除
+        if (data.error) {
+          console.warn(`⚠️ game_state_update error: ${data.error}`)
+          setIsProcessing(false)
+        }
+        
+        console.log(`✅ gameState更新完了: ${skillName}の演出開始`);
       }
     })
 
@@ -1688,6 +1706,26 @@ function App() {
         {shieldEffect && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="w-96 h-96 border-4 border-cyan-400 rounded-full animate-shield-pulse" style={{ borderStyle: 'dashed' }} />
+          </div>
+        )}
+
+        {/* 中央オーバーレイ：バトルログ（PC/スマホ両対応） */}
+        {gameStarted && (
+          <div className="battle-log-overlay">
+            <div className="battle-log-panel">
+              <div className="battle-log-header">BATTLE LOG</div>
+              <div className="battle-log-list">
+                {logs.length === 0 ? (
+                  <p className="battle-log-empty">待機中...</p>
+                ) : (
+                  logs.map((log, index) => (
+                    <div key={index} className={`battle-log-entry ${getLogColor(log)}`}>
+                      {renderLogWithRainbow(log)}
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         )}
 

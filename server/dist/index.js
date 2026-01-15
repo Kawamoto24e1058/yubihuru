@@ -1102,7 +1102,26 @@ io.on('connection', (socket) => {
             return;
         }
         // Get random skill from SKILLS array with zone effects and riichi state
-        const selectedSkill = getRandomSkill(attacker.state.activeZone, attacker.state.isRiichi, attacker.state.hp, attacker.state.maxHp, currentGame.currentTurn);
+        let selectedSkill = null;
+        try {
+            selectedSkill = getRandomSkill(attacker.state.activeZone, attacker.state.isRiichi, attacker.state.hp, attacker.state.maxHp, currentGame.currentTurn);
+            if (!selectedSkill) {
+                throw new Error('Skill selection failed (empty skill list)');
+            }
+        }
+        catch (err) {
+            const message = err instanceof Error ? err.message : 'Skill selection failed';
+            console.error(`❌ 技抽選エラー: ${message}`);
+            io.to(currentRoomId).emit('game_state_update', {
+                gameState: currentGame,
+                currentSkill: null,
+                damage: 0,
+                animationStart: false,
+                error: message,
+            });
+            socket.emit('error', { message });
+            return;
+        }
         console.log(`🎲 Random skill selected: ${selectedSkill.name} (${selectedSkill.type})`);
         console.log(`   Current zone: ${attacker.state.activeZone.type} (${attacker.state.activeZone.remainingTurns} turns remaining)`);
         if (attacker.state.isRiichi) {
@@ -1336,8 +1355,9 @@ io.on('connection', (socket) => {
         console.log(`   次のターン: ${nextPlayer.username}`);
         io.to(currentRoomId).emit('game_state_update', {
             gameState: currentGame,
-            skillName: selectedSkill.name,
+            currentSkill: selectedSkill.name,
             damage: result.damage,
+            animationStart: true,
         });
         // ウォッチドッグを再開（新しいターンの5秒ウォッチドッグ）
         startWatchdog(currentRoomId);
