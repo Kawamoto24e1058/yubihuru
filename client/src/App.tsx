@@ -732,14 +732,8 @@ function App() {
     })
 
     newSocket.on('game_over', (data: any) => {
-      // サーバーから勝敗が確定したときだけ表示
-      console.log('Game over:', data)
-      
-      // ガード：ゲーム中でない場合は無視（マッチング直後の誤動作防止）
-      if (!gameStarted) {
-        console.warn('Ignoring game_over event: game not started')
-        return
-      }
+      // サーバーから勝敗が確定したときに無条件で処理
+      console.log('🏁 Game over event received:', data)
       
       setIsGameOver(true)
       setWinner(data.winner)
@@ -770,6 +764,10 @@ function App() {
       localStorage.removeItem('yubihuru_active_battle')
       // セッションを完全に破棄（復帰ボタンを無効化）
       localStorage.removeItem('yubihuru_player_id')
+      
+      // ★無条件で終了処理を実行
+      setGameStarted(false)
+      console.log('🏁 Game over processed - result screen will be shown')
       
       // グレースケール解除
       setLastAttackGrayscale(false)
