@@ -102,6 +102,8 @@ function App() {
   const [totalWins, setTotalWins] = useState(0) // 通算勝利数
   const [currentStreak, setCurrentStreak] = useState(0) // 連勝数
 
+  const gameState = { turnIndex }
+
   // 相手のactiveEffectを監視
   useEffect(() => {
     if (!opponentData?.state.activeEffect) return
@@ -1491,7 +1493,7 @@ function App() {
             {/* 指を振るボタン */}
             <button
               onClick={handleUseSkill}
-              disabled={turnIndex !== myIndex || isProcessing || myIndex === null || myData.state.isRiichi}
+              disabled={gameState.turnIndex !== myIndex || isAnimating || isProcessing || myIndex === null || myData.state.isRiichi}
               className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-6 font-black text-lg ${
                 myIndex !== null && turnIndex === myIndex && !isProcessing && !myData.state.isRiichi
                   ? 'bg-pink-500 hover:bg-pink-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
@@ -1591,7 +1593,7 @@ function App() {
               {/* 指を振るボタン */}
               <button
                 onClick={handleUseSkill}
-                disabled={myIndex === null || turnIndex !== myIndex || isProcessing || myData.state.isRiichi}
+                disabled={gameState.turnIndex !== myIndex || isAnimating || isProcessing || myIndex === null || myData.state.isRiichi}
                 className={`border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-8 font-black text-2xl ${
                   myIndex !== null && turnIndex === myIndex && !isProcessing && !myData.state.isRiichi
                     ? 'bg-pink-500 hover:bg-pink-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
