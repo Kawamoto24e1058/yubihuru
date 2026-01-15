@@ -43,7 +43,6 @@ function App() {
   const [myData, setMyData] = useState<PlayerData | null>(null)
   const [opponentData, setOpponentData] = useState<PlayerData | null>(null)
   const [logs, setLogs] = useState<string[]>([])
-  const [currentTurnId, setCurrentTurnId] = useState<string>('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [isShaking, setIsShaking] = useState(false)
   const [selectedZoneType, setSelectedZoneType] = useState<'強攻のゾーン' | '集中のゾーン' | '乱舞のゾーン' | '博打のゾーン'>('強攻のゾーン')
@@ -313,7 +312,6 @@ function App() {
       setMyIndex(myIdx)
       setTurnIndex(turnIdx)
       setIsYourTurn(myIdx === turnIdx)
-      setCurrentTurnId(data.gameState.currentTurnPlayerId)
       console.log('✅ Reconnect: Current turn set to:', data.gameState.currentTurnPlayerId)
       setLogs(prev => [`🔁 再接続しました`, ...prev].slice(0, 10))
     })
@@ -392,12 +390,7 @@ function App() {
       setMyIndex(myIdx)
       setTurnIndex(turnIdx)
       setIsYourTurn(myIdx === turnIdx)
-      
-      // ターンIDを設定（重要：初回ターンプレイヤーを把握）
-      if (data.currentTurnPlayerId) {
-        setCurrentTurnId(data.currentTurnPlayerId)
-        console.log('✅ Current turn set to:', data.currentTurnPlayerId)
-      }
+      console.log('✅ Current turn set to:', data.currentTurnPlayerId)
       
       setLogs([`⚔️ バトル開始！ vs ${opponent.username}`])
     })
@@ -464,12 +457,6 @@ function App() {
         setTurnIndex(turnIdx)
         setIsYourTurn(myIdx === turnIdx)
         
-        // ターンIDを上書き保証
-        if (data.currentTurnPlayerId) {
-          setCurrentTurnId(data.currentTurnPlayerId)
-          console.log('✅ Turn ID synced:', data.currentTurnPlayerId)
-        }
-        
         // 【デッドロック救済】自分のターンならボタン強制有効化
         if (turnIdx === myIdx) {
           console.log(`🔓 ボタン強制有効化（turnIndex一致）`)
@@ -506,7 +493,6 @@ function App() {
       setMyIndex(myIdx)
       setTurnIndex(turnIdx)
       setIsYourTurn(myIdx === turnIdx)
-      setCurrentTurnId(data.gameState.currentTurnPlayerId)
       setLogs(prev => [`🔄 バトル画面に同期しました`, ...prev].slice(0, 10))
     })
 
@@ -530,7 +516,6 @@ function App() {
         setMyIndex(myIdx)
         setTurnIndex(turnIdx)
         setIsYourTurn(myIdx === turnIdx)
-        setCurrentTurnId(data.gameState.currentTurnPlayerId)
         
         // 【デッドロック救済】forceUnlock フラグが立っていたら強制有効化
         if (data.forceUnlock && turnIdx === myIdx) {
@@ -941,9 +926,6 @@ function App() {
       // 演出によるボタンロックを強制解除
       setIsProcessing(false)
       
-      // ターンIDを再判定・更新
-      setCurrentTurnId(data.currentTurnPlayerId)
-      
       const turnIdx = data.turnIndex ?? turnIndex
       setTurnIndex(turnIdx)
       if (data.gameState) {
@@ -1095,7 +1077,6 @@ function App() {
     setMyData(null)
     setOpponentData(null)
     setLogs([])
-    setCurrentTurnId('')
     setMyIndex(null)
     setTurnIndex(0)
     setIsYourTurn(false)
@@ -1330,7 +1311,6 @@ function App() {
               setMyData(null)
               setOpponentData(null)
               setLogs([])
-              setCurrentTurnId('')
               setIsProcessing(false)
               setName('')
             }}

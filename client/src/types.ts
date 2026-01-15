@@ -101,6 +101,7 @@ export interface GameState {
   roomId: string;
   players: [PlayerState, PlayerState];
   currentTurn: number;
+  turnIndex: number;
   activeZone: Zone | null;
   isGameOver: boolean;
   winner: string | null;
@@ -172,6 +173,7 @@ export interface PlayerData {
  */
 export interface GameStartData {
   roomId: string;
+  turnIndex: number;
   currentTurnPlayerId: string; // 初回ターンプレイヤーID
   player1: PlayerData;
   player2: PlayerData;
