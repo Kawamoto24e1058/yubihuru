@@ -49,7 +49,6 @@ function App() {
   const [shieldEffect, setShieldEffect] = useState(false)
   const [myMaxHpExpand, setMyMaxHpExpand] = useState(false)
   const [opponentMaxHpExpand, setOpponentMaxHpExpand] = useState(false)
-  const [showZoneTooltip, setShowZoneTooltip] = useState(false)
   
   // turnIndex ターン管理用（新方式）
   const [myIndex, setMyIndex] = useState<number | null>(null)
