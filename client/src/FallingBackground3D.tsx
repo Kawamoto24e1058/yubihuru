@@ -1,6 +1,6 @@
 import React, { useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { Environment, RoundedBox } from '@react-three/drei';
+import { Environment } from '@react-three/drei';
 import * as THREE from 'three';
 
 // --- 描画ヘルパー: 竹 (索子) ---
