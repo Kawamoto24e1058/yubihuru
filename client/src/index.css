@@ -73,16 +73,14 @@
 
 html, body {
   font-family: 'Press Start 2P', cursive;
-  background-color: #fdf6e3;
-  background-image: radial-gradient(#444 15%, transparent 16%), radial-gradient(#444 15%, transparent 16%);
-  background-size: 20px 20px;
-  background-position: 0 0, 10px 10px;
+  background-color: transparent;
   color: #000;
   margin: 0;
   padding: 0;
   overflow-x: hidden;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+  height: 100%;
 }
 
 body { font-size: 8px; line-height: 1.5; letter-spacing: 1px; }
@@ -94,6 +92,7 @@ body { font-size: 8px; line-height: 1.5; letter-spacing: 1px; }
   padding: 24px;
   box-shadow: 12px 12px 0px #000 !important;
   position: relative;
+  z-index: 10;
 }
 
 .retro-window-title {
