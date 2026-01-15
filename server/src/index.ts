@@ -950,20 +950,43 @@ io.on('connection', (socket) => {
       console.log(`📳 shake_effect detected: shakeTurns set to 4`);
     }
 
-    if (!currentGame.isGameOver && defender.state.hp <= 0) {
-      console.log(`🏆 Game Over! ${attacker.username} wins! (delaying 4s for attack演出)`);
+    // ★【統合ゲーム終了判定】HPのマイナス補正 & 終了チェック
+    // 1. HPのマイナス補正（見た目用）
+    if (attacker.state.hp < 0) attacker.state.hp = 0;
+    if (defender.state.hp < 0) defender.state.hp = 0;
+
+    // 2. どちらかのHPが0になったかチェック
+    if (!currentGame.isGameOver && (attacker.state.hp === 0 || defender.state.hp === 0)) {
+      console.log("🏆 Game End Condition Met. Waiting 4s for animation...");
+      
+      // 勝者判定: HPが残っている方、両方0なら攻撃側の勝ち
+      let winnerName: string;
+      if (attacker.state.hp > 0 && defender.state.hp === 0) {
+        winnerName = attacker.username;
+      } else if (defender.state.hp > 0 && attacker.state.hp === 0) {
+        winnerName = defender.username;
+      } else {
+        // 両方0の場合は攻撃側の勝ち（相打ちルール）
+        winnerName = attacker.username;
+      }
+      
+      console.log(`🏆 Winner determined: ${winnerName}`);
 
       const roomIdForTimeout = currentRoomId;
-      const winnerName = attacker.username;
-      const gameStateSnapshot = currentGame; // setTimeoutコールバック内での参照用
+      const gameStateSnapshot = currentGame;
       
-      // まずはHP が0の状態でgame_state_updateを送信（攻撃演出を再生させる）
+      // まずはHPが0の状態でgame_state_updateを送信（攻撃演出を再生させる）
       io.to(roomIdForTimeout).emit('game_state_update', gameStateSnapshot);
       
-      // 4秒後に改めてisGameOverを設定してgame_overを送信
+      // 4秒後に正式に終了
       setTimeout(() => {
         gameStateSnapshot.isGameOver = true;
         gameStateSnapshot.winner = winnerName;
+        
+        console.log(`🏁 Game Over! Winner: ${winnerName}`);
+        
+        // ★重要: フラグを立てた状態を再送し、かつ game_over イベントも送る
+        io.to(roomIdForTimeout).emit('game_state_update', gameStateSnapshot);
         io.to(roomIdForTimeout).emit('game_over', {
           winner: winnerName,
           gameState: gameStateSnapshot,
@@ -971,31 +994,7 @@ io.on('connection', (socket) => {
         activeGames.delete(roomIdForTimeout);
       }, 4000);
 
-      return;
-    }
-
-    if (!currentGame.isGameOver && attacker.state.hp <= 0) {
-      console.log(`🏆 Game Over! ${defender.username} wins! (delaying 4s for attack演出)`);
-
-      const roomIdForTimeout = currentRoomId;
-      const winnerName = defender.username;
-      const gameStateSnapshot = currentGame; // setTimeoutコールバック内での参照用
-      
-      // まずはHP が0の状態でgame_state_updateを送信（攻撃演出を再生させる）
-      io.to(roomIdForTimeout).emit('game_state_update', gameStateSnapshot);
-      
-      // 4秒後に改めてisGameOverを設定してgame_overを送信
-      setTimeout(() => {
-        gameStateSnapshot.isGameOver = true;
-        gameStateSnapshot.winner = winnerName;
-        io.to(roomIdForTimeout).emit('game_over', {
-          winner: winnerName,
-          gameState: gameStateSnapshot,
-        });
-        activeGames.delete(roomIdForTimeout);
-      }, 4000);
-
-      return;
+      return; // ここで関数を抜け、ターン交代処理などに行かないようにする
     }
 
     currentGame.currentTurn++;
