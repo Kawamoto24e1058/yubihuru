@@ -88,10 +88,6 @@ export interface PlayerState {
   activeEffect?: 'ink' | 'shake' | 'none'; // メタ要素：インクこぼし、ウィンドウシェイク
   activeEffectTurns?: number; // アクティブ効果の残りターン数
   riichiBombCount?: number; // 数え役満カウント用
-  // 反射・カウンター系
-  isReflecting: boolean; // ミラーコート待機中
-  isCounter: boolean; // カウンター待機中
-  isDestinyBond: boolean; // 道連れ待機中
 }
 
 /**
@@ -101,7 +97,6 @@ export interface GameState {
   roomId: string;
   players: [PlayerState, PlayerState];
   currentTurn: number;
-  turnIndex: number;
   activeZone: Zone | null;
   isGameOver: boolean;
   winner: string | null;
@@ -173,8 +168,6 @@ export interface PlayerData {
  */
 export interface GameStartData {
   roomId: string;
-  turnIndex: number;
-  currentTurnPlayerId: string; // 初回ターンプレイヤーID
   player1: PlayerData;
   player2: PlayerData;
 }

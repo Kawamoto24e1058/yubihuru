@@ -20,8 +20,9 @@ const io = new Server(httpServer, {
     methods: ['GET', 'POST'],
   },
   // スマホ向け：heartbeat間隔を短く設定
-  pingInterval: 5000,
-  pingTimeout: 3000,
+  pingInterval: 3000, // 3秒ごとにping
+  pingTimeout: 10000, // 10秒でタイムアウト
+  transports: ['websocket', 'polling'],
 });
 
 app.use(cors({
@@ -52,12 +53,10 @@ interface GameState {
     state: PlayerState;
   };
   currentTurn: number;
-  turnIndex: 0 | 1; // 0: player1, 1: player2
-  currentTurnPlayerId: string; // 現在のターンのプレイヤーID（互換用）
+  currentTurnPlayerId: string; // 現在のターンのプレイヤーID
   isGameOver: boolean;
   winner: string | null;
   startedAt?: number; // ゲーム開始時刻（マッチング直後の保護用）
-  lastTurnChangeTime?: number; // 最後のターン変更時刻（ウォッチドッグ用）
 }
 
 const waitingRoom: WaitingPlayer[] = [];
@@ -67,8 +66,6 @@ const offlinePlayers = new Map<string, { roomId: string; lastSeen: number; usern
 const socketToPlayerId = new Map<string, string>();
 // マッチング確認待ち: roomId -> { player1_ready, player2_ready, timeout }
 const matchingWaitingRooms = new Map<string, { player1_ready: boolean; player2_ready: boolean; timeout: NodeJS.Timeout; roomData: any }>();
-// ウォッチドッグ監視: roomId -> timeoutID
-const watchdogTimers = new Map<string, NodeJS.Timeout>();
 
 // Helper function to create initial player state
 function createPlayerState(): PlayerState {
@@ -92,98 +89,7 @@ function createPlayerState(): PlayerState {
     riichiBombCount: 0,
     isBroken: false,
     brokenTurns: 0,
-    // 反射・カウンター系の初期化
-    isReflecting: false,
-    isCounter: false,
-    isDestinyBond: false,
   };
-}
-
-// Helper function to clean up game room and offline player data
-function cleanupGameRoom(roomId: string) {
-  const game = activeGames.get(roomId);
-  if (game) {
-    // 両プレイヤーのオフラインデータを削除
-    const player1Id = Array.from(socketToPlayerId.entries()).find(([, id]) => {
-      const info = offlinePlayers.get(id);
-      return info && info.roomId === roomId;
-    })?.[1];
-    
-    const player2Id = Array.from(socketToPlayerId.entries()).find(([, id]) => {
-      if (id === player1Id) return false;
-      const info = offlinePlayers.get(id);
-      return info && info.roomId === roomId;
-    })?.[1];
-    
-    if (player1Id) offlinePlayers.delete(player1Id);
-    if (player2Id) offlinePlayers.delete(player2Id);
-  }
-  
-  activeGames.delete(roomId);
-  stopWatchdog(roomId); // ウォッチドッグをクリア
-  console.log(`🗑️ Room ${roomId} cleaned up: game data and offline player info deleted`);
-}
-
-// Helper function to start watchdog for a game room (re-sync turn after 5s inactivity)
-function startWatchdog(roomId: string) {
-  // 既存のウォッチドッグをクリア
-  const existingTimer = watchdogTimers.get(roomId);
-  if (existingTimer) {
-    clearTimeout(existingTimer);
-  }
-
-  // 3秒後：警告ログを出す
-  const warningTimer = setTimeout(() => {
-    const game = activeGames.get(roomId);
-    if (game && !game.isGameOver) {
-      console.log(`⚠️ Room ${roomId}: No action for 3 seconds. Preparing reminder...`);
-    }
-  }, 3000);
-
-  // 5秒後：ターン状態を再送信（3秒以上行動なし）
-  const timer = setTimeout(() => {
-    const game = activeGames.get(roomId);
-    if (game && !game.isGameOver) {
-      console.log(`⏰ Watchdog triggered for room ${roomId}: Re-syncing turn...`);
-      const currentPlayer = game.turnIndex === 0 ? game.player1 : game.player2;
-      game.currentTurnPlayerId = currentPlayer.playerId;
-      const currentPlayerName = currentPlayer.username;
-      
-      // 【自動復旧】現在のターン状態をリマインド送信
-      io.to(roomId).emit('turn_change', {
-        turnIndex: game.turnIndex,
-        currentTurnPlayerId: game.currentTurnPlayerId,
-        currentTurnPlayerName: currentPlayerName,
-        gameState: game, // 完全なgameStateを送信
-        isReminder: true, // リマインド フラグ
-      });
-      
-      // 【デッドロック救済】game_state_updateで強制的にボタン有効化を指示
-      io.to(roomId).emit('game_state_update', {
-        gameState: game,
-        turnIndex: game.turnIndex,
-        currentTurnPlayerId: game.currentTurnPlayerId,
-        forceUnlock: true, // ボタン強制有効化フラグ
-        message: `${currentPlayerName}のターン（再通知）`,
-      });
-      
-      console.log(`✅ Turn re-synced (reminder): ${currentPlayerName} (${game.currentTurnPlayerId})`);
-      console.log(`🔓 デッドロック救済: ボタン強制有効化を指示`);
-    }
-  }, 5000); // 5秒のウォッチドッグ
-
-  watchdogTimers.set(roomId, timer);
-  console.log(`🐕 Watchdog started for room ${roomId} (3s warning → 5s reminder)`);
-}
-
-// Helper function to stop watchdog for a game room
-function stopWatchdog(roomId: string) {
-  const timer = watchdogTimers.get(roomId);
-  if (timer) {
-    clearTimeout(timer);
-    watchdogTimers.delete(roomId);
-    console.log(`🛑 Watchdog stopped for room ${roomId}`);
-  }
 }
 
 // Helper: weighted random pick according to zone rules
@@ -223,16 +129,6 @@ function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean
       const comeback = SKILLS.find(skill => skill.id === 119);
       console.log('🔄 HP危機的！起死回生が出現！');
       return comeback!;
-    }
-  }
-
-  // 【道連れ】HP20%以下で抽選可能（5%の確率）
-  if (currentHpPercent <= 0.20) {
-    const destinyBondChance = Math.random();
-    if (destinyBondChance < 0.05) { // 5%の確率で道連れ
-      const destinyBond = SKILLS.find(skill => skill.id === 134);
-      console.log('💀 HP危機的！道連れが出現！');
-      return destinyBond!;
     }
   }
 
@@ -311,81 +207,9 @@ function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean
     }
   }
 
-  // 技リストが空の場合のフォールバック（絶対に空にしない）
-  if (availableSkills.length === 0) {
-    console.warn('⚠️ フィルタ後の技リストが空です。全技から再抽選します。');
-    availableSkills = SKILLS.filter(skill => skill.id < 200); // ギガインパクト等を除外
-    if (availableSkills.length === 0) {
-      // それでも空なら最低限のフォールバック技を作成
-      availableSkills = [{
-        id: 0,
-        name: 'ゆびをふる',
-        type: 'attack',
-        power: 10,
-        description: '基本攻撃',
-        effect: 'none'
-      } as Skill];
-      console.warn('⚠️ SKILLS配列が完全に空です。フォールバック技を使用します。');
-    }
-  }
-
   // ランダムに1つ選択
   const randomIndex = Math.floor(Math.random() * availableSkills.length);
-  let selectedSkill = availableSkills[randomIndex];
-  
-  // 【立直中の役昇格】通常技が選ばれた場合、役に昇格する可能性
-  if (isRiichi) {
-    // 役のIDリスト（タンヤオ127、清一色128、国士無双129、九蓮宝燈130）
-    const yakuIds = [127, 128, 129, 130];
-    const isYaku = yakuIds.includes(selectedSkill.id);
-    
-    // 通常技（役ではない）が選ばれた場合のみ昇格抽選
-    if (!isYaku) {
-      const upgradeRoll = Math.random() * 100; // 0-100の乱数
-      
-      if (upgradeRoll < 1) { // 1%で九蓮宝燈
-        const chuuren = SKILLS.find(skill => skill.id === 130);
-        if (chuuren) {
-          selectedSkill = chuuren;
-          console.log('🀄✨ 立直昇格！九蓮宝燈へ昇格！（1%）');
-        }
-      } else if (upgradeRoll < 4) { // 3%で国士無双（累計4%）
-        const kokushi = SKILLS.find(skill => skill.id === 129);
-        if (kokushi) {
-          selectedSkill = kokushi;
-          console.log('🀄 立直昇格！国士無双へ昇格！（3%）');
-        }
-      } else if (upgradeRoll < 9) { // 5%で清一色（累計9%）
-        const chinItsu = SKILLS.find(skill => skill.id === 128);
-        if (chinItsu) {
-          selectedSkill = chinItsu;
-          console.log('🀄 立直昇格！清一色へ昇格！（5%）');
-        }
-      } else if (upgradeRoll < 19) { // 10%で断幺九（累計19%）
-        const tanyao = SKILLS.find(skill => skill.id === 127);
-        if (tanyao) {
-          selectedSkill = tanyao;
-          console.log('🀄 立直昇格！断幺九へ昇格！（10%）');
-        }
-      }
-      // 19%を超えた場合は通常技のまま
-    }
-  }
-  
-  // 最終的な安全チェック：技が選択されていない場合のフォールバック
-  if (!selectedSkill) {
-    console.warn('⚠️ getRandomSkill: 技が選択されませんでした。デフォルト技（パンチ）を返します。');
-    selectedSkill = SKILLS.find(skill => skill.id === 1) || {
-      id: 0,
-      name: 'ゆびをふる',
-      type: 'attack',
-      power: 10,
-      description: '基本攻撃',
-      effect: 'none'
-    } as Skill;
-  }
-  
-  return selectedSkill;
+  return availableSkills[randomIndex];
 }
 
 
@@ -393,8 +217,7 @@ function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean
 function applySkillEffect(
   skill: Skill,
   attacker: GameState['player1'],
-  defender: GameState['player2'],
-  riichiFieldBoost: number = 1.0
+  defender: GameState['player2']
 ): { 
   damage: number; 
   healing: number; 
@@ -460,51 +283,8 @@ function applySkillEffect(
           attacker.state.buffTurns = 0;
         }
       }
-      
-      // 立直フィールド効果を適用（役のみ、相手が立直中）
-      baseDamage = Math.floor(baseDamage * riichiFieldBoost);
-      
       damage = applyDefense(baseDamage);
-      
-      // 【反射チェック】ダメージが0より大きい場合のみ反射処理
-      if (damage > 0) {
-        // ミラーコート：ダメージを0にして1.5倍で跳ね返す
-        if (defender.state.isReflecting) {
-          const reflectDamage = Math.floor(damage * 1.5);
-          attacker.state.hp = Math.max(0, attacker.state.hp - reflectDamage);
-          defender.state.isReflecting = false; // 反射状態解除
-          logs.push(`🛡️✨ ${defender.username}のミラーコート！`);
-          logs.push(`🔮 REFLECT!! ダメージを跳ね返した！`);
-          logs.push(`💥 ${attacker.username}に${reflectDamage}の反射ダメージ！`);
-          resultSkillEffect = 'reflect-success';
-          damage = 0; // 自分はダメージを受けない
-          // defenderのHPは変更しない
-        }
-        // カウンター：ダメージを50%軽減し、軽減前の2倍で返す
-        else if (defender.state.isCounter) {
-          const originalDamage = damage;
-          const reducedDamage = Math.floor(damage * 0.5);
-          const counterDamage = Math.floor(originalDamage * 2);
-          
-          defender.state.hp = Math.max(0, defender.state.hp - reducedDamage);
-          attacker.state.hp = Math.max(0, attacker.state.hp - counterDamage);
-          defender.state.isCounter = false; // カウンター状態解除
-          
-          logs.push(`⚔️🛡️ ${defender.username}のカウンター！`);
-          logs.push(`🔄 COUNTER!! 攻撃を見切った！`);
-          logs.push(`💢 ${defender.username}は${reducedDamage}ダメージを受けた`);
-          logs.push(`⚡ ${attacker.username}に${counterDamage}の反撃ダメージ！`);
-          resultSkillEffect = 'counter-success';
-          damage = reducedDamage; // 軽減後のダメージを記録
-        }
-        else {
-          // 通常のダメージ処理
-          defender.state.hp = Math.max(0, defender.state.hp - damage);
-        }
-      } else {
-        // ダメージが0の技には反射しない（反射状態も消費しない）
-        defender.state.hp = Math.max(0, defender.state.hp - damage);
-      }
+      defender.state.hp = Math.max(0, defender.state.hp - damage);
       
       // ネタ技の特別ログ
       if (skill.id === 115) {
@@ -735,27 +515,6 @@ function applySkillEffect(
         defender.state.hp = 0; // 強制的にHP0で勝利確定
         resultSkillEffect = 'tenpai-ultimate'; // 天和特別演出
       }
-      // 【反射】ミラーコート：次のターンに受けるダメージを1.5倍で跳ね返す
-      else if (skill.effect === 'mirror_coat') {
-        attacker.state.isReflecting = true;
-        logs.push(`🛡️✨ ${attacker.username}の${skill.name}！`);
-        logs.push(`🔮 次のダメージを跳ね返す構えを取った！`);
-        resultSkillEffect = 'reflect-ready';
-      }
-      // 【反射】カウンター：次のダメージを50%軽減し、軽減前の2倍で返す
-      else if (skill.effect === 'counter') {
-        attacker.state.isCounter = true;
-        logs.push(`⚔️🛡️ ${attacker.username}の${skill.name}！`);
-        logs.push(`🔄 次の攻撃を見切って反撃する構え！`);
-        resultSkillEffect = 'counter-ready';
-      }
-      // 【道連れ】次のターンに倒された時、相手も道連れにする
-      else if (skill.effect === 'destiny_bond') {
-        attacker.state.isDestinyBond = true;
-        logs.push(`💀🔗 ${attacker.username}の${skill.name}！`);
-        logs.push(`⚠️ 自分が倒された時、相手も道連れにする呪いをかけた！`);
-        resultSkillEffect = 'destiny-bond-ready';
-      }
       // 立直攻撃（ロン/ツモ）の処理
       else if (skill.effect === 'riichi_attack') {
         damage = skill.power;
@@ -862,8 +621,7 @@ io.on('connection', (socket) => {
             state: player2State,
           },
           currentTurn: 0,
-          turnIndex: 0,
-          currentTurnPlayerId: player1.playerId, // 🔴 socket.id → playerId に変更（互換用）
+          currentTurnPlayerId: player1.socketId, // player1が最初のターン
           isGameOver: false,
           winner: null,
           startedAt: Date.now(), // マッチング直後の保護用
@@ -872,7 +630,6 @@ io.on('connection', (socket) => {
         // Send game_start event to both clients
         const gameData = {
           roomId,
-          currentTurnPlayerId: gameState.currentTurnPlayerId, // playerId ベース
           player1: {
             playerId: player1.playerId,
             socketId: player1.socketId,
@@ -909,88 +666,11 @@ io.on('connection', (socket) => {
           roomData: gameData,
         });
 
-        // 【審判ロジック】必ず最初のターンプレイヤーを明示的に指定
-        gameState.currentTurnPlayerId = player1.playerId; // 🔴 socket.id → playerId に変更
-        activeGames.set(roomId, gameState);
-        console.log(`🎯 Initial turn set to: ${player1.username} (${player1.playerId})`);
-
-        // 【強制フラグ方式】各プレイヤーに対して「操作許可」を明確に指名
-        // Player1: 先行プレイヤー（isYourTurn: true）
-        io.to(player1.socketId).emit('match_found', { 
-          roomId, 
-          turnIndex: gameState.turnIndex,
-          currentTurnPlayerId: gameState.currentTurnPlayerId,
-          isYourTurn: true,
-          yourIndex: 0,
-          yourOpponent: player2.username,
-        });
-        console.log(`✅ Player1 (${player1.username}): isYourTurn = true`);
-        
-        // Player2: 後攻プレイヤー（isYourTurn: false）
-        io.to(player2.socketId).emit('match_found', { 
-          roomId, 
-          turnIndex: gameState.turnIndex,
-          currentTurnPlayerId: gameState.currentTurnPlayerId,
-          isYourTurn: false,
-          yourIndex: 1,
-          yourOpponent: player1.username,
-        });
-        console.log(`✅ Player2 (${player2.username}): isYourTurn = false`);
+        // マッチング確立を通知（winner/gameOverリセット用）
+        io.to(roomId).emit('match_found', { roomId });
         
         // ゲームスタート通知
-        io.to(roomId).emit('game_start', { ...gameData, turnIndex: gameState.turnIndex });
-        
-        // 【強制ターン開始】マッチング直後、初期ターンプレイヤーを確実にセットして全員に通知
-        console.log(`\n⚡ ===== 強制ターン開始ロジック =====`);
-        gameState.turnIndex = 0;
-        gameState.currentTurnPlayerId = player1.playerId;
-        console.log(`✅ 初期ターンを確定: ${player1.username} (${player1.playerId})`);
-        
-        io.to(roomId).emit('game_state_update', {
-          gameState: gameState,
-          turnIndex: gameState.turnIndex,
-          currentTurnPlayerId: gameState.currentTurnPlayerId,
-          message: `${player1.username}のターンです！`,
-        });
-        console.log(`📤 game_state_update(初期ターン) 送信完了`);
-        console.log(`========================================\n`);
-        
-        // 【握手プロセス】通信揺らぎ対策：300msおきに最新のgameStateを5回送信
-        let shakehandCount = 0;
-        const shakehandInterval = setInterval(() => {
-          const currentGame = activeGames.get(roomId);
-          if (currentGame && shakehandCount < 5) {
-            io.to(roomId).emit('game_state_sync', {
-              gameState: currentGame,
-              currentTurnPlayerId: currentGame.currentTurnPlayerId,
-              turnIndex: currentGame.turnIndex,
-            });
-            console.log(`🤝 Handshake #${shakehandCount + 1}/5 for room ${roomId}`);
-            shakehandCount++;
-          } else {
-            clearInterval(shakehandInterval);
-            console.log(`✅ Handshake completed for room ${roomId}`);
-          }
-        }, 300); // 300msおきに送信
-        
-        // 【同期保証のハメ技】2秒経ってアクションがない場合、先行プレイヤーに強制通知
-        const forceStartTimeout = setTimeout(() => {
-          const game = activeGames.get(roomId);
-          if (game && !game.isGameOver) {
-            const currentPlayer = game.currentTurnPlayerId === player1.playerId ? player1 : player2;
-            console.log(`⏱️ 2秒経過：先行プレイヤー(${currentPlayer.username})に強制通知`);
-            io.to(currentPlayer.socketId).emit('force_turn_start', {
-              message: `${currentPlayer.username}のターン！ボタンを押してください！`,
-              isYourTurn: true,
-              turnIndex: game.turnIndex,
-              currentTurnPlayerId: game.currentTurnPlayerId,
-            });
-            console.log(`🚨 force_turn_start sent to ${currentPlayer.username}`);
-          }
-        }, 2000); // 2秒のタイムアウト
-        
-        // ゲーム開始時にウォッチドッグを開始（ボタンロック対策）
-        startWatchdog(roomId);
+        io.to(roomId).emit('game_start', gameData);
         
         console.log(`📋 Matching confirmed. Waiting for battle_ready_ack from both players in room ${roomId}`);
         console.log(`   Player 1: ${player1.username} (${player1.socketId})`);
@@ -1011,20 +691,19 @@ io.on('connection', (socket) => {
     const offlineInfo = offlinePlayers.get(playerId);
     
     if (!offlineInfo) {
-      socket.emit('can_reconnect', { canReconnect: false, hasActiveGame: false });
+      socket.emit('can_reconnect', { canReconnect: false });
       return;
     }
 
     const game = activeGames.get(offlineInfo.roomId);
     if (!game) {
       offlinePlayers.delete(playerId);
-      socket.emit('can_reconnect', { canReconnect: false, hasActiveGame: false });
+      socket.emit('can_reconnect', { canReconnect: false });
       return;
     }
 
-    // 有効な対戦データが存在する：hasActiveGame フラグを true で返す
-    console.log(`📢 Active game found for playerId ${playerId}: ${offlineInfo.roomId}`);
-    socket.emit('can_reconnect', { canReconnect: false, hasActiveGame: true });
+    // 有効な対戦データが存在する
+    socket.emit('can_reconnect', { canReconnect: true });
   });
 
   // 再接続リクエスト
@@ -1052,17 +731,15 @@ io.on('connection', (socket) => {
 
     if (game.player1.playerId === playerId) {
       game.player1.socketId = socket.id;
-      // 🔴 currentTurnPlayerId は playerId ベースなので更新不要
-      // if (game.currentTurnPlayerId === previousSocketId) {
-      //   game.currentTurnPlayerId = socket.id;
-      // }
+      if (game.currentTurnPlayerId === previousSocketId) {
+        game.currentTurnPlayerId = socket.id;
+      }
     }
     if (game.player2.playerId === playerId) {
       game.player2.socketId = socket.id;
-      // 🔴 currentTurnPlayerId は playerId ベースなので更新不要
-      // if (game.currentTurnPlayerId === previousSocketId) {
-      //   game.currentTurnPlayerId = socket.id;
-      // }
+      if (game.currentTurnPlayerId === previousSocketId) {
+        game.currentTurnPlayerId = socket.id;
+      }
     }
 
     offlinePlayers.delete(playerId);
@@ -1081,9 +758,8 @@ io.on('connection', (socket) => {
   });
 
   // Handle action_activate_zone event
-  socket.on('action_activate_zone', (payload: { zoneType: '強攻のゾーン' | '集中のゾーン' | '乱舞のゾーン' | '博打のゾーン', playerId?: string }) => {
-    const senderPlayerId = payload.playerId || '';
-    console.log(`🌀 ゾーン発動リクエスト: SenderId=${senderPlayerId}, SocketId=${socket.id}, zoneType=${payload.zoneType}`);
+  socket.on('action_activate_zone', (payload: { zoneType: '強攻のゾーン' | '集中のゾーン' | '乱舞のゾーン' | '博打のゾーン' }) => {
+    console.log(`🌀 ${socket.id} activating zone: ${payload.zoneType}`);
 
     // Find the game this player is in
     let currentGame: GameState | undefined;
@@ -1097,25 +773,25 @@ io.on('connection', (socket) => {
     });
 
     if (!currentGame || !currentRoomId) {
-      console.error(`❌ ゲーム見つからず: ${socket.id}`);
       socket.emit('error', { message: 'Game not found' });
       return;
     }
 
     if (currentGame.isGameOver) {
-      console.error(`❌ ゲーム終了済み: ${socket.id}`);
       socket.emit('error', { message: 'Game is already over' });
       return;
     }
 
-    // turnIndex に基づいて行動プレイヤーを決定
-    const actingIndex = currentGame.turnIndex ?? 0;
-    const player = actingIndex === 0 ? currentGame.player1 : currentGame.player2;
-    const nextIndex = actingIndex === 0 ? 1 : 0;
-    const nextPlayer = nextIndex === 0 ? currentGame.player1 : currentGame.player2;
-    currentGame.currentTurnPlayerId = player.playerId;
+    // ターンチェック：自分のターンかどうか
+    if (currentGame.currentTurnPlayerId !== socket.id) {
+      console.log(`❌ ${socket.id} tried to activate zone on opponent's turn`);
+      socket.emit('error', { message: 'Not your turn!' });
+      return;
+    }
 
-    console.log(`📍 ターン判定: turnIndex=${currentGame.turnIndex}, acting=${player.username}`);
+    // Determine which player is activating the zone
+    const isPlayer1 = currentGame.player1.socketId === socket.id;
+    const player = isPlayer1 ? currentGame.player1 : currentGame.player2;
 
     // ゾーンアクティブ化のMPコスト
     const ZONE_MP_COST = 5;
@@ -1123,7 +799,7 @@ io.on('connection', (socket) => {
     // Check if player has enough MP (MP上限5)
     if (player.state.mp < ZONE_MP_COST) {
       socket.emit('error', { message: `Insufficient MP. Need ${ZONE_MP_COST} MP to activate zone.` });
-      console.log(`❌ ${player.username}のMP不足 (${player.state.mp}/${ZONE_MP_COST})`);
+      console.log(`❌ ${player.username} has insufficient MP (${player.state.mp}/${ZONE_MP_COST})`);
       return;
     }
 
@@ -1137,13 +813,14 @@ io.on('connection', (socket) => {
       remainingTurns: duration,
     };
 
-    console.log(`✨ ${player.username}が${payload.zoneType}を${duration}ターン発動`);
+    console.log(`✨ ${player.username} activated ${payload.zoneType} for ${duration} turns`);
     console.log(`   MP: ${player.state.mp + ZONE_MP_COST} -> ${player.state.mp}`);
 
-    // ターンを交代（turnIndexを反転）
-    currentGame.currentTurn++;
-    currentGame.turnIndex = nextIndex as 0 | 1;
-    currentGame.currentTurnPlayerId = nextPlayer.playerId;
+    // ターンを交代
+    const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId 
+      ? currentGame.player2 
+      : currentGame.player1;
+    currentGame.currentTurnPlayerId = nextPlayer.socketId;
 
     // Send zone_activated event to both players
     io.to(currentRoomId).emit('zone_activated', {
@@ -1157,82 +834,49 @@ io.on('connection', (socket) => {
 
     // ターン変更を通知
     io.to(currentRoomId).emit('turn_change', {
-      turnIndex: currentGame.turnIndex,
       currentTurnPlayerId: currentGame.currentTurnPlayerId,
       currentTurnPlayerName: nextPlayer.username,
     });
 
-    io.to(currentRoomId).emit('game_state_update', {
-      gameState: currentGame,
-      turnIndex: currentGame.turnIndex,
-      currentTurnPlayerId: currentGame.currentTurnPlayerId,
-    });
-
-    console.log(`🔄 ターン交代: ${nextPlayer.username} (${nextPlayer.socketId})`);
+    console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.socketId})`);
   });
 
   // Handle action_use_skill event
-  socket.on('action_use_skill', (data: any = {}) => {
-    const senderPlayerId = data.playerId || '';
-    const senderRoomId = data.roomId || '';
-    console.log(`\n⚔️ ===== 技発動リクエスト受信 =====`);
-    console.log(`   SenderId (playerId): ${senderPlayerId}`);
-    console.log(`   RoomId: ${senderRoomId}`);
-    console.log(`   SocketId: ${socket.id}`);
-    console.log(`   Received data:`, JSON.stringify(data));
+  socket.on('action_use_skill', () => {
+    console.log(`⚔️ ${socket.id} used a skill`);
 
-    // 【修正】roomIdを直接使用してゲームを検索
+    // Find the game this player is in
     let currentGame: GameState | undefined;
     let currentRoomId: string | undefined;
 
-    // 第1段階：送られてきたroomIdで検索
-    if (senderRoomId) {
-      currentGame = activeGames.get(senderRoomId);
-      if (currentGame) {
-        currentRoomId = senderRoomId;
-        console.log(`✅ ゲーム発見（roomId指定）: Room ${currentRoomId}`);
-      } else {
-        console.warn(`⚠️ roomIdで見つかりませんでした: ${senderRoomId}。socket.idで検索します...`);
+    activeGames.forEach((game, roomId) => {
+      if (game.player1.socketId === socket.id || game.player2.socketId === socket.id) {
+        currentGame = game;
+        currentRoomId = roomId;
       }
-    }
-
-    // 第2段階：roomIdで見つからなかった場合、socket.idで検索（フォールバック）
-    if (!currentGame) {
-      activeGames.forEach((game, roomId) => {
-        if (game.player1.socketId === socket.id || game.player2.socketId === socket.id) {
-          currentGame = game;
-          currentRoomId = roomId;
-          console.log(`✅ ゲーム発見（socket.id検索）: Room ${currentRoomId}`);
-        }
-      });
-    }
+    });
 
     if (!currentGame || !currentRoomId) {
-      console.error(`❌ ゲーム見つからず: roomId=${senderRoomId}, socketId=${socket.id}`);
       socket.emit('error', { message: 'Game not found' });
       return;
     }
 
-    console.log(`✅ ゲーム確定: Room ${currentRoomId}`);
-    console.log(`   Player1: ${currentGame.player1.username} (playerId: ${currentGame.player1.playerId}, socketId: ${currentGame.player1.socketId})`);
-    console.log(`   Player2: ${currentGame.player2.username} (playerId: ${currentGame.player2.playerId}, socketId: ${currentGame.player2.socketId})`);
-
     if (currentGame.isGameOver) {
-      console.error(`❌ ゲーム終了済み: ${socket.id}`);
       socket.emit('error', { message: 'Game is already over' });
       return;
     }
 
-    // シンプルなターン管理：turnIndex を採用し、送信者に依存せず処理
-    const attackerIndex = currentGame.turnIndex ?? 0;
-    const attacker = attackerIndex === 0 ? currentGame.player1 : currentGame.player2;
-    const defender = attackerIndex === 0 ? currentGame.player2 : currentGame.player1;
-    currentGame.currentTurnPlayerId = attacker.playerId; // 互換用にプレイヤーIDも保持
+    // ターンチェック：自分のターンかどうか
+    if (currentGame.currentTurnPlayerId !== socket.id) {
+      console.log(`❌ ${socket.id} tried to use skill on opponent's turn`);
+      socket.emit('error', { message: 'Not your turn!' });
+      return;
+    }
 
-    console.log(`\n📍 ===== ターン判定（turnIndexベース） =====`);
-    console.log(`   turnIndex: ${currentGame.turnIndex}`);
-    console.log(`   attacker: ${attacker.username} (${attacker.playerId})`);
-    console.log(`   defender: ${defender.username} (${defender.playerId})`);
+    // Determine attacker and defender
+    const isPlayer1 = currentGame.player1.socketId === socket.id;
+    const attacker = isPlayer1 ? currentGame.player1 : currentGame.player2;
+    const defender = isPlayer1 ? currentGame.player2 : currentGame.player1;
 
     // Safety: ensure opponent exists before proceeding
     if (!defender || !defender.state) {
@@ -1260,7 +904,7 @@ io.on('connection', (socket) => {
           winner: defender.username,
           gameState: currentGame,
         });
-        cleanupGameRoom(currentRoomId);
+        activeGames.delete(currentRoomId);
         return;
       }
     }
@@ -1312,13 +956,12 @@ io.on('connection', (socket) => {
         if (defender.state.activeEffectTurns === 0) defender.state.activeEffect = 'none';
       }
 
-      // ターンカウントと交代（シンプルにインデックスを反転）
+      // ターンカウントと交代
       currentGame.currentTurn++;
-      currentGame.turnIndex = currentGame.turnIndex === 0 ? 1 : 0;
-      const nextPlayer = currentGame.turnIndex === 0
-        ? currentGame.player1
-        : currentGame.player2;
-      currentGame.currentTurnPlayerId = nextPlayer.playerId;
+      const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId 
+        ? currentGame.player2 
+        : currentGame.player1;
+      currentGame.currentTurnPlayerId = nextPlayer.socketId;
 
       // 行動不能の battle_update を送信
       const battleUpdate = {
@@ -1335,7 +978,6 @@ io.on('connection', (socket) => {
       io.to(currentRoomId).emit('battle_update', battleUpdate);
 
       io.to(currentRoomId).emit('turn_change', {
-        turnIndex: currentGame.turnIndex,
         currentTurnPlayerId: currentGame.currentTurnPlayerId,
         currentTurnPlayerName: nextPlayer.username,
       });
@@ -1343,57 +985,9 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Get random skill: room.skills 優先、なければ共通SKILLSから抽選
-    let selectedSkill: Skill | null = null;
-    try {
-      console.log(`🎲 技抽選開始...`);
-      const roomSkills = (currentGame as any).skills as Skill[] | undefined;
-      if (roomSkills && roomSkills.length > 0) {
-        const randomIndex = Math.floor(Math.random() * roomSkills.length);
-        selectedSkill = roomSkills[randomIndex];
-        console.log(`✅ room.skills から抽選: ${selectedSkill.name}`);
-      } else {
-        selectedSkill = getRandomSkill(attacker.state.activeZone, attacker.state.isRiichi, attacker.state.hp, attacker.state.maxHp, currentGame.currentTurn);
-      }
-      
-      // 技が選択されなかった場合、デフォルト技（パンチ）を使用
-      if (!selectedSkill) {
-        console.warn('⚠️ 技抽選で技が選択されませんでした。デフォルト技（パンチ）を使用します。');
-        selectedSkill = SKILLS.find(skill => skill.id === 1) || null; // パンチ (id: 1)
-        if (!selectedSkill) {
-          // SKILLSリスト自体が空の場合の最終フォールバック
-          selectedSkill = {
-            id: 0,
-            name: 'ゆびをふる',
-            type: 'attack',
-            power: 10,
-            description: '基本攻撃',
-            effect: 'none'
-          } as Skill;
-          console.warn('⚠️ SKILLSリストが空です。フォールバック技「ゆびをふる」を使用します。');
-        }
-      }
-      console.log(`✅ 技抽選成功: ${selectedSkill.name} (威力: ${selectedSkill.power})`);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Skill selection failed';
-      console.error(`❌ 技抽選エラー: ${message}`);
-      
-      // エラー時も確実に全プレイヤーに通知
-      io.to(currentRoomId).emit('game_state_update', {
-        gameState: currentGame,
-        turnIndex: currentGame.turnIndex,
-        currentSkill: null,
-        damage: 0,
-        animationStart: false,
-        error: message,
-      });
-      socket.emit('error', { message: `技抽選に失敗しました: ${message}` });
-      console.log(`📤 エラー通知を全プレイヤーに送信完了`);
-      return;
-    }
-
+    // Get random skill from SKILLS array with zone effects and riichi state
+    const selectedSkill = getRandomSkill(attacker.state.activeZone, attacker.state.isRiichi, attacker.state.hp, attacker.state.maxHp, currentGame.currentTurn);
     console.log(`🎲 Random skill selected: ${selectedSkill.name} (${selectedSkill.type})`);
-    console.log(`🎲 技決定: ${selectedSkill.name} (id: ${selectedSkill.id}, power: ${selectedSkill.power})`);
     console.log(`   Current zone: ${attacker.state.activeZone.type} (${attacker.state.activeZone.remainingTurns} turns remaining)`);
     if (attacker.state.isRiichi) {
       console.log(`   🀄 立直状態: ${attacker.username}`);
@@ -1430,7 +1024,7 @@ io.on('connection', (socket) => {
           gameState: currentGame,
         });
         
-        cleanupGameRoom(currentRoomId);
+        activeGames.delete(currentRoomId);
         return;
       }
     } else {
@@ -1451,28 +1045,11 @@ io.on('connection', (socket) => {
       }
     }
 
-    // 【立直フィールド効果】相手が立直中で、自分が役を引いた場合、威力1.5倍
-    const yakuIds = [127, 128, 129, 130]; // 断幺九、清一色、国士無双、九蓮宝燈
-    const isYakuSkill = yakuIds.includes(selectedSkill.id);
-    const isOpponentRiichi = defender.state.isRiichi;
-    let riichiFieldBoost = 1.0;
-    let riichiFieldMessage = '';
-    
-    if (isOpponentRiichi && isYakuSkill && !attacker.state.isRiichi) {
-      // 相手が立直中、自分は立直していない、そして役を引いた
-      riichiFieldBoost = 1.5;
-      riichiFieldMessage = `🀄💥 立直による場荒れ！役の威力が跳ね上がった！`;
-      console.log(`🀄 立直フィールド効果: ${attacker.username}の役が1.5倍！`);
-    }
-
     // Apply skill effect
-    let result = applySkillEffect(selectedSkill, attacker, defender, riichiFieldBoost);
+    let result = applySkillEffect(selectedSkill, attacker, defender);
     const messageParts = [...preMessages];
     if (zoneEffectMessage) {
       messageParts.push(zoneEffectMessage);
-    }
-    if (riichiFieldMessage) {
-      messageParts.push(riichiFieldMessage);
     }
     messageParts.push(result.message);
 
@@ -1488,16 +1065,6 @@ io.on('connection', (socket) => {
     }
 
     result.message = messageParts.join('\n');
-
-    // 技結果をゲーム状態に反映（UI用メタ情報）
-    (currentGame as any).lastSkill = {
-      name: selectedSkill.name,
-      type: selectedSkill.type,
-      power: selectedSkill.power,
-      damage: result.damage,
-      attackerId: attacker.playerId,
-      defenderId: defender.playerId,
-    };
 
     // Debug: log HP state right after damage/heal is applied
     console.log(`🧪 HP after action -> ${attacker.username}: ${attacker.state.hp}, ${defender.username}: ${defender.state.hp}`);
@@ -1563,39 +1130,6 @@ io.on('connection', (socket) => {
     // Check for game over (only while battle is active and after HP updates)
     // 2秒間のディレイを設けて、クライアント側の演出が完了するのを待つ
     if (!currentGame.isGameOver && defender.state.hp <= 0) {
-      // 【道連れチェック】defenderが道連れ状態で倒された場合
-      if (defender.state.isDestinyBond) {
-        attacker.state.hp = 0; // 相手も強制的に0に
-        currentGame.isGameOver = true;
-        currentGame.winner = null; // 引き分け
-        defender.state.isDestinyBond = false; // 状態解除
-        
-        console.log(`💀 Destiny Bond activated! Both players defeated!`);
-        
-        io.to(currentRoomId).emit('battle_update', {
-          turn: currentGame.currentTurn,
-          skillName: '道連れ',
-          skillPower: 0,
-          message: `💀🔗 ${defender.username}の道連れ発動！\n\n⚠️ 両者とも倒れた...！`,
-          skillEffect: 'destiny-bond-activated',
-          gameState: currentGame,
-        });
-        
-        if (currentRoomId) {
-          const roomIdForTimeout = currentRoomId; // TSナローイング保持用
-          setTimeout(() => {
-            io.to(roomIdForTimeout).emit('game_over', {
-              winner: null,
-              gameState: currentGame,
-              isDraw: true,
-            });
-            cleanupGameRoom(roomIdForTimeout);
-          }, 3000);
-        }
-        
-        return;
-      }
-      
       currentGame.isGameOver = true;
       currentGame.winner = attacker.username;
 
@@ -1610,7 +1144,7 @@ io.on('connection', (socket) => {
         });
 
         // Remove game from active games
-        cleanupGameRoom(roomIdForTimeout);
+        activeGames.delete(roomIdForTimeout);
       }, 2000);
 
       return;
@@ -1631,7 +1165,7 @@ io.on('connection', (socket) => {
           gameState: currentGame,
         });
 
-        cleanupGameRoom(roomIdForTimeout);
+        activeGames.delete(roomIdForTimeout);
       }, 2000);
 
       return;
@@ -1640,12 +1174,11 @@ io.on('connection', (socket) => {
     // Increment turn counter
     currentGame.currentTurn++;
 
-    // ターンを交代（turnIndexを反転）
-    currentGame.turnIndex = currentGame.turnIndex === 0 ? 1 : 0;
-    const nextPlayer = currentGame.turnIndex === 0 
-      ? currentGame.player1 
-      : currentGame.player2;
-    currentGame.currentTurnPlayerId = nextPlayer.playerId;
+    // ターンを交代
+    const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId 
+      ? currentGame.player2 
+      : currentGame.player1;
+    currentGame.currentTurnPlayerId = nextPlayer.socketId;
 
     // 【メタ要素】activeEffectの期間を減らす
     if (attacker.state.activeEffectTurns && attacker.state.activeEffectTurns > 0) {
@@ -1661,42 +1194,16 @@ io.on('connection', (socket) => {
       }
     }
 
-    // ターン変更を通知（ターンプレイヤー情報を含める）
+    // ターン変更を通知
     io.to(currentRoomId).emit('turn_change', {
-      turnIndex: currentGame.turnIndex,
       currentTurnPlayerId: currentGame.currentTurnPlayerId,
       currentTurnPlayerName: nextPlayer.username,
-      gameState: currentGame, // 完全なgameStateを送信
     });
-
-    // 🔴 【重要】gameState更新後、即座に全員へ新しいゲーム状態を送信
-    console.log(`\n📤 ===== game_state_update 送信 =====`);
-    console.log(`   Room ID: ${currentRoomId}`);
-    console.log(`   技: ${selectedSkill.name}`);
-    console.log(`   威力: ${selectedSkill.power}`);
-    console.log(`   ダメージ: ${result.damage}`);
-    console.log(`   次のターン: ${nextPlayer.username} (${nextPlayer.playerId})`);
-    console.log(`   アニメーション: 有効`);
-    console.log(`!!! BROADCASTING UPDATE !!! turnPlayerId=${currentGame.currentTurnPlayerId}`);
-    
-    io.to(currentRoomId).emit('game_state_update', {
-      gameState: currentGame,
-      turnIndex: currentGame.turnIndex,
-      currentSkill: selectedSkill.name,
-      damage: result.damage,
-      animationStart: true,
-    });
-    
-    console.log(`✅ Skill executed and state broadcasted`);
-    console.log(`========================================\n`);
-
-    // ウォッチドッグを再開（新しいターンの5秒ウォッチドッグ）
-    startWatchdog(currentRoomId);
 
     console.log(`📊 Turn ${currentGame.currentTurn}:`);
     console.log(`   ${attacker.username}: HP ${attacker.state.hp}, MP ${attacker.state.mp}`);
     console.log(`   ${defender.username}: HP ${defender.state.hp}, MP ${defender.state.mp}`);
-    console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.playerId})`);
+    console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.socketId})`);
   });
 
   // マッチング準備完了を受け取る
@@ -1731,8 +1238,7 @@ io.on('connection', (socket) => {
         player1: gameData.player1,
         player2: gameData.player2,
         currentTurn: 0,
-        turnIndex: 0,
-        currentTurnPlayerId: gameData.player1.playerId, // 🔁 プレイヤーIDで統一（互換用）
+        currentTurnPlayerId: gameData.player1.socketId,
         isGameOver: false,
         winner: null,
         startedAt: Date.now(),
@@ -1745,7 +1251,6 @@ io.on('connection', (socket) => {
 
       // ターン変更通知
       io.to(roomId).emit('turn_change', {
-        turnIndex: gameState.turnIndex,
         currentTurnPlayerId: gameState.currentTurnPlayerId,
         currentTurnPlayerName: gameData.player1.username,
       });
@@ -1754,8 +1259,8 @@ io.on('connection', (socket) => {
     }
   });
 
-  // 状態チェック（スマホ救済：待機中にバトルルームに入っているかを確認）
-  socket.on('check_status', (data: any) => {
+  // 【スマホ救済】状態チェック：待機中にバトルルームに入っているかを確認
+  socket.on('check_status', () => {
     const playerId = socketToPlayerId.get(socket.id);
     
     // activeGames の中に自分が参加しているルームを探す
@@ -1773,39 +1278,20 @@ io.on('connection', (socket) => {
     if (foundRoom && roomId) {
       console.log(`🔄 Status check: ${socket.id} is in active game room ${roomId}`);
       // バトルルームに入っている → 最新データを送信して強制同期
-      socket.emit('battle_sync', {
+      socket.emit('force_battle_sync', {
         gameState: foundRoom,
-        roomId: roomId
+        roomId: roomId,
+        status: 'playing'
       });
     } else {
       // 待機中または未参加
       console.log(`⏳ Status check: ${socket.id} is waiting or not in game`);
-    }
-  });
-
-  // 🔄 【手動同期】クライアントからの同期リクエストに応答
-  socket.on('request_manual_sync', (data: { roomId: string }) => {
-    const roomId = data.roomId;
-    const gameState = activeGames.get(roomId);
-
-    if (!gameState) {
-      console.warn(`⚠️ Manual sync requested but game not found: ${roomId}`);
-      socket.emit('manual_sync_response', {
-        error: 'Game not found',
+      socket.emit('status_response', {
+        status: 'waiting',
         gameState: null,
-        currentTurnPlayerId: null,
+        roomId: null
       });
-      return;
     }
-
-    // クライアントに最新の同期データを送信
-    socket.emit('manual_sync_response', {
-      gameState,
-      currentTurnPlayerId: gameState.currentTurnPlayerId,
-      turnNumber: gameState.currentTurn,
-    });
-
-    console.log(`🔄 Manual sync sent to client in room ${roomId}. Current turn: ${gameState.currentTurnPlayerId}`);
   });
 
   socket.on('disconnect', () => {

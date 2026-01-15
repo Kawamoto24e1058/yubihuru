@@ -31,7 +31,7 @@ export interface Skill {
   type: 'attack' | 'heal' | 'buff' | 'special';
   power: number; // ダメージ量、回復量、またはバフの場合は0
   description: string;
-  effect?: 'none' | 'recoil' | 'lifesteal' | 'mp_regen_boost' | 'poison' | 'multi_hit' | 'self_damage' | 'drain' | 'charge' | 'protect' | 'hit_rate' | 'max_hp_boost' | 'max_hp_boost_with_heal' | 'max_hp_boost_with_damage' | 'riichi' | 'riichi_attack' | 'comeback' | 'instant_win' | 'ink_effect' | 'shake_effect' | 'hp_swap' | 'mp_steal_2' | 'broken_finger' | 'food_terror' | 'yakuman' | 'chuuren' | 'tenpai' | 'mirror_coat' | 'counter' | 'destiny_bond';
+  effect?: 'none' | 'recoil' | 'lifesteal' | 'mp_regen_boost' | 'poison' | 'multi_hit' | 'self_damage' | 'drain' | 'charge' | 'protect' | 'hit_rate' | 'max_hp_boost' | 'max_hp_boost_with_heal' | 'max_hp_boost_with_damage' | 'riichi' | 'riichi_attack' | 'comeback' | 'instant_win' | 'ink_effect' | 'shake_effect' | 'hp_swap' | 'mp_steal_2' | 'broken_finger' | 'food_terror' | 'yakuman' | 'chuuren' | 'tenpai';
   recoilRatio?: number; // 自傷割合（例: 0.25なら25%）
   lifestealRatio?: number; // 与ダメージに対する回復割合
   mpRegenBonus?: number; // 追加MP回復量
@@ -104,10 +104,6 @@ export interface PlayerState {
   brokenTurns?: number; // 行動不能の残りターン数
   isBuffed?: boolean; // 攻撃力上昇フラグ
   buffTurns?: number; // バフ残りターン
-  // 反射・カウンター系
-  isReflecting: boolean; // ミラーコート待機中
-  isCounter: boolean; // カウンター待機中
-  isDestinyBond: boolean; // 道連れ待機中
 }
 
 /**

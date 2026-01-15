@@ -86,10 +86,6 @@ export interface PlayerState {
   activeEffect?: 'ink' | 'shake' | 'none'; // メタ要素
   activeEffectTurns?: number; // 効果の残りターン数
   riichiBombCount?: number; // 立直時の連続パンチカウント
-  // 反射・カウンター系
-  isReflecting?: boolean; // ミラーコート待機中
-  isCounter?: boolean; // カウンター待機中
-  isDestinyBond?: boolean; // 道連れ待機中
 }
 
 /**

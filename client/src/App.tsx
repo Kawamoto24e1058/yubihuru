@@ -1,15 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { io, Socket } from 'socket.io-client'
 import './App.css'
 import type { GameStartData, PlayerData } from './types'
-
-// グローバル変数の型定義
-declare global {
-  interface Window {
-    __gameOverData?: any
-    __resultTimeout?: any
-  }
-}
 
 // ゾーン効果の説明データ
 const ZONE_DESCRIPTIONS = {
@@ -43,6 +35,7 @@ function App() {
   const [myData, setMyData] = useState<PlayerData | null>(null)
   const [opponentData, setOpponentData] = useState<PlayerData | null>(null)
   const [logs, setLogs] = useState<string[]>([])
+  const [currentTurnId, setCurrentTurnId] = useState<string>('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [isShaking, setIsShaking] = useState(false)
   const [selectedZoneType, setSelectedZoneType] = useState<'強攻のゾーン' | '集中のゾーン' | '乱舞のゾーン' | '博打のゾーン'>('強攻のゾーン')
@@ -77,7 +70,7 @@ function App() {
   const [yakumanFreeze, setYakumanFreeze] = useState(false) // 役満フリーズ演出
   const [tenpaiUltimate, setTenpaiUltimate] = useState(false) // 天和の究極演出
   const [whiteoutFlash, setWhiteoutFlash] = useState(false) // ホワイトアウト
-  const [mahjongTiles, setMahjongTiles] = useState<Array<{id: number, left: number, emoji?: string, angle?: number, size?: number, duration?: number, delay?: number}>>([]) // 麻雀牌フロー
+  const [mahjongTiles, setMahjongTiles] = useState<Array<{id: number, left: number}>>([]) // 麻雀牌フロー
 
   // ラストアタック・インパクト用
   const [lastAttackGrayscale, setLastAttackGrayscale] = useState(false) // グレースケール
@@ -91,37 +84,10 @@ function App() {
   const [buffedDamage, setBuffedDamage] = useState<number | null>(null)
   const [showMenu, setShowMenu] = useState(false)
   const [showQuitConfirm, setShowQuitConfirm] = useState(false)
-  const [hasActiveGame, setHasActiveGame] = useState(false) // サーバーが進行中ゲーム検知時のフラグ
-  const [isYourTurn, setIsYourTurn] = useState(false) // turnIndexとmyIndexで算出
-  const [turnIndex, setTurnIndex] = useState<number>(0)
-  const [myIndex, setMyIndex] = useState<number | null>(null)
-  const [isAnimating, setIsAnimating] = useState(false) // 演出中フラグ（初期状態は必ずfalse）
+  const [canReconnect, setCanReconnect] = useState(false)
   const [isCheckingReconnect, setIsCheckingReconnect] = useState(true)
   const [totalWins, setTotalWins] = useState(0) // 通算勝利数
   const [currentStreak, setCurrentStreak] = useState(0) // 連勝数
-  const [currentRoomId, setCurrentRoomId] = useState<string>('') // 🔄 手動同期用：現在のroomId
-  const [myPersistentId, setMyPersistentId] = useState<string>('') // 🔴 不変ID方式：サーバーから与えられた固定ID
-  
-  // 反射・カウンター系演出
-  const [showReflectReady, setShowReflectReady] = useState(false) // ミラーコート待機中
-  const [showCounterReady, setShowCounterReady] = useState(false) // カウンター待機中
-  const [showDestinyBondReady, setShowDestinyBondReady] = useState(false) // 道連れ待機中
-  const [showReflectSuccess, setShowReflectSuccess] = useState(false) // 反射成功
-  const [showCounterSuccess, setShowCounterSuccess] = useState(false) // カウンター成功
-  const [showDestinyBondActivated, setShowDestinyBondActivated] = useState(false) // 道連れ発動
-
-  // 🔄 【手動同期】クライアントからサーバーに同期リクエストを送信
-  const requestManualSync = useCallback(() => {
-    if (!socket?.id) {
-      console.warn('❌ Socket ID not available for sync')
-      return
-    }
-    console.log('🔄 Requesting manual sync from server...')
-    socket.emit('request_manual_sync', { roomId: currentRoomId })
-  }, [socket, currentRoomId])
-
-  // 🔴 【接続イベント重複防止ガード】connect イベントが複数回実行されることを防ぐ
-  const hasConnectedRef = useRef(false)
 
   // 相手のactiveEffectを監視
   useEffect(() => {
@@ -233,20 +199,38 @@ function App() {
 
     newSocket.on('connect', () => {
       console.log('Connected to server')
-      
-      // 🔴 初回接続時のみ初期化を実行（再接続時はスキップ）
-      if (!hasConnectedRef.current) {
-        hasConnectedRef.current = true
-        
-        // 初回接続時は再接続可否のチェックのみ（自動復帰はしない）
-        const savedId = localStorage.getItem('yubihuru_player_id')
-        if (savedId && !gameStarted) {
-          newSocket.emit('check_reconnect', { playerId: savedId })
-        } else {
-          setIsCheckingReconnect(false)
+
+      // 進行中のバトルがあるかチェック
+      const activeBattle = localStorage.getItem('yubihuru_active_battle')
+      if (activeBattle && !gameStarted) {
+        try {
+          const battleData = JSON.parse(activeBattle)
+          // 5分以内のバトルなら復帰を試みる
+          if (Date.now() - battleData.timestamp < 300000) {
+            console.log('Active battle detected, attempting to reconnect...')
+            const savedId = localStorage.getItem('yubihuru_player_id')
+            if (savedId) {
+              newSocket.emit('reconnect', { playerId: savedId })
+              setIsWaiting(true)
+              return
+            }
+          } else {
+            // 古いバトル情報はクリア
+            localStorage.removeItem('yubihuru_active_battle')
+          }
+        } catch (e) {
+          console.error('Failed to parse active battle data:', e)
+          localStorage.removeItem('yubihuru_active_battle')
         }
+      }
+
+      // 初回接続時は再接続可否のチェックのみ
+      const savedId = localStorage.getItem('yubihuru_player_id')
+      if (savedId && !gameStarted) {
+        // 再接続可能かチェック（自動接続はしない）
+        newSocket.emit('check_reconnect', { playerId: savedId })
       } else {
-        console.log('✅ Reconnected - gameState sync will continue normally')
+        setIsCheckingReconnect(false)
       }
     })
 
@@ -256,9 +240,8 @@ function App() {
     })
 
     // 再接続可否の応答
-    newSocket.on('can_reconnect', (data: { canReconnect: boolean; hasActiveGame: boolean }) => {
-      console.log('Reconnect check response:', data)
-      setHasActiveGame(data.hasActiveGame)
+    newSocket.on('can_reconnect', (data: { canReconnect: boolean }) => {
+      setCanReconnect(data.canReconnect)
       setIsCheckingReconnect(false)
     })
 
@@ -278,48 +261,22 @@ function App() {
       setIsGameOver(false)
       setWinner(null)
       setZoneBanner(null)
-      setIsProcessing(false) // 演出中フラグを強制リセット
-      
-      // すべての演出フラグをリセット
-      setDamageFlash(false)
-      setHealFlash(false)
-      setPoisonFlash(false)
-      setShieldEffect(false)
-      setSpecialVictoryText(null)
-      setVictoryResult(null)
-      setOpponentInkEffect(false)
-      setOpponentShakeEffect(false)
-      setInkSplashes([])
-      setYakumanFreeze(false)
-      setLastAttackGrayscale(false)
-      setLastAttackFlash(false)
-      setShowImpact(false)
-      setShowFinishText(false)
-      setFatalFlash(false)
-      setFatalWarning(false)
-      setGlassBreak(false)
-      setSlowMotion(false)
-      setBuffedDamage(null)
+      setIsProcessing(false)
 
       const mySocketId = newSocket.id || ''
       const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
       const opponent = data.gameState.player1.socketId === mySocketId ? data.gameState.player2 : data.gameState.player1
-      const myIdx = data.gameState.player1.socketId === mySocketId ? 0 : 1
-      const turnIdx = data.gameState.turnIndex ?? 0
 
       setMyData(me)
       setOpponentData(opponent)
-      setMyIndex(myIdx)
-      setTurnIndex(turnIdx)
-      setIsYourTurn(myIdx === turnIdx)
-      console.log('✅ Reconnect: Current turn set to:', data.gameState.currentTurnPlayerId)
+      setCurrentTurnId(data.gameState.currentTurnPlayerId)
       setLogs(prev => [`🔁 再接続しました`, ...prev].slice(0, 10))
     })
 
     newSocket.on('reconnect_failed', (data: any) => {
       console.warn('Reconnect failed', data)
       setLogs(prev => [`❌ 再接続に失敗しました`, ...prev].slice(0, 10))
-      setHasActiveGame(false)
+      setCanReconnect(false)
       setIsCheckingReconnect(false)
     })
 
@@ -327,9 +284,6 @@ function App() {
       console.log('Game started!', data)
       setIsWaiting(false)
       setGameStarted(true)
-      // 初期状態では演出フラグを確実に解除
-      setIsAnimating(false)
-      setIsProcessing(false)
       
       // マッチング成立時、バトル情報を localStorage に保存
       localStorage.setItem('yubihuru_active_battle', JSON.stringify({
@@ -364,198 +318,27 @@ function App() {
       setGlassBreak(false)
       setSlowMotion(false)
       setBuffedDamage(null)
-      setIsProcessing(false) // 演出中フラグを強制リセット
       
       // プレイヤーデータを設定（重要：これがないとホーム画面に戻る）
       const mySocketId = newSocket.id || ''
       const me = data.player1.socketId === mySocketId ? data.player1 : data.player2
       const opponent = data.player1.socketId === mySocketId ? data.player2 : data.player1
       
-      // 🔴 【不変ID方式】サーバーから送られた playerId を永続ID として保存
-      const persistentId = me.playerId || ''
-      setMyPersistentId(persistentId)
-      if (persistentId) {
-        localStorage.setItem('yubihuru_my_player_id', persistentId)
-        console.log(`🔴 My Persistent ID set: ${persistentId}`)
-      } else {
-        console.warn('⚠️ playerId is empty!')
-      }
-      
       setMyData(me)
       setOpponentData(opponent)
-
-      // インデックスとターンを同期
-      const myIdx = data.player1.socketId === mySocketId ? 0 : 1
-      const turnIdx = data.turnIndex ?? 0
-      setMyIndex(myIdx)
-      setTurnIndex(turnIdx)
-      setIsYourTurn(myIdx === turnIdx)
-      console.log('✅ Current turn set to:', data.currentTurnPlayerId)
       
       setLogs([`⚔️ バトル開始！ vs ${opponent.username}`])
     })
 
-    // マッチング成立直後：100msディレイ後に画面遷移 + gameState強制セット
+    // マッチング成立直後に winner と gameOver をリセット（保険）
     newSocket.on('match_found', (data: any) => {
       console.log('Match found confirmation:', data)
-      
-      // 🔄 手動同期用にroomIdを保存
-      setCurrentRoomId(data.roomId)
-      
-      // turnIndex と自分のインデックスを同期
-      const myIdx = typeof data.yourIndex === 'number' ? data.yourIndex : null
-      if (myIdx !== null) setMyIndex(myIdx)
-      const turnIdx = data.turnIndex ?? 0
-      setTurnIndex(turnIdx)
-      const isMine = myIdx !== null ? turnIdx === myIdx : Boolean(data.isYourTurn)
-      setIsYourTurn(isMine)
-      if (isMine) {
-        console.log(`✅ あなたのターンです！(${data.yourOpponent}と対戦)`)
-      } else {
-        console.log(`⏳ 相手のターンです。待ってください...(${data.yourOpponent}と対戦)`)
-      }
-      
-      // 【強制描画】ディレイなしで即座にbattle画面へ遷移（通信揺らぎ対策）
-      setIsWaiting(false)
-      setGameStarted(true)
-      
-      // 【重要】マッチング成立時、全ての演出フラグを強制的にリセット → ボタンロック解除
-      setIsProcessing(false)
-      resetAllEffects()
-      
       setWinner(null)
       setIsGameOver(false)
-      
-      // 【即座にボタン点灯】
-      console.log('🔓 ボタンロック解除: isProcessing=false, isYourTurn=', isMine)
-      
-      // battle_ready を送信してサーバーに準備完了を通知
-      newSocket.emit('battle_ready', { roomId: data.roomId })
-      console.log('✅ battle_ready sent to server')
-    })
-
-    // 【握手プロセス】サーバーから300msおきに送られてくるgameStateを同期
-    newSocket.on('game_state_sync', (data: any) => {
-      console.log('🤝 game_state_sync received:', data)
-      
-      // 🔄 手動同期用にroomIdを保存
-      if (data.gameState?.roomId) {
-        setCurrentRoomId(data.gameState.roomId)
-      }
-      
-      // 最新のgameStateをクライアント側に反映
-      if (data.gameState) {
-        const mySocketId = newSocket.id || ''
-        const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
-        const opponent = data.gameState.player1.socketId === mySocketId ? data.gameState.player2 : data.gameState.player1
-        const myIdx = data.gameState.player1.socketId === mySocketId ? 0 : 1
-        const turnIdx = data.turnIndex ?? data.gameState.turnIndex ?? 0
-        
-        setMyData(me)
-        setOpponentData(opponent)
-        setMyIndex(myIdx)
-        setTurnIndex(turnIdx)
-        setIsYourTurn(myIdx === turnIdx)
-        
-        // 【デッドロック救済】自分のターンならボタン強制有効化
-        if (turnIdx === myIdx) {
-          console.log(`🔓 ボタン強制有効化（turnIndex一致）`)
-          setIsProcessing(false)
-          setIsAnimating(false)
-          setShowImpact(false)
-        }
-        
-        // ボタンロック防止：演出中フラグをリセット
-        setIsProcessing(false)
-        setIsAnimating(false)
-      }
-      
-      // battle_ready を必ず送信（冗長性）
-      newSocket.emit('battle_ready', { roomId: data.gameState?.roomId })
-    })
-
-    // 強制同期：サーバーから最新バトルデータを受け取る（スマホ救済）
-    newSocket.on('battle_sync', (data: any) => {
-      console.log('Battle sync received:', data)
-      setIsWaiting(false)
-      setGameStarted(true)
-      setIsGameOver(false)
-      setWinner(null)
-      
-      const mySocketId = newSocket.id || ''
-      const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
-      const opponent = data.gameState.player1.socketId === mySocketId ? data.gameState.player2 : data.gameState.player1
-      const myIdx = data.gameState.player1.socketId === mySocketId ? 0 : 1
-      const turnIdx = data.gameState.turnIndex ?? 0
-      
-      setMyData(me)
-      setOpponentData(opponent)
-      setMyIndex(myIdx)
-      setTurnIndex(turnIdx)
-      setIsYourTurn(myIdx === turnIdx)
-      setLogs(prev => [`🔄 バトル画面に同期しました`, ...prev].slice(0, 10))
-    })
-
-    // 【新追加】技発動後のgameState更新 - アニメーションをトリガー
-    newSocket.on('game_state_update', (data: any) => {
-      console.log(`\n🎯 ===== gameState更新受信 =====`);
-      console.log(`   技: ${data.skillName}`);
-      console.log(`   ダメージ: ${data.damage}`);
-      console.log(`   forceUnlock: ${data.forceUnlock}`);
-      
-      if (data.gameState) {
-        const mySocketId = newSocket.id || ''
-        const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
-        const opponent = data.gameState.player1.socketId === mySocketId ? data.gameState.player2 : data.gameState.player1
-        const myIdx = data.gameState.player1.socketId === mySocketId ? 0 : 1
-        const turnIdx = data.turnIndex ?? data.gameState.turnIndex ?? 0
-        
-        // gameStateを更新
-        setMyData(me)
-        setOpponentData(opponent)
-        setMyIndex(myIdx)
-        setTurnIndex(turnIdx)
-        setIsYourTurn(myIdx === turnIdx)
-        
-        // 【デッドロック救済】forceUnlock フラグが立っていたら強制有効化
-        if (data.forceUnlock && turnIdx === myIdx) {
-          console.log(`🔓 デッドロック救済: ボタン強制有効化（turnIndex一致）`)
-          setIsProcessing(false)
-          setIsAnimating(false)
-          setShowImpact(false)
-        }
-        
-        // 技演出開始
-        const skillName = data.currentSkill || data.skillName || '技'
-        setImpactText(skillName)
-        const shouldAnimate = data.animationStart !== false
-        setShowImpact(shouldAnimate)
-        setIsAnimating(shouldAnimate)
-        
-        // アニメーション中はロック、終了後に解除
-        setIsProcessing(true)
-        const animationDuration = shouldAnimate ? 2500 : 0
-        setTimeout(() => {
-          if (shouldAnimate) setShowImpact(false)
-          setIsProcessing(false)
-          setIsAnimating(false)
-          console.log('✅ 演出終了 - isProcessing=false / isAnimating=false')
-        }, animationDuration)
-        
-        // エラー通知時も必ずロック解除
-        if (data.error) {
-          console.warn(`⚠️ game_state_update error: ${data.error}`)
-          setIsProcessing(false)
-          setIsAnimating(false)
-        }
-        
-        console.log(`✅ gameState更新完了: ${skillName}の演出開始`);
-      }
     })
 
     newSocket.on('battle_update', (data: any) => {
       console.log('Battle update:', data)
-      console.log(`🎯 技発動: ${data.skillName}, ダメージ: ${data.damage}, バフ攻撃: ${data.wasBuffedAttack}`)
       setLogs(prev => [data.message, ...prev].slice(0, 10))
       
       // 役満フリーズ演出（国士無双・九蓮宝燈）
@@ -566,10 +349,6 @@ function App() {
         setTimeout(() => {
           setYakumanFreeze(false)
         }, freezeDuration)
-        // セーフティ：5秒後に強制リセット
-        setTimeout(() => {
-          resetAllEffects()
-        }, 5000)
       }
       
       // 天和の究極演出
@@ -581,35 +360,11 @@ function App() {
         // 0.5秒後に天和テキスト表示開始
         setTimeout(() => {
           setTenpaiUltimate(true)
-          // 麻雀牌アニメーション生成（種類豊富＆密度UP）
-          const mahjongEmojis = [
-            // 字牌（7種）
-            '🀄', '🀅', '🀆', '🀀', '🀁', '🀂', '🀃',
-            // 萬子（9種）
-            '🀇', '🀈', '🀉', '🀊', '🀋', '🀌', '🀍', '🀎', '🀏',
-            // 筒子（9種）
-            '🀙', '🀚', '🀛', '🀜', '🀝', '🀞', '🀟', '🀠', '🀡',
-            // 索子（9種）
-            '🀐', '🀑', '🀒', '🀓', '🀔', '🀕', '🀖', '🀗', '🀘'
-          ]
-          
-          const tiles = Array.from({ length: 40 }, (_, i) => {
-            const randomEmoji = mahjongEmojis[Math.floor(Math.random() * mahjongEmojis.length)]
-            const randomAngle = Math.random() * 360
-            const randomSize = 0.6 + Math.random() * 0.7 // 0.6倍～1.3倍
-            const randomDuration = 6 + Math.random() * 3 // 6～9秒でランダムな落下速度
-            const randomDelay = Math.random() * 0.5 // 0～0.5秒のランダムな開始遅延
-            
-            return {
-              id: i,
-              left: Math.random() * 100,
-              emoji: randomEmoji,
-              angle: randomAngle,
-              size: randomSize,
-              duration: randomDuration,
-              delay: randomDelay
-            }
-          })
+          // 麻雀牌アニメーション生成
+          const tiles = Array.from({ length: 13 }, (_, i) => ({
+            id: i,
+            left: Math.random() * 100
+          }))
           setMahjongTiles(tiles)
         }, 500)
         
@@ -623,12 +378,6 @@ function App() {
           setTenpaiUltimate(false)
           setMahjongTiles([])
         }, 8000)
-        
-        // セーフティ：9秒後に強制リセット
-        setTimeout(() => {
-          console.log('✅ 天和演出完全終了 - resetAllEffects実行')
-          resetAllEffects()
-        }, 9000)
       }
       
       // 特殊勝利を検知（出禁 or 数え役満）
@@ -642,49 +391,8 @@ function App() {
         setTimeout(() => setFatalFlash(false), 900)
         setTimeout(() => setGlassBreak(true), 250)
         setTimeout(() => setGlassBreak(false), 1250)
-        // セーフティ：3秒後に強制リセット
-        setTimeout(() => {
-          resetAllEffects()
-        }, 3000)
       } else if (data.message && data.message.includes('役満')) {
         setSpecialVictoryText('役満')
-        // セーフティ：3秒後に強制リセット
-        setTimeout(() => {
-          setSpecialVictoryText(null)
-        }, 3000)
-      }
-      
-      // 【反射・カウンター系演出】
-      if (data.skillEffect === 'reflect-ready') {
-        setShowReflectReady(true)
-      } else if (data.skillEffect === 'counter-ready') {
-        setShowCounterReady(true)
-      } else if (data.skillEffect === 'destiny-bond-ready') {
-        setShowDestinyBondReady(true)
-      } else if (data.skillEffect === 'reflect-success') {
-        setShowReflectReady(false)
-        setShowReflectSuccess(true)
-        setTimeout(() => {
-          setShowReflectSuccess(false)
-          console.log('✅ ミラーコート演出終了 - isProcessing=false')
-          setIsProcessing(false)
-        }, 2000)
-      } else if (data.skillEffect === 'counter-success') {
-        setShowCounterReady(false)
-        setShowCounterSuccess(true)
-        setTimeout(() => {
-          setShowCounterSuccess(false)
-          console.log('✅ カウンター演出終了 - isProcessing=false')
-          setIsProcessing(false)
-        }, 2000)
-      } else if (data.skillEffect === 'destiny-bond-activated') {
-        setShowDestinyBondReady(false)
-        setShowDestinyBondActivated(true)
-        setTimeout(() => {
-          setShowDestinyBondActivated(false)
-          console.log('✅ 道連れ演出終了 - isProcessing=false')
-          setIsProcessing(false)
-        }, 3000)
       }
       
       // 技名を即座に表示
@@ -695,21 +403,16 @@ function App() {
       // バフ付き攻撃の場合、ダメージを記録して後で巨大化表示
       if (data.wasBuffedAttack && data.damage > 0) {
         setBuffedDamage(data.damage)
-        console.log(`💥 バフ付き攻撃ダメージ表示: ${data.damage}`)
         setTimeout(() => setBuffedDamage(null), 1200)
       }
 
       if (data.wasBuffedAttack && data.damage && data.damage > 0) {
         setBuffedDamage(data.damage)
-        console.log(`💥 バフ付き攻撃ダメージ表示: ${data.damage}`)
         setTimeout(() => setBuffedDamage(null), 900)
       }
       
-      // 通常ダメージの即座表示（skillName付きで）
-      if (data.damage && data.damage > 0 && !data.wasBuffedAttack) {
-        console.log(`⚔️ 通常ダメージ表示: ${data.skillName} で ${data.damage} ダメージ`)
-        // skill nameは既にsetImpactTextで表示されているため追加表示なし
-      }
+      // ドラ該当時は金縁表示
+      // (削除: ドラ機能は廃止)
       
       // パワー150以上で超必殺演出（虹色）
       if (data.skillPower && data.skillPower >= 150) {
@@ -760,41 +463,25 @@ function App() {
         if (newHpOpponent <= 0 && prevHpOpponent > 0) {
           console.log('🎬 ラストアタック・インパクト開始！');
           
-          // Phase 1: スローモーション演出を即座に開始
-          setSlowMotion(true)
+          // Phase 1: スローモーション演出（グレースケール + 画面フラッシュ）を即座に開始
           setLastAttackGrayscale(true)
-          setShowImpact(true) // 技名表示
-          setImpactText(data.skillName || '技')
+          setLastAttackFlash(true)
           
-          // Phase 2: 0.8秒後に画面フラッシュ＋FINISH表示
+          // Phase 2: 1.5秒後にドカン音と共にHPを最終反映
           setTimeout(() => {
-            console.log('🎬 0.8秒経過 - FINISH！');
-            setLastAttackFlash(true)
-            setShowFinishText(true)
+            console.log('🎬 1.5秒経過 - ドカン！HP最終反映');
+            setShouldApplyFinalDamage(true)
+            setShowFinishText(true) // ドカン音表示
             
-            // Phase 3: 1.5秒後にHPを最終反映
+            // Phase 3: 1.0秒後にWINNER表示
             setTimeout(() => {
-              console.log('🎬 1.5秒経過 - HP最終反映');
-              setShouldApplyFinalDamage(true)
-              setSlowMotion(false) // スロー終了
+              console.log('🎬 WINNER表示');
+              setVictoryResult('WINNER')
               
-              // Phase 4: 1.2秒後にWINNER表示＆演出完全終了＋リザルト画面遷移
-              setTimeout(() => {
-                console.log('🎬 WINNER表示＆演出完了');
-                setVictoryResult('WINNER')
-                setLastAttackGrayscale(false)
-                setLastAttackFlash(false)
-                setShowImpact(false)
-                setShowFinishText(false)
-                
-                // game_overデータが到着済みの場合は handleBattleEnd を呼び出し
-                if ((window as any).__gameOverData) {
-                  console.log('🎬 Game over data available - transitioning to result')
-                  handleBattleEnd((window as any).__gameOverData)
-                }
-              }, 1200)
-            }, 1500)
-          }, 800)
+              // Phase 4: グレースケール解除（WINNER表示は続ける）
+              setLastAttackGrayscale(false)
+            }, 1000)
+          }, 1500)
           
           return // HP反映を遅延させるため、ここでreturn
         }
@@ -894,62 +581,16 @@ function App() {
       
       // Turn management: wait 2 seconds before enabling next action
       setTimeout(() => {
-        console.log('⏰ 2秒タイマー - isProcessing=false')
         setIsProcessing(false)
       }, 2000)
-      
-      // 🔴 【保険】5秒後のセーフティタイマー：万が一演出がハング時に強制リセット
-      setTimeout(() => {
-        if (isProcessing === true) {
-          console.warn('⚠️ 【セーフティ】5秒経過 - isProcessing=falseに強制リセット');
-          setIsProcessing(false)
-          setLogs(prev => [`⚠️ システムエラー検出・回復しました`, ...prev].slice(0, 10))
-        }
-      }, 5000)
     })
 
-    // 強制ターン開始：サーバーから強制的にターンを割り当てる（2秒タイムアウト対策）
-    newSocket.on('force_turn_start', (data: any) => {
-      console.log('🚨 Force turn start received:', data)
-      const nextTurnIndex = data.turnIndex ?? turnIndex
-      setTurnIndex(nextTurnIndex)
-      const isMyTurn = myIndex !== null ? nextTurnIndex === myIndex : data.currentTurnPlayerId === myPersistentId
-      setIsYourTurn(isMyTurn)
-      setIsProcessing(false)
-      resetAllEffects()
-      console.log(`✅ Force turn enabled: isYourTurn=${isMyTurn}, turnIndex=${nextTurnIndex}, myIndex=${myIndex}`)
-    })
     newSocket.on('turn_change', (data: any) => {
-      // 【ボタンロック強制解放】新しいターン開始時に全演出をリセット
-      resetAllEffects()
-      
-      // 演出によるボタンロックを強制解除
+      setCurrentTurnId(data.currentTurnPlayerId)
       setIsProcessing(false)
       
-      const turnIdx = data.turnIndex ?? turnIndex
-      setTurnIndex(turnIdx)
-      if (data.gameState) {
-        const mySocketId = newSocket.id || ''
-        const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
-        const opponent = data.gameState.player1.socketId === mySocketId ? data.gameState.player2 : data.gameState.player1
-        const myIdx = data.gameState.player1.socketId === mySocketId ? 0 : 1
-        setMyIndex(myIdx)
-        setIsYourTurn(myIdx === turnIdx)
-        setMyData(me)
-        setOpponentData(opponent)
-        console.log('✅ GameState updated from turn_change event')
-      } else if (myIndex !== null) {
-        setIsYourTurn(myIndex === turnIdx)
-      }
-      console.log(`🔴 Turn check: turnIndex=${turnIdx}, myIndex=${myIndex}`)
-      
-      // リマインド送信の場合、ログに表示
-      const logMessage = data.isReminder 
-        ? `🔄 【リマインド】${data.currentTurnPlayerName}のターンです！`
-        : `🔄 ${data.currentTurnPlayerName}のターン`
-      
-      console.log(`${logMessage} (ID: ${data.currentTurnPlayerId})`)
-      setLogs(prev => [logMessage, ...prev].slice(0, 10))
+      console.log(`🔄 Turn changed to: ${data.currentTurnPlayerName} (ID: ${data.currentTurnPlayerId})`)
+      setLogs(prev => [`🔄 ${data.currentTurnPlayerName}のターン`, ...prev].slice(0, 10))
     })
 
     newSocket.on('zone_activated', (data: any) => {
@@ -976,19 +617,80 @@ function App() {
         return
       }
       
-      // すぐには結果を表示せず、演出完了を待つ
-      console.log('⏳ Waiting for battle end effects to complete...')
+      setIsGameOver(true)
+      setWinner(data.winner)
+      setLogs(prev => [`🏆 ${data.winner} の勝利！`, ...prev])
       
-      // 演出完了後のリザルト画面遷移を5秒後に強制実行（セーフティネット）
-      const resultTimeout = setTimeout(() => {
-        console.log('🏆 Force transitioning to result screen (timeout)')
-        handleBattleEnd(data)
-      }, 5000)
+      // 勝敗結果を表示
+      const mySocketId = newSocket.id || ''
+      const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
+      const isWinner = me.username === data.winner
+      setVictoryResult(isWinner ? 'WINNER' : 'LOSER')
       
-      // 実際の演出完了時（FINISH表示後）にここで遷移
-      // handleBattleEnd 関数で適切なタイミングで呼ぶ
-      window.__gameOverData = data
-      window.__resultTimeout = resultTimeout
+      // 戦績を更新・保存
+      if (isWinner) {
+        // 勝利時：通算勝利数と連勝数を +1
+        const newTotalWins = totalWins + 1
+        const newStreak = currentStreak + 1
+        setTotalWins(newTotalWins)
+        setCurrentStreak(newStreak)
+        localStorage.setItem('yubihuru_total_wins', newTotalWins.toString())
+        localStorage.setItem('yubihuru_current_streak', newStreak.toString())
+      } else {
+        // 敗北時：連勝数をリセット（通算勝利数は変わらない）
+        setCurrentStreak(0)
+        localStorage.setItem('yubihuru_current_streak', '0')
+      }
+      
+      // バトル終了時、active_battle をクリア
+      localStorage.removeItem('yubihuru_active_battle')
+      // セッションを完全に破棄（復帰ボタンを無効化）
+      localStorage.removeItem('yubihuru_player_id')
+      
+      // グレースケール解除
+      setLastAttackGrayscale(false)
+      setLastAttackFlash(false)
+    })
+
+    // 【スマホ救済】しつこい同期：待機中は1秒ごとにサーバーへ状態確認
+    newSocket.on('force_battle_sync', (data: any) => {
+      console.log('🚨 Force battle sync received:', data)
+      
+      // 待機中でバトルルームに入っていることが判明 → 即座に遷移
+      if (data.status === 'playing' && data.gameState) {
+        console.log('⚡ Forcing transition to battle screen...')
+        setIsWaiting(false)
+        setGameStarted(true)
+        setIsGameOver(false)
+        setWinner(null)
+        
+        const mySocketId = newSocket.id || ''
+        const me = data.gameState.player1.socketId === mySocketId ? data.gameState.player1 : data.gameState.player2
+        const opponent = data.gameState.player1.socketId === mySocketId ? data.gameState.player2 : data.gameState.player1
+        const myIdx = data.gameState.player1.socketId === mySocketId ? 0 : 1
+        const turnIdx = data.gameState.turnIndex ?? 0
+        
+        setMyData(me)
+        setOpponentData(opponent)
+        setMyIndex(myIdx)
+        setTurnIndex(turnIdx)
+        setIsYourTurn(myIdx === turnIdx)
+        setCurrentRoomId(data.roomId)
+        
+        const persistentId = me.playerId || ''
+        setMyPersistentId(persistentId)
+        if (persistentId) {
+          localStorage.setItem('yubihuru_my_player_id', persistentId)
+        }
+        
+        setLogs([`⚔️ バトル開始！ vs ${opponent.username}`])
+        console.log('✅ Force sync complete - now in battle!')
+      }
+    })
+
+    newSocket.on('status_response', (data: any) => {
+      // 待機中の確認応答（特に処理不要）
+      console.log('📊 Status response:', data.status)
     })
 
     setSocket(newSocket)
@@ -996,61 +698,23 @@ function App() {
     return () => {
       newSocket.close()
     }
-  }, [gameStarted])
+  }, [])
 
-  // 待機中に1秒ごとにステータスをチェック（スマホ救済）
+  // 【スマホ救済】待機中は1秒ごとにサーバーへ状態確認ポーリング
   useEffect(() => {
     if (!socket || !isWaiting || gameStarted) return
-    
-    console.log('Starting status check interval (waiting for match)...')
+
+    console.log('🔄 Starting periodic status check (every 1s)')
     const intervalId = setInterval(() => {
-      console.log('Sending check_status...')
-      socket.emit('check_status', { timestamp: Date.now() })
-    }, 1000)
-    
+      console.log('📡 Polling server status...')
+      socket.emit('check_status')
+    }, 1000) // 1秒ごと
+
     return () => {
-      console.log('Clearing status check interval')
+      console.log('🛑 Stopping status check polling')
       clearInterval(intervalId)
     }
   }, [socket, isWaiting, gameStarted])
-
-  // 全演出フラグをリセットする関数（スマホ救済）
-  const resetAllEffects = () => {
-    console.log('🧹 Resetting all effects...')
-    setDamageFlash(false)
-    setHealFlash(false)
-    setPoisonFlash(false)
-    setShieldEffect(false)
-    setShowImpact(false)
-    setShowFinishText(false)
-    setYakumanFreeze(false)
-    setTenpaiUltimate(false)
-    setWhiteoutFlash(false)
-    setMahjongTiles([])
-    setLastAttackGrayscale(false)
-    setLastAttackFlash(false)
-    setFatalFlash(false)
-    setFatalWarning(false)
-    setGlassBreak(false)
-    setSlowMotion(false)
-    setBuffedDamage(null)
-    setScreenShake(false)
-    setOpponentInkEffect(false)
-    setOpponentShakeEffect(false)
-    setInkSplashes([])
-    setSpecialVictoryText(null)
-    setZoneBanner(null)
-    // 反射・カウンター系
-    setShowReflectReady(false)
-    setShowCounterReady(false)
-    setShowDestinyBondReady(false)
-    setShowReflectSuccess(false)
-    setShowCounterSuccess(false)
-    setShowDestinyBondActivated(false)
-    // 🔴 【重要】アクション完了フラグを必ずリセット
-    setIsProcessing(false)
-    console.log('✅ All effects reset + isProcessing=false')
-  }
 
   const handleJoin = () => {
     if (socket && name.trim()) {
@@ -1077,9 +741,7 @@ function App() {
     setMyData(null)
     setOpponentData(null)
     setLogs([])
-    setMyIndex(null)
-    setTurnIndex(0)
-    setIsYourTurn(false)
+    setCurrentTurnId('')
     // バトルから戻る際、保存されたユーザー名を復元
     const savedName = localStorage.getItem('yubihuru_user_name')
     if (savedName) {
@@ -1090,96 +752,19 @@ function App() {
   }
 
   const handleUseSkill = () => {
-    const isMyTurnByIndex = myIndex !== null && turnIndex === myIndex
-    if (socket && gameStarted && isMyTurnByIndex && !isProcessing) {
-      console.log(`\n✅ ===== 技発動ボタン押下 =====`)
-      console.log(`   myIndex: ${myIndex}`)
-      console.log(`   turnIndex: ${turnIndex}`)
-      console.log(`   currentRoomId: ${currentRoomId}`)
-      console.log(`   isProcessing: ${isProcessing}`)
-      console.log(`   Emitting action_use_skill...`)
-      
-      socket.emit('action_use_skill', { roomId: currentRoomId, playerId: myPersistentId })
+    const mySocketId = socket?.id || ''
+    if (socket && gameStarted && mySocketId === currentTurnId && !isProcessing) {
+      socket.emit('action_use_skill')
       setIsProcessing(true)
-      
-      console.log(`✅ action_use_skill emitted`)
-    } else {
-      console.warn(`\n⚠️ ===== 技発動ボタン押下失敗 =====`)
-      if (!socket) console.warn('❌ Socket not connected')
-      if (!gameStarted) console.warn('❌ Game not started')
-      if (myIndex === null) console.warn('❌ myIndex is not set')
-      if (turnIndex !== myIndex) console.warn(`ℹ️ Not your turn: turnIndex=${turnIndex}, myIndex=${myIndex}`)
-      if (isProcessing) console.warn('❌ Already processing action')
     }
   }
 
   const handleActivateZone = () => {
-    const isMyTurnByIndex = myIndex !== null && turnIndex === myIndex
-    if (socket && gameStarted && myData && myData.state.mp >= 5 && isMyTurnByIndex && !isProcessing) {
-      console.log(`✅ ゾーン発動: myIndex=${myIndex}, turnIndex=${turnIndex}, zone=${selectedZoneType}, roomId=${currentRoomId}`)
-      socket.emit('action_activate_zone', { roomId: currentRoomId, zoneType: selectedZoneType, playerId: myPersistentId })
+    const mySocketId = socket?.id || ''
+    if (socket && gameStarted && myData && myData.state.mp >= 5 && mySocketId === currentTurnId && !isProcessing) {
+      socket.emit('action_activate_zone', { zoneType: selectedZoneType })
       setIsProcessing(true)
-    } else {
-      if (!socket) console.warn('⚠️ Socket not connected')
-      if (!gameStarted) console.warn('⚠️ Game not started')
-      if (!myData) console.warn('⚠️ MyData not set')
-      if (myData && myData.state.mp < 5) console.warn(`⚠️ Not enough MP: ${myData.state.mp} < 5`)
-      if (!isMyTurnByIndex) console.warn(`⚠️ Not your turn by index: turnIndex=${turnIndex}, myIndex=${myIndex}`)
-      if (isProcessing) console.warn('⚠️ Already processing action')
     }
-  }
-
-  // バトル終了演出処理
-  const handleBattleEnd = (gameOverData: any) => {
-    console.log('🎬 handleBattleEnd called')
-    
-    // タイムアウトをクリア
-    if ((window as any).__resultTimeout) {
-      clearTimeout((window as any).__resultTimeout)
-    }
-    
-    // 1. ボタン即座に無効化
-    setIsProcessing(true)
-    
-    // 2. 操作ボタン非表示状態を設定（isProcessingで隠れるはず）
-    
-    // 3. FINISH演出を2秒間表示中（既に showFinishText で表示済み）
-    
-    // 4. 演出完了後、リザルト画面へ遷移（ここで全演出フラグをリセット）
-    setTimeout(() => {
-      console.log('🏆 Showing result screen')
-      
-      // すべての演出フラグをリセット
-      resetAllEffects()
-      
-      // 戦績情報の更新
-      const mySocketId = socket?.id || ''
-      const me = gameOverData.gameState.player1.socketId === mySocketId ? gameOverData.gameState.player1 : gameOverData.gameState.player2
-      const isWinner = me.username === gameOverData.winner || (gameOverData.isDraw && true)
-      
-      setIsGameOver(true)
-      setWinner(gameOverData.winner)
-      setVictoryResult(gameOverData.isDraw ? null : (isWinner ? 'WINNER' : 'LOSER'))
-      
-      // 戦績を更新・保存
-      if (isWinner && !gameOverData.isDraw) {
-        const newTotalWins = totalWins + 1
-        const newStreak = currentStreak + 1
-        setTotalWins(newTotalWins)
-        setCurrentStreak(newStreak)
-        localStorage.setItem('yubihuru_total_wins', newTotalWins.toString())
-        localStorage.setItem('yubihuru_current_streak', newStreak.toString())
-      } else if (!isWinner) {
-        setCurrentStreak(0)
-        localStorage.setItem('yubihuru_current_streak', '0')
-      }
-      
-      // バトル終了処理：セッションキャッシュと復帰情報を削除
-      localStorage.removeItem('yubihuru_active_battle')
-      setHasActiveGame(false) // 復帰ボタンを非表示に
-      
-      console.log('✅ Result screen ready')
-    }, 2500) // FINISH表示後に遷移
   }
 
   // ログ色決定関数
@@ -1311,6 +896,7 @@ function App() {
               setMyData(null)
               setOpponentData(null)
               setLogs([])
+              setCurrentTurnId('')
               setIsProcessing(false)
               setName('')
             }}
@@ -1325,9 +911,8 @@ function App() {
 
   // バトル画面
   if (gameStarted && myData && opponentData) {
-    // 🔄 新方式：isYourTurn はサーバーから直接指名されたフラグを使用
-    // const mySocketId = socket?.id || ''  // ❌ 旧方式（削除）
-    // const isMyTurn = mySocketId === currentTurnId  // ❌ 旧方式（削除）
+    const mySocketId = socket?.id || ''
+    const isMyTurn = mySocketId === currentTurnId
     const myHpPercent = (myData.state.hp / myData.state.maxHp) * 100
     const myMpPercent = (myData.state.mp / 5) * 100
     const opponentHpPercent = (opponentData.state.hp / opponentData.state.maxHp) * 100
@@ -1342,23 +927,8 @@ function App() {
     }
     const myZoneBorder = zoneBorderMap[myData.state.activeZone.type] || 'border-black'
 
-    // 演出が表示されているかを判定
-    const isEffectPlaying = yakumanFreeze || tenpaiUltimate || whiteoutFlash || 
-                           specialVictoryText !== null || fatalFlash || glassBreak
-    
-    // 画面タップで演出スキップ（緊急リセット）
-    const handleEmergencyReset = () => {
-      if (isEffectPlaying) {
-        console.log('⚠️ Emergency reset triggered by tap')
-        resetAllEffects()
-      }
-    }
-
     return (
-      <div 
-        className={`w-screen h-screen bg-yellow-50 transition-all relative overflow-hidden flex flex-col ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${opponentShakeEffect ? 'animate-window-shake' : ''} ${lastAttackGrayscale ? 'filter grayscale' : ''} ${slowMotion ? 'animate-slow-motion' : ''}`}
-        onClick={handleEmergencyReset}
-      >
+      <div className={`min-h-screen bg-yellow-50 p-4 transition-all relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${opponentShakeEffect ? 'animate-window-shake' : ''} ${lastAttackGrayscale ? 'filter grayscale' : ''} ${slowMotion ? 'animate-slow-motion' : ''}`}>
         {/* メニューボタン（右上） */}
         <button
           onClick={() => setShowMenu(true)}
@@ -1449,13 +1019,7 @@ function App() {
           </div>
         )}
 
-        {/* === z-index レイアーの整理 === */}
-        {/* z-0: ゲーム画面（ベース） */}
-        {/* z-[60-80]: ゲーム内演出（バフダメージ、役満など） */}
-        {/* z-[90-100]: 決着演出（FINISH、道連れ） */}
-        {/* z-[110-130]: モーダル・メニュー */}
-
-        {/* バフ付きダメージ表示（3倍サイズ）z-[60] */}
+        {/* バフ付きダメージ表示（3倍サイズ） */}
         {buffedDamage !== null && (
           <div className="pointer-events-none absolute inset-0 z-[55] flex items-center justify-center">
             <p 
@@ -1473,22 +1037,21 @@ function App() {
 
         {/* ラストアタック：グレースケール + 画面フラッシュ */}
         {lastAttackFlash && (
-          <div className="pointer-events-none absolute inset-0 z-[90] bg-white opacity-0 animate-last-attack-flash animate-inverse-flash" />
+          <div className="pointer-events-none absolute inset-0 z-[90] bg-white opacity-0 animate-last-attack-flash" />
         )}
         
-        {/* フィニッシュテキスト表示 */}
+        {/* フィニッシュ・インパクト演出 */}
         {showFinishText && (
-          <div className="pointer-events-none absolute inset-0 z-[92] flex items-center justify-center">
+          <div className="pointer-events-none absolute inset-0 z-[60] flex items-center justify-center">
             <p 
-              className="text-[250px] font-black select-none"
+              className="text-[180px] font-black select-none animate-finish-impact"
               style={{
-                WebkitTextStroke: '8px black',
+                WebkitTextStroke: '4px black',
                 fontWeight: 900,
-                color: '#FF0000',
-                animation: 'finish-glow 0.6s ease-out'
+                color: '#FF0000'
               }}
             >
-              FINISH!!
+              ドゴォォォォン！！
             </p>
           </div>
         )}
@@ -1525,95 +1088,6 @@ function App() {
           </div>
         )}
         
-        {/* 反射待機中（ミラーコート）：六角形バリア */}
-        {(showReflectReady || (myData?.state.isReflecting)) && (
-          <div className="pointer-events-none absolute inset-0 z-[70] flex items-center justify-center">
-            <div 
-              className="w-80 h-80 border-8 border-cyan-400 animate-pulse"
-              style={{
-                clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                boxShadow: '0 0 40px rgba(34, 211, 238, 0.6), inset 0 0 40px rgba(34, 211, 238, 0.3)',
-              }}
-            />
-          </div>
-        )}
-        
-        {/* カウンター待機中：回転するバリア */}
-        {(showCounterReady || (myData?.state.isCounter)) && (
-          <div className="pointer-events-none absolute inset-0 z-[70] flex items-center justify-center">
-            <div 
-              className="w-80 h-80 border-8 border-orange-500"
-              style={{
-                clipPath: 'polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)',
-                boxShadow: '0 0 40px rgba(249, 115, 22, 0.6), inset 0 0 40px rgba(249, 115, 22, 0.3)',
-                animation: 'spin 2s linear infinite'
-              }}
-            />
-          </div>
-        )}
-        
-        {/* 道連れ待機中：紫の呪いオーラ */}
-        {(showDestinyBondReady || (myData?.state.isDestinyBond)) && (
-          <div className="pointer-events-none absolute inset-0 z-[70] flex items-center justify-center">
-            <div 
-              className="w-full h-full border-8 border-purple-700 animate-pulse"
-              style={{
-                boxShadow: '0 0 60px rgba(126, 34, 206, 0.8), inset 0 0 60px rgba(126, 34, 206, 0.4)',
-              }}
-            />
-          </div>
-        )}
-        
-        {/* 反射成功演出 */}
-        {showReflectSuccess && (
-          <div className="pointer-events-none absolute inset-0 z-[90] flex items-center justify-center bg-cyan-500/30">
-            <p 
-              className="text-[200px] font-black select-none animate-bounce"
-              style={{
-                WebkitTextStroke: '8px black',
-                fontWeight: 900,
-                color: '#22D3EE'
-              }}
-            >
-              REFLECT!!
-            </p>
-          </div>
-        )}
-        
-        {/* カウンター成功演出 */}
-        {showCounterSuccess && (
-          <div className="pointer-events-none absolute inset-0 z-[90] flex items-center justify-center bg-orange-500/30">
-            <p 
-              className="text-[200px] font-black select-none animate-bounce"
-              style={{
-                WebkitTextStroke: '8px black',
-                fontWeight: 900,
-                color: '#F97316'
-              }}
-            >
-              COUNTER!!
-            </p>
-          </div>
-        )}
-        
-        {/* 道連れ発動演出 */}
-        {showDestinyBondActivated && (
-          <div className="pointer-events-none absolute inset-0 z-[95] flex items-center justify-center bg-black/80"
-            style={{filter: 'sepia(60%)'}}>
-            <p 
-              className="text-[250px] font-black select-none"
-              style={{
-                WebkitTextStroke: '8px black',
-                fontWeight: 900,
-                color: '#7E22CE',
-                animation: 'pulse 1s ease-in-out infinite'
-              }}
-            >
-              道連れ
-            </p>
-          </div>
-        )}
-        
         {/* ホワイトアウトフラッシュ（天和用） */}
         {whiteoutFlash && (
           <div className="pointer-events-none fixed inset-0 z-[85] bg-white animate-pulse" style={{animation: 'whiteout 0.5s ease-out'}} />
@@ -1646,24 +1120,22 @@ function App() {
                 style={{
                   left: `${tile.left}%`,
                   top: '-80px',
-                  width: `${60 * (tile.size || 1)}px`,
-                  height: `${80 * (tile.size || 1)}px`,
-                  animation: `mahjong-fall ${tile.duration || 7}s linear forwards`,
-                  animationDelay: `${(tile.delay || 0) + (tile.id * 0.08)}s`,
+                  width: '60px',
+                  height: '80px',
+                  animation: `mahjong-fall 7s linear forwards`,
+                  animationDelay: `${tile.id * 0.1}s`,
                   backgroundColor: '#fff',
                   border: '2px solid #333',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: `${20 * (tile.size || 1)}px`,
+                  fontSize: '20px',
                   fontWeight: 'bold',
                   color: '#e74c3c',
-                  borderRadius: '4px',
-                  transform: `rotate(${tile.angle || 0}deg)`,
-                  opacity: 0.9
+                  borderRadius: '4px'
                 }}
               >
-                {tile.emoji || '🀄'}
+                🀄
               </div>
             ))}
           </>
@@ -1746,217 +1218,15 @@ function App() {
           </div>
         )}
 
-        {/* 中央オーバーレイ：バトルログ（PC/スマホ両対応） */}
-        {gameStarted && (
-          <div className="battle-log-overlay">
-            <div className="battle-log-panel">
-              <div className="battle-log-header">BATTLE LOG</div>
-              <div className="battle-log-list">
-                {logs.length === 0 ? (
-                  <p className="battle-log-empty">待機中...</p>
-                ) : (
-                  logs.map((log, index) => (
-                    <div key={index} className={`battle-log-entry ${getLogColor(log)}`}>
-                      {renderLogWithRainbow(log)}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* PC版レイアウト：フレックスボックス（上・中・下） */}
-        {(() => {
-          if (!myData || !opponentData) return null
-          
-          // 🔄 新方式：isYourTurn はサーバーから直接指名されたフラグを使用
-          // const mySocketId = socket?.id || ''  // ❌ 旧方式（削除）
-          // const isMyTurn = mySocketId === currentTurnId  // ❌ 旧方式（削除）
-          const myHpPercent = (myData.state.hp / myData.state.maxHp) * 100
-          const myMpPercent = (myData.state.mp / 5) * 100
-          const opponentHpPercent = (opponentData.state.hp / opponentData.state.maxHp) * 100
-          const opponentMpPercent = (opponentData.state.mp / 5) * 100
-          const zoneBorderMap: Record<string, string> = {
-            '強攻のゾーン': 'border-red-500',
-            '集中のゾーン': 'border-emerald-500',
-            '乱舞のゾーン': 'border-orange-500',
-            '博打のゾーン': 'border-purple-500',
-            'none': 'border-black',
-          }
-          const myZoneBorder = zoneBorderMap[myData.state.activeZone.type] || 'border-black'
-
-          return (
-            <div className="relative hidden md:flex flex-col justify-between w-full h-full">
-              
-              {/* 🔄 【デバッグ用】手動同期ボタン */}
-              <button
-                onClick={() => requestManualSync()}
-                className="fixed top-2 right-2 z-50 px-3 py-1 text-xs bg-cyan-300 border-2 border-black font-black rounded shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-cyan-200 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-              >
-                🔄 同期
-              </button>
-
-          <div className="p-4 border-b-4 border-black bg-yellow-50">
-            <div className="w-full">
-              <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <p className="font-black text-sm">🎮 OPPONENT</p>
-                  {opponentData.state.status.poison && (
-                    <span className="bg-purple-600 text-white text-xs font-black px-2 py-1 rounded">☠️ 毒</span>
-                  )}
-                  {opponentData.state.isRiichi && (
-                    <span className="bg-red-600 text-white text-xs font-black px-2 py-1 rounded animate-pulse">🀄 立直</span>
-                  )}
-                </div>
-                <p className="font-black text-xl mb-2">{opponentData.username}</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="flex justify-between text-xs font-bold mb-1">
-                      <span>HP</span>
-                      <span>{opponentData.state.hp}/{opponentData.state.maxHp}</span>
-                    </div>
-                    <div className="h-4 border-2 border-black bg-gray-200">
-                      <div 
-                        className="h-full bg-lime-400 transition-all duration-500"
-                        style={{ width: `${opponentHpPercent}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs font-bold mb-1">
-                      <span>MP</span>
-                      <span>{opponentData.state.mp}/5</span>
-                    </div>
-                    <div className="h-4 border-2 border-black bg-gray-200">
-                      <div 
-                        className="h-full bg-cyan-400 transition-all duration-300"
-                        style={{ width: `${opponentMpPercent}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* ===== 中央：バトルログ＆演出 ===== */}
-          <div className="flex-1 overflow-y-auto p-4">
-            <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-6 h-full">
-              <h3 className="font-black text-xl mb-4 border-b-4 border-black pb-2">BATTLE LOG</h3>
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                {logs.length === 0 ? (
-                  <p className="text-gray-400 font-bold text-sm">待機中...</p>
-                ) : (
-                  logs.map((log, index) => (
-                    <div key={index} className={`font-bold text-sm py-1 border-b-2 border-gray-200 ${getLogColor(log)}`}>
-                      {renderLogWithRainbow(log)}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* ===== 下部：自分情報＋ボタン ===== */}
-          <div className="p-4 border-t-4 border-black bg-yellow-50">
-            <div className="space-y-3">
-              {/* 自分ステータス */}
-              <div className={`bg-white border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 transition-all ${
-                `${myZoneBorder} ${isYourTurn ? 'animate-pulse' : ''}`
-              } ${isShaking ? 'animate-shake' : ''}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <p className="font-black text-sm">⚔️ YOU {isYourTurn && '⭐'}</p>
-                    {myData.state.status.poison && (
-                      <span className="bg-purple-600 text-white text-xs font-black px-2 py-1 rounded">☠️ 毒</span>
-                    )}
-                    {myData.state.isRiichi && (
-                      <span className="bg-red-600 text-white text-xs font-black px-2 py-1 rounded animate-pulse">🀄 立直</span>
-                    )}
-                  </div>
-                  {healFlash && (
-                    <span className="text-green-600 font-black text-xs animate-flash">✨ HEAL</span>
-                  )}
-                </div>
-                <p className="font-black text-xl mb-2">{myData.username}</p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="flex justify-between text-xs font-bold mb-1">
-                      <span>HP</span>
-                      <span>{myData.state.hp}/{myData.state.maxHp}</span>
-                    </div>
-                    <div className="h-4 border-2 border-black bg-gray-200">
-                      <div 
-                        className={`h-full transition-all duration-500 ${healFlash ? 'animate-flash bg-white' : 'bg-lime-400'}`}
-                        style={{ width: `${myHpPercent}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs font-bold mb-1">
-                      <span>MP</span>
-                      <span>{myData.state.mp}/5</span>
-                    </div>
-                    <div className="h-4 border-2 border-black bg-gray-200">
-                      <div 
-                        className="h-full bg-cyan-400 transition-all duration-300"
-                        style={{ width: `${myMpPercent}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* ボタン行 */}
-              <div className="grid grid-cols-3 gap-3">
-                <button
-                  onClick={handleUseSkill}
-                  disabled={myIndex === null || turnIndex !== myIndex || isProcessing}
-                  className={`py-4 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-lg ${
-                    myIndex !== null && turnIndex === myIndex && !isProcessing
-                      ? 'bg-red-500 hover:bg-red-400'
-                      : 'bg-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  {myIndex !== null && turnIndex === myIndex && !isProcessing ? '👆 指を振る' : '⏳ 待機'}
-                </button>
-
-                <button
-                  onClick={handleActivateZone}
-                  disabled={myIndex === null || turnIndex !== myIndex || myData.state.mp < 5 || isProcessing}
-                  className={`py-4 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-lg ${
-                    myIndex !== null && turnIndex === myIndex && myData.state.mp >= 5 && !isProcessing
-                      ? 'bg-purple-500 hover:bg-purple-400'
-                      : 'bg-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  {myIndex !== null && turnIndex === myIndex ? (isProcessing ? '中...' : '🌀 立直') : '待機'}
-                </button>
-
-                <button
-                  onClick={() => setShowMenu(true)}
-                  className="py-4 bg-blue-500 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-400 hover:shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-lg"
-                >
-                  ⚙️ メニュー
-                </button>
-              </div>
-            </div>
-          </div>
-            </div>
-          );
-        })()} 
-
-        {/* スマホ版レイアウト（元の3カラム） */}
-        <div className="md:hidden flex flex-col gap-2 p-4 pb-40 w-full mx-auto space-y-2">
+        <div className="w-full mx-auto space-y-2 md:space-y-4 flex flex-col md:flex-row gap-2 md:gap-4 pb-40 md:pb-0">
           {/* 相手側（スマホ時は上部、PC時は左） */}
-          <div className="w-full order-1">
+          <div className="w-full md:w-1/3 order-1">
             {/* 相手ステータス */}
             <div className="space-y-2">
               <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-3 md:p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <p className="font-black text-xs md:text-sm">OPPONENT</p>
-                  {opponentData?.state.status.poison && (
+                  {opponentData.state.status.poison && (
                     <span className="bg-purple-600 text-white text-xs font-black px-2 py-1 rounded">☠️ 毒</span>
                   )}
                   {opponentData.state.isRiichi && (
@@ -2019,11 +1289,11 @@ function App() {
             {/* 自分ステータス */}
             <div className="space-y-2 relative">
               <div className={`bg-white border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-3 md:p-4 transition-all ${
-                `${myZoneBorder} ${isYourTurn ? 'animate-pulse' : ''}`
+                `${myZoneBorder} ${isMyTurn ? 'animate-pulse' : ''}`
               } ${isShaking ? 'animate-shake' : ''}`}>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <p className="font-black text-xs md:text-sm">YOU {isYourTurn && '⭐'}</p>
+                    <p className="font-black text-xs md:text-sm">YOU {isMyTurn && '⭐'}</p>
                     {myData.state.status.poison && (
                       <span className="bg-purple-600 text-white text-xs font-black px-2 py-1 rounded">☠️ 毒</span>
                     )}
@@ -2070,12 +1340,12 @@ function App() {
           {/* スマホ時のボタンエリア（下部固定） */}
           <div className="order-5 md:hidden fixed bottom-0 left-0 right-0 p-4 bg-yellow-50 border-t-4 border-black space-y-3 max-h-[35vh] overflow-y-auto">
             {/* ターン表示 */}
-            {!(myIndex !== null && turnIndex === myIndex) && (
+            {!isMyTurn && (
               <div className="bg-orange-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-2 text-center">
                 <p className="font-black text-sm animate-pulse">⏳ 相手の行動を待っています...</p>
               </div>
             )}
-            {isProcessing && myIndex !== null && turnIndex === myIndex && (
+            {isProcessing && isMyTurn && (
               <div className="bg-blue-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-2 text-center">
                 <p className="font-black text-sm animate-pulse">⚡ 演出中...</p>
               </div>
@@ -2084,16 +1354,14 @@ function App() {
             {/* 指を振るボタン */}
             <button
               onClick={handleUseSkill}
-              disabled={myIndex === null || turnIndex !== myIndex || isProcessing || isAnimating}
+              disabled={mySocketId !== currentTurnId || isProcessing}
               className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-6 font-black text-lg ${
-                myIndex !== null && turnIndex === myIndex && !(isProcessing || isAnimating)
+                mySocketId === currentTurnId && !isProcessing
                   ? 'bg-pink-500 hover:bg-pink-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
                   : 'bg-gray-400 cursor-not-allowed'
               }`}
             >
-              {myIndex !== null && turnIndex === myIndex && !(isProcessing || isAnimating)
-                ? (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る')
-                : '相手の行動を待っています...'}
+              {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る')}
             </button>
 
             {/* 現在のゾーン効果表示 */}
@@ -2117,7 +1385,7 @@ function App() {
               <select
                 value={selectedZoneType}
                 onChange={(e) => setSelectedZoneType(e.target.value as any)}
-                disabled={myIndex === null || turnIndex !== myIndex}
+                disabled={mySocketId !== currentTurnId || isProcessing}
                 className="flex-1 px-2 py-2 border-2 border-black font-bold text-xs bg-white"
               >
                 <option value="強攻のゾーン">🔥 強攻のゾーン</option>
@@ -2137,27 +1405,27 @@ function App() {
             {/* ゾーン展開ボタン */}
             <button
               onClick={handleActivateZone}
-              disabled={!isYourTurn || myData.state.mp < 5}
+              disabled={mySocketId !== currentTurnId || isProcessing || myData.state.mp < 5}
               className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-3 font-black text-sm ${
-                isYourTurn && myData.state.mp >= 5
+                mySocketId === currentTurnId && !isProcessing && myData.state.mp >= 5
                   ? 'bg-purple-400 hover:bg-purple-300 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
                   : 'bg-gray-400 cursor-not-allowed'
               }`}
             >
-              {!isYourTurn ? '相手の行動を待っています...' : '🌀 ゾーン展開'}
-              {isYourTurn && <span className="block text-xs">(MP 5消費)</span>}
+              {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : '🌀 ゾーン展開'}
+              {mySocketId === currentTurnId && !isProcessing && <span className="block text-xs">(MP 5消費)</span>}
             </button>
           </div>
 
           {/* PC版：下部アクション */}
           <div className="hidden md:block space-y-4">
             {/* ターン表示 */}
-            {!isYourTurn && (
+            {!isMyTurn && (
               <div className="bg-orange-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 text-center">
                 <p className="font-black text-xl animate-pulse">⏳ 相手の行動を待っています...</p>
               </div>
             )}
-            {isProcessing && isYourTurn && (
+            {isProcessing && isMyTurn && (
               <div className="bg-blue-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 text-center">
                 <p className="font-black text-xl animate-pulse">⚡ 演出中...</p>
               </div>
@@ -2168,14 +1436,14 @@ function App() {
               {/* 指を振るボタン */}
               <button
                 onClick={handleUseSkill}
-                disabled={isProcessing || isAnimating}
+                disabled={mySocketId !== currentTurnId || isProcessing}
                 className={`border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-8 font-black text-2xl ${
-                  !(isProcessing || isAnimating)
+                  mySocketId === currentTurnId && !isProcessing
                     ? 'bg-pink-500 hover:bg-pink-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
                     : 'bg-gray-400 cursor-not-allowed'
                 }`}
               >
-                {!(isProcessing || isAnimating) ? (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る') : '相手の行動を待っています...'}
+                {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : (myData.state.isBuffed ? '✨ 指を振る（威力2倍中！）' : '✨ 指を振る')}
               </button>
 
               {/* ゾーン展開エリア */}
@@ -2200,7 +1468,7 @@ function App() {
                 <select
                   value={selectedZoneType}
                   onChange={(e) => setSelectedZoneType(e.target.value as any)}
-                  disabled={!isYourTurn}
+                  disabled={mySocketId !== currentTurnId || isProcessing}
                   className="w-full px-3 py-2 border-2 border-black font-bold text-sm bg-white"
                 >
                   <option value="強攻のゾーン">🔥 強攻のゾーン</option>
@@ -2215,15 +1483,15 @@ function App() {
                     onClick={handleActivateZone}
                     onMouseEnter={() => setShowZoneTooltip(true)}
                     onMouseLeave={() => setShowZoneTooltip(false)}
-                    disabled={!isYourTurn || myData.state.mp < 5}
+                    disabled={mySocketId !== currentTurnId || isProcessing || myData.state.mp < 5}
                     className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-4 font-black text-lg ${
-                      isYourTurn && myData.state.mp >= 5
+                      mySocketId === currentTurnId && !isProcessing && myData.state.mp >= 5
                         ? 'bg-purple-400 hover:bg-purple-300 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
                         : 'bg-gray-400 cursor-not-allowed'
                     }`}
                   >
-                    {!isYourTurn ? '相手の行動を待っています...' : '🌀 ゾーン展開'}
-                    {isYourTurn && <span className="block text-xs">(MP 5消費)</span>}
+                    {mySocketId !== currentTurnId ? '相手の行動を待っています...' : isProcessing ? '⏳ WAITING...' : '🌀 ゾーン展開'}
+                    {mySocketId === currentTurnId && !isProcessing && <span className="block text-xs">(MP 5消費)</span>}
                   </button>
 
                   {/* ツールチップ：全ゾーン説明 */}
@@ -2289,26 +1557,11 @@ function App() {
 
   // 初期画面（名前入力）
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
+    <div className="min-h-screen bg-yellow-50 flex items-center justify-center p-4">
       <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-8 max-w-md w-full">
-        {/* タイトルロゴ */}
-        <div className="text-center mb-8 animate-logo">
-          <div className="text-5xl font-black mb-2" style={{
-            background: 'linear-gradient(90deg, #ffff00, #ff69b4, #00bfff, #ffff00)',
-            backgroundSize: '300% 100%',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-            WebkitTextStroke: '2px black',
-            fontWeight: 900,
-            animation: 'gradient-shift 3s ease-in-out infinite'
-          }}>
-            指振博徒
-          </div>
-          <p className="text-sm font-black text-gray-700 tracking-widest">
-            - YUBIFURU -
-          </p>
-        </div>
+        <h1 className="text-6xl font-black text-center mb-8 -rotate-3">
+          YUBIFURU
+        </h1>
         
         <div className="space-y-6">
           {isCheckingReconnect ? (
@@ -2317,14 +1570,14 @@ function App() {
             </div>
           ) : (
             <>
-              {hasActiveGame && (
+              {canReconnect && (
                 <div className="bg-yellow-100 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-4 mb-4">
                   <p className="font-black text-sm mb-3 text-center">前回のバトルが残っています</p>
                   <button
                     onClick={handleReconnect}
-                    className="w-full py-3 bg-cyan-400 border-4 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] hover:bg-cyan-300 active:translate-x-1 active:translate-y-1 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-lg"
+                    className="w-full py-4 bg-green-500 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-green-400 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black text-xl"
                   >
-                    🔄 前回の続きから復帰
+                    🔄 前回のバトルに復帰する
                   </button>
                 </div>
               )}
@@ -2344,24 +1597,28 @@ function App() {
 
               {/* 戦績表示 */}
               <div 
-                className={`border-4 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-4 text-center font-black text-lg ${
-                  currentStreak >= 3 
-                    ? 'bg-red-100 border-red-500 animate-fire-glow'
-                    : 'bg-white border-black'
-                }`}
+                className="bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-4 text-center"
+                style={{
+                  WebkitTextStroke: '1px black'
+                }}
               >
-                <div className="flex items-center justify-center gap-2">
-                  {currentStreak >= 3 && <span className="text-2xl">🔥</span>}
-                  <span>通算：{totalWins}勝 / {currentStreak}連勝中</span>
-                  {currentStreak >= 3 && <span className="text-2xl">🔥</span>}
-                </div>
+                <p 
+                  className="font-black text-lg"
+                  style={{
+                    color: currentStreak >= 3 ? '#ff3333' : '#000000',
+                    textShadow: currentStreak >= 3 ? '0 0 20px rgba(255, 51, 51, 0.6)' : 'none',
+                    animation: currentStreak >= 3 ? 'fire-glow 1.5s ease-in-out infinite' : 'none'
+                  }}
+                >
+                  {currentStreak >= 3 ? '🔥' : ''} 通算：{totalWins}勝 / {currentStreak}連勝中 {currentStreak >= 3 ? '🔥' : ''}
+                </p>
               </div>
 
               <button
                 onClick={handleJoin}
-                className="w-full py-6 bg-lime-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-lime-300 active:translate-x-1 active:translate-y-1 active:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-2xl"
+                className="w-full py-4 bg-blue-500 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-400 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black text-xl"
               >
-                ⚔️ BATTLE START
+                ⚔️ 新しいバトルを始める
               </button>
             </>
           )}
