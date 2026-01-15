@@ -955,53 +955,55 @@ io.on('connection', (socket) => {
       console.log(`📳 shake_effect detected: shakeTurns set to 4`);
     }
 
-    // ★【統合ゲーム終了判定】HPのマイナス補正 & 終了チェック
-    // 1. HPのマイナス補正（見た目用）
+    // ★【絶対確実なゲーム終了判定】
+    // 1. HPのマイナス補正（0で止める）
     if (attacker.state.hp < 0) attacker.state.hp = 0;
     if (defender.state.hp < 0) defender.state.hp = 0;
 
-    // 2. どちらかのHPが0になったかチェック
-    if (!currentGame.isGameOver && (attacker.state.hp === 0 || defender.state.hp === 0)) {
-      console.log("🏆 Game End Condition Met. Waiting 4s for animation...");
-      
-      // 勝者判定: HPが残っている方、両方0なら攻撃側の勝ち
-      let winnerName: string;
-      if (attacker.state.hp > 0 && defender.state.hp === 0) {
-        winnerName = attacker.username;
-      } else if (defender.state.hp > 0 && attacker.state.hp === 0) {
-        winnerName = defender.username;
-      } else {
-        // 両方0の場合は攻撃側の勝ち（相打ちルール）
-        winnerName = attacker.username;
-      }
-      
-      console.log(`🏆 Winner determined: ${winnerName}`);
+    // 2. ゲーム終了判定（HPが0になったら即座に終了プロセスへ）
+    if (attacker.state.hp === 0 || defender.state.hp === 0) {
+      if (!currentGame.isGameOver) {
+        console.log("🏆 Game Over Condition Met!");
+        currentGame.isGameOver = true; // 二重発動防止
+        
+        // 勝者判定: HPが残っている方、両方0なら攻撃側の勝ち
+        let winnerName: string;
+        if (attacker.state.hp > 0 && defender.state.hp === 0) {
+          winnerName = attacker.username;
+        } else if (defender.state.hp > 0 && attacker.state.hp === 0) {
+          winnerName = defender.username;
+        } else {
+          winnerName = attacker.username; // 相打ちは攻撃側勝利
+        }
+        
+        console.log(`🏆 Winner: ${winnerName}`);
 
-      const roomIdForTimeout = currentRoomId;
-      const gameStateSnapshot = currentGame;
-      
-      // まずはHPが0の状態でgame_state_updateを送信（攻撃演出を再生させる）
-      io.to(roomIdForTimeout).emit('game_state_update', gameStateSnapshot);
-      
-      // 4秒後に正式に終了
-      setTimeout(() => {
-        gameStateSnapshot.isGameOver = true;
-        gameStateSnapshot.winner = winnerName;
+        const roomIdForTimeout = currentRoomId;
+        const gameStateSnapshot = currentGame;
         
-        console.log(`🏁 Game Over! Winner: ${winnerName}`);
-        
-        // ★重要: フラグを立てた状態を再送し、かつ game_over イベントも送る
+        // 最新のHP状態（0になった状態）を送信
         io.to(roomIdForTimeout).emit('game_state_update', gameStateSnapshot);
-        io.to(roomIdForTimeout).emit('game_over', {
-          winner: winnerName,
-          gameState: gameStateSnapshot,
-        });
-        activeGames.delete(roomIdForTimeout);
-      }, 4000);
-
-      return; // ここで関数を抜け、ターン交代処理などに行かないようにする
+        
+        // 4秒後にリザルト画面へ遷移させる
+        setTimeout(() => {
+          gameStateSnapshot.winner = winnerName;
+          
+          console.log(`🏁 Sending game_over event. Winner: ${winnerName}`);
+          io.to(roomIdForTimeout).emit('game_state_update', gameStateSnapshot);
+          io.to(roomIdForTimeout).emit('game_over', { 
+            winner: winnerName,
+            gameState: gameStateSnapshot 
+          });
+          activeGames.delete(roomIdForTimeout);
+        }, 4000);
+        
+        return; // ここで処理終了（ターン交代させない）
+      }
+      return; // 既に終了処理中の場合も抜ける
     }
 
+    // ★【ゲームが続いている場合のみ以下を実行】
+    // 3. ターン交代処理
     currentGame.currentTurn++;
 
     const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId 
@@ -1009,6 +1011,7 @@ io.on('connection', (socket) => {
       : currentGame.player1;
     currentGame.currentTurnPlayerId = nextPlayer.socketId;
 
+    // 4. エフェクトターン数の減算
     if (attacker.state.activeEffectTurns && attacker.state.activeEffectTurns > 0) {
       attacker.state.activeEffectTurns--;
       if (attacker.state.activeEffectTurns === 0) {
@@ -1022,21 +1025,22 @@ io.on('connection', (socket) => {
       }
     }
 
+    // 5. ターン変更通知
     io.to(currentRoomId).emit('turn_change', {
       currentTurnPlayerId: currentGame.currentTurnPlayerId,
       currentTurnPlayerName: nextPlayer.username,
     });
 
     currentGame.turnIndex = currentGame.turnIndex === 0 ? 1 : 0;
-    console.log(`🔄 ターン交代: ${currentGame.turnIndex}`);
+    console.log(`🔄 ターン交代: ${currentGame.turnIndex} -> ${nextPlayer.username}`);
 
-    // shakeTurns をデクリメント（0より大きければ）
+    // 6. 画面揺れターン数の減算
     if (currentGame.shakeTurns > 0) {
       currentGame.shakeTurns--;
       console.log(`📳 shakeTurns decremented to ${currentGame.shakeTurns}`);
     }
 
-    // 役が出たら、誰の立直でも強制終了
+    // 7. 役が出た場合の立直強制終了
     const yakuNames = ['断幺九', '清一色', '国士無双', '九蓮宝燈'];
     if (yakuNames.includes(upgradedSkill.name)) {
       const roomId = currentRoomId as string;
@@ -1052,18 +1056,13 @@ io.on('connection', (socket) => {
         }
       });
       currentGame.riichiPlayerId = null;
+      console.log(`役「${upgradedSkill.name}」が出たため、立直状態を強制解除`);
     }
 
-    // ★ 【追加】game_state_update 送信直前の強制リセット
-    const YAKU_NAMES = ['断幺九', '清一色', '国士無双', '九蓮宝燈'];
-    if (YAKU_NAMES.includes(upgradedSkill.name)) {
-      console.log(`役「${upgradedSkill.name}」が出たため、立直状態を強制解除します。`);
-      currentGame.riichiPlayerId = null;
-    }
-
+    // 8. ゲーム状態の更新通知
     io.to(currentRoomId).emit('game_state_update', currentGame);
 
-    // 【立直の解除】役が確定した場合、立直を解除
+    // 9. 立直昇格による立直解除
     if (riichiResolved) {
       attacker.state.isRiichi = false;
       attacker.state.riichiBombCount = 0;
@@ -1075,11 +1074,12 @@ io.on('connection', (socket) => {
       });
     }
 
+    // 10. デバッグログ
     console.log(`📊 Turn ${currentGame.currentTurn}:`);
     console.log(`   ${attacker.username}: HP ${attacker.state.hp}, MP ${attacker.state.mp}`);
     console.log(`   ${defender.username}: HP ${defender.state.hp}, MP ${defender.state.mp}`);
-    console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.socketId})`);
 
+    // 11. 立直中の自動ツモ切りスケジュール
     scheduleAutoTsumoIfRiichi(currentRoomId);
   }
 
