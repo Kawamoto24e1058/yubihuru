@@ -1032,6 +1032,13 @@ io.on('connection', (socket) => {
       currentGame.riichiPlayerId = null;
     }
 
+    // ★ 【追加】game_state_update 送信直前の強制リセット
+    const YAKU_NAMES = ['断幺九', '清一色', '国士無双', '九蓮宝燈'];
+    if (YAKU_NAMES.includes(upgradedSkill.name)) {
+      console.log(`役「${upgradedSkill.name}」が出たため、立直状態を強制解除します。`);
+      currentGame.riichiPlayerId = null;
+    }
+
     io.to(currentRoomId).emit('game_state_update', currentGame);
 
     // 【立直の解除】役が確定した場合、立直を解除
