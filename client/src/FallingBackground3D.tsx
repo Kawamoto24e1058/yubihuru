@@ -297,12 +297,28 @@ const HandModel: React.FC<{ extendedFinger: 'index' | 'middle' }> = ({ extendedF
       <mesh material={skinMat} position={[-0.4, -0.1, 0.2]} rotation={[0, 0.5, 0.5]} castShadow>
         <cylinderGeometry args={[0.12, 0.12, 0.5]} />
       </mesh>
-      {/* 4本の指 */}\n      {[0, 1, 2, 3].map((i) => {
-        const isIndex = i === 0;\n        const isMiddle = i === 1;\n        const xPos = -0.3 + i * 0.25;\n        const isExtended = (extendedFinger === 'index' && isIndex) || (extendedFinger === 'middle' && isMiddle);\n        \n        return (\n          <mesh 
+      {/* 4本の指 */}
+      {[0, 1, 2, 3].map((i) => {
+        const isIndex = i === 0;
+        const isMiddle = i === 1;
+        const xPos = -0.3 + i * 0.25;
+        const isExtended = (extendedFinger === 'index' && isIndex) || (extendedFinger === 'middle' && isMiddle);
+        
+        return (
+          <mesh 
             key={i} 
             material={skinMat} 
             position={[xPos, isExtended ? 0.8 : 0.4, isExtended ? 0 : 0.2]} 
-            rotation={[isExtended ? 0 : Math.PI / 2, 0, 0]}\n            castShadow\n          >\n            <cylinderGeometry args={[0.1, 0.1, isExtended ? 0.8 : 0.4]} />\n          </mesh>\n        );\n      })}\n    </group>\n  );\n};\n\n// 人差し指を立てた手\nconst IndexFingerHand: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {\n  const groupRef = useRef<THREE.Group>(null!);\n  useFrame((_state, delta) => {\n    if(!groupRef.current) return;\n    groupRef.current.rotation.x += delta * rotationSpeed[0];\n    groupRef.current.rotation.y += delta * rotationSpeed[1];\n    groupRef.current.position.y -= delta * fallSpeed;\n    if (groupRef.current.position.y < -20) {\n      groupRef.current.position.y = 20;\n      groupRef.current.position.x = (Math.random() - 0.5) * 25;\n    }\n  });\n  \n  return (\n    <group ref={groupRef} position={position}>\n      <HandModel extendedFinger=\"index\" />\n    </group>\n  );\n};\n\n// 中指を立てた手\nconst MiddleFingerHand: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {\n  const groupRef = useRef<THREE.Group>(null!);\n  useFrame((_state, delta) => {\n    if(!groupRef.current) return;\n    groupRef.current.rotation.x += delta * rotationSpeed[0];\n    groupRef.current.rotation.y += delta * rotationSpeed[1];\n    groupRef.current.position.y -= delta * fallSpeed;\n    if (groupRef.current.position.y < -20) {\n      groupRef.current.position.y = 20;\n      groupRef.current.position.x = (Math.random() - 0.5) * 25;\n    }\n  });\n  \n  return (\n    <group ref={groupRef} position={position}>\n      <HandModel extendedFinger=\"middle\" />\n    </group>\n  );\n};\n\n// --- メインコンポーネント ---\nexport const FallingBackground3D: React.FC = () => {
+            rotation={[isExtended ? 0 : Math.PI / 2, 0, 0]}
+            castShadow
+          >
+            <cylinderGeometry args={[0.1, 0.1, isExtended ? 0.8 : 0.4]} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+};\n\n// 人差し指を立てた手\nconst IndexFingerHand: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {\n  const groupRef = useRef<THREE.Group>(null!);\n  useFrame((_state, delta) => {\n    if(!groupRef.current) return;\n    groupRef.current.rotation.x += delta * rotationSpeed[0];\n    groupRef.current.rotation.y += delta * rotationSpeed[1];\n    groupRef.current.position.y -= delta * fallSpeed;\n    if (groupRef.current.position.y < -20) {\n      groupRef.current.position.y = 20;\n      groupRef.current.position.x = (Math.random() - 0.5) * 25;\n    }\n  });\n  \n  return (\n    <group ref={groupRef} position={position}>\n      <HandModel extendedFinger=\"index\" />\n    </group>\n  );\n};\n\n// 中指を立てた手\nconst MiddleFingerHand: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {\n  const groupRef = useRef<THREE.Group>(null!);\n  useFrame((_state, delta) => {\n    if(!groupRef.current) return;\n    groupRef.current.rotation.x += delta * rotationSpeed[0];\n    groupRef.current.rotation.y += delta * rotationSpeed[1];\n    groupRef.current.position.y -= delta * fallSpeed;\n    if (groupRef.current.position.y < -20) {\n      groupRef.current.position.y = 20;\n      groupRef.current.position.x = (Math.random() - 0.5) * 25;\n    }\n  });\n  \n  return (\n    <group ref={groupRef} position={position}>\n      <HandModel extendedFinger=\"middle\" />\n    </group>\n  );\n};\n\n// --- メインコンポーネント ---\nexport const FallingBackground3D: React.FC = () => {
   const count = 40;
 
   const items = useMemo(() => {
