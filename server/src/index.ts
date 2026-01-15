@@ -934,10 +934,11 @@ io.on('connection', (socket) => {
     } as any;
 
     // 【飯テロ】画像URLをランダムに選んで追加
-    if (upgradedSkill.effect === 'food_terror') {
+    if (upgradedSkill.effect === 'food_terror' || upgradedSkill.name === '飯テロ') {
       const foodImageUrl = FOOD_IMAGES[Math.floor(Math.random() * FOOD_IMAGES.length)];
       battleUpdate.extraImage = foodImageUrl;
-      console.log(`🍱 飯テロ画像URL: ${foodImageUrl}`);
+      console.log(`🍱 飯テロ発動！画像URL: ${foodImageUrl}`);
+      console.log(`🍱 飯テロスキル詳細: name="${upgradedSkill.name}", effect="${upgradedSkill.effect}"`);
     }
 
     io.to(currentRoomId).emit('battle_update', battleUpdate);

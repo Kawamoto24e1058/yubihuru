@@ -377,9 +377,11 @@ function App() {
 
       // 【飯テロ】画像表示
       if (data.extraImage) {
+        console.log('🍱 飯テロ画像を受信:', data.extraImage)
         setFoodImage(data.extraImage)
         // 3秒後に画像を消す
         setTimeout(() => {
+          console.log('🍱 飯テロ画像を非表示')
           setFoodImage(null)
         }, 3000)
       }
@@ -1278,7 +1280,11 @@ function App() {
         {/* 【飯テロ】画像表示オーバーレイ */}
         {foodImage && (
           <div 
-            className="pointer-events-auto fixed inset-0 z-[90] flex items-center justify-center bg-black/80 animate-fade-in cursor-pointer"
+            className="pointer-events-auto fixed inset-0 flex items-center justify-center bg-black/80 animate-fade-in cursor-pointer"
+            style={{
+              zIndex: 10000,
+              animation: 'fadeIn 0.3s ease-in'
+            }}
             onClick={() => setFoodImage(null)}
             role="button"
             tabIndex={0}
@@ -1286,9 +1292,6 @@ function App() {
               if (e.key === 'Enter' || e.key === ' ') {
                 setFoodImage(null)
               }
-            }}
-            style={{
-              animation: 'fadeIn 0.3s ease-in'
             }}
           >
             <div className="relative w-full h-full flex items-center justify-center p-4">
