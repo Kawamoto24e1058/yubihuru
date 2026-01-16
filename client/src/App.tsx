@@ -242,15 +242,41 @@ function App() {
         'animate-window-shake',
         'animate-yakuman-pulse',
         'animate-rainbow-glow',
-        'animate-dora-glow'
+        'animate-dora-glow',
+        'yakuman-flash',
+        'battle-bg-effect'
       ]
       classesToClear.forEach((cls) => {
         document.body.classList.remove(cls)
         document.documentElement.classList.remove(cls)
+        const rootEl = document.getElementById('root')
+        if (rootEl) rootEl.classList.remove(cls)
       })
+      
+      // すべてのインラインアニメーションをリセット
       document.documentElement.style.animation = 'none'
+      document.documentElement.style.backgroundColor = 'transparent !important'
+      document.body.style.animation = 'none'
       document.body.style.backgroundColor = 'transparent'
-      document.documentElement.style.backgroundColor = 'transparent'
+      document.body.style.backgroundImage = 'none'
+      
+      const rootEl = document.getElementById('root')
+      if (rootEl) {
+        rootEl.style.animation = 'none'
+        rootEl.style.backgroundColor = 'transparent'
+      }
+      
+      const appEl = document.querySelector('.App')
+      if (appEl instanceof HTMLElement) {
+        appEl.style.backgroundColor = 'transparent'
+        appEl.style.animation = 'none'
+      }
+      
+      // スタート画面への遷移時に no-flash クラスを追加して確実に点滅を止める
+      document.body.classList.add('no-flash')
+      setTimeout(() => {
+        document.body.classList.remove('no-flash')
+      }, 500)
       
       console.log('✅ All effects cleared')
     }
@@ -868,13 +894,19 @@ function App() {
       // セッションを完全に破棄（復帰ボタンを無効化）
       localStorage.removeItem('yubihuru_player_id')
       
-      // ★無条件で終了処理を実行
-      setGameStarted(false)
-      console.log('🏁 Game over processed - result screen will be shown')
-      
       // グレースケール解除
       setLastAttackGrayscale(false)
       setLastAttackFlash(false)
+      
+      // ★演出終了後にスタート画面に遷移（背景点滅防止）
+      setTimeout(() => {
+        console.log('🏁 Transitioning to start screen after 2.5s')
+        setGameStarted(false)
+        // DOM再度クリーンアップ
+        document.body.classList.add('no-flash')
+        document.body.style.animation = 'none'
+        document.body.style.backgroundColor = 'transparent'
+      }, 2500)
     })
 
     // 【スマホ救済】しつこい同期：待機中は1秒ごとにサーバーへ状態確認
