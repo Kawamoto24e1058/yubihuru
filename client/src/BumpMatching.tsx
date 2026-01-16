@@ -12,6 +12,7 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
   const [bumpStrength, setBumpStrength] = useState(0);
   const [isWaiting, setIsWaiting] = useState(false);
   const [statusText, setStatusText] = useState('スマホを相手とコツンとぶつけてください');
+  const [permissionError, setPermissionError] = useState<string | null>(null);
   const lastTotalRef = useRef(9.8);
   const isCoolingDownRef = useRef(false);
   const animationFrameRef = useRef<number>();
@@ -33,6 +34,10 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
 
       // 衝撃検知（しきい値25）
       if (delta > 25 && !isCoolingDownRef.current) {
+        // 触覚フィードバック (Vibration API)
+        if ('vibrate' in navigator) {
+          navigator.vibrate(50);
+        }
         onBumpDetected();
         startCoolDown();
       }
@@ -59,6 +64,12 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
           },
           (error) => {
             console.error('Geolocation error:', error);
+            // 権限がブロックされている場合
+            if (error.code === error.PERMISSION_DENIED) {
+              setPermissionError('位置情報がブロックされています。ブラウザの設定から位置情報の使用を許可してください。');
+              setIsWaiting(false);
+              return;
+            }
             // 位置情報取得失敗時もダミー値で送信（テスト用）
             socket.emit('bump_attempt', {
               username: playerName,
@@ -99,9 +110,13 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
           .then((response: string) => {
             if (response === 'granted') {
               window.addEventListener('devicemotion', handleMotion as any);
+            } else if (response === 'denied') {
+              setPermissionError('モーションセンサーへのアクセスが拒否されました。ブラウザの設定から許可してください。');
             }
           })
-          .catch(console.error);
+          .catch(() => {
+            setPermissionError('モーションセンサーへのアクセスに失敗しました。ブラウザの設定を確認してください。');
+          });
       } else {
         window.addEventListener('devicemotion', handleMotion as any);
       }
@@ -143,6 +158,34 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 relative" style={{ backgroundColor: '#fffdd0' }}>
+      {/* 権限エラーダイアログ */}
+      {permissionError && (
+        <div className="fixed inset-0 z-[200] bg-black/70 flex items-center justify-center px-4">
+          <div className="w-full max-w-sm bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-6 space-y-4">
+            <h2 className="text-2xl font-black text-center" style={{ WebkitTextStroke: '2px black', color: '#ff3333' }}>
+              ⚠️ 権限エラー
+            </h2>
+            <p className="text-center font-bold text-sm leading-relaxed">
+              {permissionError}
+            </p>
+            <div className="space-y-2">
+              <button
+                onClick={() => setPermissionError(null)}
+                className="w-full py-3 bg-blue-400 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-300 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black"
+              >
+                設定を確認
+              </button>
+              <button
+                onClick={onBack}
+                className="w-full py-3 bg-gray-300 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-200 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black"
+              >
+                戻る
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 戻るボタン（左上） */}
       <button
         onClick={onBack}
