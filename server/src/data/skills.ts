@@ -159,7 +159,7 @@ export const SKILLS: Skill[] = [
   // ============================================
   // 【逆転の目】起死回生
   // ============================================
-  { id: 119, name: '起死回生', type: 'attack', power: 0, description: '基礎20 + (最大HP - 現在HP) ダメージを与える', effect: 'comeback', dynamicPower: true },
+  { id: 119, name: '起死回生', type: 'attack', power: 0, description: 'ダメージ = max(20, floor((最大HP - 現在HP) * 2.0))', effect: 'comeback', dynamicPower: true },
 
   // ============================================
   // 【特殊勝利】出禁・メタ要素
