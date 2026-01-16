@@ -1835,12 +1835,12 @@ function App() {
         )}
 
         {/* PC版：3カラムレイアウト（左：自分、中央：操作＋ログ、右：相手） / スマホ版：縦積み */}
-        <div className="w-full max-w-[1400px] mx-auto flex flex-col md:flex-row gap-4 md:gap-6 pb-40 md:pb-0 px-2 md:px-8">
+        <div className="w-full max-w-[1400px] mx-auto flex flex-col md:flex-row gap-4 md:gap-6 pb-40 md:pb-0 px-2 md:px-8 relative z-10 pointer-events-auto">
           {/* 左カラム：自分の情報（PC版） / スマホでは下部 */}
           <div className="w-full md:w-[300px] order-3 md:order-1">
             {/* 自分ステータス */}
             <div className="space-y-2 relative">
-              <div className={`bg-white border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-3 md:p-4 transition-all ${
+              <div className={`bg-white/95 border-4 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-3 md:p-4 transition-all ${
                 `${myZoneBorder} ${isMyTurn ? 'animate-pulse' : ''}`
               } ${isShaking ? 'animate-shake' : ''}`}>
                 <div className="flex items-center justify-between mb-2">
@@ -1894,19 +1894,19 @@ function App() {
             {/* ターン状態表示 */}
             <div className="hidden md:block">
               {!(myIndex !== null && turnIndex === myIndex) && (
-                <div className="bg-orange-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 text-center">
+                <div className="bg-orange-400/95 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 text-center">
                   <p className="font-black text-xl animate-pulse">⏳ 相手の行動を待っています...</p>
                 </div>
               )}
               {isProcessing && myIndex !== null && turnIndex === myIndex && (
-                <div className="bg-blue-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 text-center">
+                <div className="bg-blue-400/95 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-4 text-center">
                   <p className="font-black text-xl animate-pulse">⚡ 演出中...</p>
                 </div>
               )}
             </div>
 
             {/* バトルログ */}
-            <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-3 md:p-6">
+            <div className="bg-white/95 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-3 md:p-6">
               <h3 className="font-black text-sm md:text-xl mb-2 md:mb-4 border-b-4 border-black pb-1 md:pb-2">BATTLE LOG</h3>
               <div className="space-y-1 md:space-y-2 max-h-32 md:max-h-64 overflow-y-auto">
                 {logs.length === 0 ? (
@@ -1946,7 +1946,7 @@ function App() {
                 <div className="space-y-3">
                   {/* 現在のゾーン効果表示 */}
                   {myData.state.activeZone.type !== 'none' && (
-                    <div className="bg-yellow-300 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-3">
+                    <div className="bg-yellow-300/95 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-3">
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-2xl">{ZONE_DESCRIPTIONS[myData.state.activeZone.type].emoji}</span>
                         <div>
@@ -2014,7 +2014,7 @@ function App() {
           <div className="w-full md:w-[300px] order-1 md:order-3">
             {/* 相手ステータス */}
             <div className="space-y-2">
-              <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-3 md:p-4">
+              <div className="bg-white/95 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-3 md:p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <p className="font-black text-xs md:text-sm">OPPONENT {!isMyTurn && '⭐'}</p>
                   {opponentData.state.status.poison && (
