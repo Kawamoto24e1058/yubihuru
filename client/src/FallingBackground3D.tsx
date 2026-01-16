@@ -5,8 +5,9 @@ import * as THREE from 'three';
 
 // --- Props型定義 ---
 interface FallingBackground3DProps {
-  objectType?: 'normal' | 'comeback' | 'yakuman';
+  objectType?: 'normal' | 'comeback' | 'yakuman' | 'weapon' | 'leg';
   opacity?: number;
+  burst?: boolean; // バースト演出フラグ
 }
 
 // --- 描画ヘルパー: 竹 (索子) ---
@@ -249,6 +250,77 @@ const GoldenMan: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
       <mesh castShadow>
         <boxGeometry args={[1.6, 2.2, 1.2]} />
         <primitive object={materials} attach="material" />
+      </mesh>
+    </group>
+  );
+};
+
+// --- シンプルな剣コンポーネント（技演出用）---
+const SimpleSword: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
+  const groupRef = useRef<THREE.Group>(null!);
+  useFrame((_state, delta) => {
+    if(!groupRef.current) return;
+    groupRef.current.rotation.x += delta * rotationSpeed[0];
+    groupRef.current.rotation.y += delta * rotationSpeed[1];
+    groupRef.current.position.y -= delta * fallSpeed;
+    if (groupRef.current.position.y < -20) {
+       groupRef.current.position.y = 20;
+       groupRef.current.position.x = (Math.random() - 0.5) * 25;
+    }
+  });
+  
+  return (
+    <group ref={groupRef} position={position} scale={[0.6, 0.6, 0.6]} rotation={[0, 0, Math.PI / 4]}>
+      {/* 柄 */}
+      <mesh position={[0, -0.8, 0]} castShadow>
+        <cylinderGeometry args={[0.15, 0.15, 1.2, 8]} />
+        <meshPhysicalMaterial color="#663300" roughness={0.8} />
+      </mesh>
+      {/* 刃 */}
+      <mesh position={[0, 0.5, 0]} castShadow>
+        <boxGeometry args={[0.3, 2.5, 0.08]} />
+        <meshPhysicalMaterial color="#c0c0c0" metalness={0.9} roughness={0.2} />
+      </mesh>
+      {/* 鍔 */}
+      <mesh position={[0, -0.2, 0]} castShadow>
+        <boxGeometry args={[0.6, 0.1, 0.15]} />
+        <meshPhysicalMaterial color="#ffd700" metalness={0.8} roughness={0.3} />
+      </mesh>
+    </group>
+  );
+};
+
+// --- 足コンポーネント（バカゲー風）---
+const Leg: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
+  const groupRef = useRef<THREE.Group>(null!);
+  useFrame((_state, delta) => {
+    if(!groupRef.current) return;
+    groupRef.current.rotation.x += delta * rotationSpeed[0];
+    groupRef.current.rotation.z += delta * rotationSpeed[1];
+    groupRef.current.position.y -= delta * fallSpeed;
+    if (groupRef.current.position.y < -20) {
+       groupRef.current.position.y = 20;
+       groupRef.current.position.x = (Math.random() - 0.5) * 25;
+    }
+  });
+  
+  return (
+    <group ref={groupRef} position={position} scale={[0.8, 0.8, 0.8]}>
+      {/* 脚（円柱） */}
+      <mesh position={[0, 0, 0]} castShadow>
+        <cylinderGeometry args={[0.25, 0.22, 2.5, 16]} />
+        <meshPhysicalMaterial color="#ffcc99" roughness={0.7} />
+      </mesh>
+      {/* 足首から先（横向きRoundedBox） */}
+      <mesh position={[0, -1.4, 0.3]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+        <RoundedBox args={[0.5, 0.8, 0.35]} radius={0.05} smoothness={4}>
+          <meshPhysicalMaterial color="#8B4513" roughness={0.6} />
+        </RoundedBox>
+      </mesh>
+      {/* つま先（小さな球体） */}
+      <mesh position={[0, -1.4, 0.7]} castShadow>
+        <sphereGeometry args={[0.18, 12, 12]} />
+        <meshPhysicalMaterial color="#8B4513" roughness={0.6} />
       </mesh>
     </group>
   );
@@ -517,8 +589,8 @@ const MiddleFingerHand: React.FC<any> = ({ position, rotationSpeed, fallSpeed })
 };
 
 // --- メインコンポーネント ---
-export const FallingBackground3D: React.FC<FallingBackground3DProps> = ({ objectType = 'normal', opacity = 1.0 }) => {
-  const count = 40;
+export const FallingBackground3D: React.FC<FallingBackground3DProps> = ({ objectType = 'normal', opacity = 1.0, burst = false }) => {
+  const count = burst ? 60 : 40; // バースト時は数を増やす
 
   const items = useMemo(() => {
     // リアルな牌のラインナップ
@@ -537,7 +609,13 @@ export const FallingBackground3D: React.FC<FallingBackground3DProps> = ({ object
       let type = 'tile';
       
       // objectTypeに応じてオブジェクトを変更
-      if (objectType === 'comeback') {
+      if (objectType === 'weapon') {
+        // 武器系：シンプルな剣100%
+        type = 'simple_sword';
+      } else if (objectType === 'leg') {
+        // 足技：足100%
+        type = 'leg';
+      } else if (objectType === 'comeback') {
         // 起死回生：炎70%、爆弾30%
         type = r < 0.7 ? 'flame' : 'bomb';
       } else if (objectType === 'yakuman') {
@@ -571,7 +649,7 @@ export const FallingBackground3D: React.FC<FallingBackground3DProps> = ({ object
         fallSpeed: Math.random() * 1.5 + 1.0,
       };
     });
-  }, [objectType]);
+  }, [objectType, count]);
 
   return (
     <div id="canvas-container" style={{ opacity }}>
@@ -583,6 +661,8 @@ export const FallingBackground3D: React.FC<FallingBackground3DProps> = ({ object
 
         {items.map((props, i) => {
           switch (props.type) {
+            case 'simple_sword': return <SimpleSword key={i} {...props} />;
+            case 'leg': return <Leg key={i} {...props} />;
             case 'flame': return <Flame key={i} {...props} />;
             case 'bomb': return <Bomb key={i} {...props} />;
             case 'golden_man': return <GoldenMan key={i} {...props} />;

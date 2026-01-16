@@ -108,7 +108,8 @@ function App() {
   const [currentStreak, setCurrentStreak] = useState(0) // 連勝数
   const [shakeTurns, setShakeTurns] = useState(0) // サーバー側のターンベースの画面揺れ管理
   const [canResume, setCanResume] = useState(false) // オートセーブデータから復帰可能かチェック
-  const [fallingType, setFallingType] = useState<'normal' | 'comeback' | 'yakuman'>('normal') // 3D背景のオブジェクトタイプ
+  const [fallingType, setFallingType] = useState<'normal' | 'comeback' | 'yakuman' | 'weapon' | 'leg'>('normal') // 3D背景のオブジェクトタイプ
+  const [burstEffect, setBurstEffect] = useState(false) // バースト演出フラグ
 
   const gameState = { turnIndex, shakeTurns }
 
@@ -554,12 +555,30 @@ function App() {
 
       // 技に応じて3D背景のオブジェクトタイプを変更
       if (data.skillName) {
+        // バースト演出を有効化
+        setBurstEffect(true)
+        setTimeout(() => setBurstEffect(false), 500)
+        
+        // 武器系の技
+        const weaponSkills = ['剣', '斧', '槍', '盾', '刀', 'ソード', '斬撃']
+        const isWeaponSkill = weaponSkills.some(w => data.skillName.includes(w))
+        
+        // 足技系の技
+        const legSkills = ['ニー', 'キック', '蹴り', '膝', '飛び膝蹴り']
+        const isLegSkill = legSkills.some(l => data.skillName.includes(l))
+        
         if (data.skillName === '起死回生') {
           setFallingType('comeback')
-          setTimeout(() => setFallingType('normal'), 3000) // 3秒後に通常に戻す
+          setTimeout(() => setFallingType('normal'), 3000)
         } else if (data.skillName.includes('役満') || data.skillName === '国士無双' || data.skillName === '九蓮宝燈' || data.skillName === '天和') {
           setFallingType('yakuman')
-          setTimeout(() => setFallingType('normal'), 5000) // 5秒後に通常に戻す
+          setTimeout(() => setFallingType('normal'), 5000)
+        } else if (isWeaponSkill) {
+          setFallingType('weapon')
+          setTimeout(() => setFallingType('normal'), 2500)
+        } else if (isLegSkill) {
+          setFallingType('leg')
+          setTimeout(() => setFallingType('normal'), 2500)
         }
       }
 
@@ -1375,9 +1394,9 @@ function App() {
 
     return (
       <div className={`game-container min-h-screen p-4 pt-[150px] pb-[140px] md:pt-4 md:pb-0 transition-all relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${gameState.shakeTurns > 0 ? 'animate-window-shake' : ''} ${lastAttackGrayscale ? 'filter grayscale' : ''} ${slowMotion ? 'animate-slow-motion' : ''}`}>
-        {/* 3D背景 (技に応じて変化) */}
+        {/* 3D背景 (技に応じて変化、UIの見やすさのためopacity 0.4) */}
         <div className="fixed inset-0 z-0 pointer-events-none">
-          <FallingBackground3D objectType={fallingType} opacity={0.5} />
+          <FallingBackground3D objectType={fallingType} opacity={0.4} burst={burstEffect} />
         </div>
 
         {/* メニューボタン（右上） */}
