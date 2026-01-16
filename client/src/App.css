@@ -68,3 +68,58 @@
     text-shadow: 0 0 20px rgba(255, 51, 51, 0.8), 0 0 30px rgba(255, 215, 0, 0.6);
   }
 }
+/* Mobile HP/status bar positioning */
+@media (max-width: 767px) {
+  /* Enemy status bar - fixed at top */
+  .enemy-stats-mobile {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    max-width: 400px;
+    z-index: 90;
+    background-color: rgba(255, 255, 255, 0.95);
+    border: 3px solid black;
+    border-radius: 8px;
+    padding: 8px;
+    box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.1);
+    margin: 0;
+  }
+
+  /* Player status bar - positioned above button area */
+  .player-stats-mobile {
+    position: fixed;
+    bottom: 200px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90%;
+    max-width: 400px;
+    z-index: 85;
+    background-color: rgba(255, 255, 255, 0.95);
+    border: 3px solid black;
+    border-radius: 8px;
+    padding: 8px;
+    box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.1);
+    margin: 0;
+  }
+
+  /* HP bar width constraint for mobile */
+  .hp-bar-mobile {
+    width: 90%;
+    margin: 0 auto;
+  }
+
+  /* Prevent text overlap */
+  .hp-label {
+    font-size: 0.75rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .hp-value {
+    font-size: 0.65rem;
+    white-space: nowrap;
+  }
+}

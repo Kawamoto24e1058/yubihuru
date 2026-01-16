@@ -450,12 +450,13 @@ function applySkillEffect(
 
       // 【逆転の目】起死回生
       if (skill.effect === 'comeback') {
-        // 基礎20 + 減少HP分をそのまま与える
+        // 計算式：max(10, floor((maxHP - currentHP) * 1.5))
         const maxHp = attacker.state.maxHp || 100;
-        const lostHp = maxHp - attacker.state.hp;
-        damage = 20 + lostHp;
+        const currentHp = attacker.state.hp || 0;
+        const lostHp = Math.max(0, maxHp - currentHp);
+        damage = Math.max(10, Math.floor(lostHp * 1.5));
         defender.state.hp = Math.max(0, defender.state.hp - damage);
-        console.log(`起死回生発動: HP=${attacker.state.hp}/${maxHp}, 減少量=${lostHp}, 計算ダメージ=${damage}`);
+        console.log(`起死回生発動: HP=${currentHp}/${maxHp}, 減少量=${lostHp}, 計算ダメージ=${damage}`);
         logs.push(`🔄 ${attacker.username}の${skill.name}！！！`);
         logs.push(`💫 絶望から蘇る... ${defender.username}に${damage}ダメージ！`);
       }

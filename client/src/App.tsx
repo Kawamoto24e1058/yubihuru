@@ -98,6 +98,7 @@ function App() {
   const [glassBreak, setGlassBreak] = useState(false)
   const [slowMotion, setSlowMotion] = useState(false)
   const [buffedDamage, setBuffedDamage] = useState<number | null>(null)
+  const [screen, setScreen] = useState<'start' | 'game'>('start')
   const [showMenu, setShowMenu] = useState(false)
   const [showQuitConfirm, setShowQuitConfirm] = useState(false)
   const [canReconnect, setCanReconnect] = useState(false)
@@ -108,6 +109,20 @@ function App() {
   const [canResume, setCanResume] = useState(false) // オートセーブデータから復帰可能かチェック
 
   const gameState = { turnIndex, shakeTurns }
+
+  // Background flickering cleanup on screen transition to start
+  useEffect(() => {
+    if (screen === 'start') {
+      document.body.className = ''; // Clear all animation classes
+      // Reset game-related states
+      setGameStarted(false);
+      setIsGameOver(false);
+      setWinner(null);
+      setLogs([]);
+      setShowMenu(false);
+      setShowQuitConfirm(false);
+    }
+  }, [screen])
 
   // リロード対策：起動時のスクリーン状態を常にstartに
   useEffect(() => {
@@ -393,6 +408,7 @@ function App() {
     newSocket.on('reconnect_success', (data: any) => {
       console.log('Reconnected with state:', data)
       setIsWaiting(false)
+      setScreen('game')
       setGameStarted(true)
       setIsGameOver(false)
       setWinner(null)
@@ -421,8 +437,9 @@ function App() {
     })
 
     newSocket.on('game_start', (data: GameStartData) => {
-      console.log('Game started!', data)
+      console.log('🎮 Game started!', data)
       setIsWaiting(false)
+      setScreen('game')
       setGameStarted(true)
       
       // マッチング成立時、バトル情報を localStorage に保存
@@ -901,11 +918,8 @@ function App() {
       // ★演出終了後にスタート画面に遷移（背景点滅防止）
       setTimeout(() => {
         console.log('🏁 Transitioning to start screen after 2.5s')
+        setScreen('start') // Trigger background cleanup via screen state change
         setGameStarted(false)
-        // DOM再度クリーンアップ
-        document.body.classList.add('no-flash')
-        document.body.style.animation = 'none'
-        document.body.style.backgroundColor = 'transparent'
       }, 2500)
     })
 
@@ -917,6 +931,7 @@ function App() {
       if (data.status === 'playing' && data.gameState) {
         console.log('⚡ Forcing transition to battle screen...')
         setIsWaiting(false)
+        setScreen('game')
         setGameStarted(true)
         setIsGameOver(false)
         setWinner(null)
@@ -1007,6 +1022,7 @@ function App() {
     try {
       const gameData = JSON.parse(savedGame)
       // セーブデータから状態を復元
+      setScreen('game')
       setGameStarted(true)
       setMyData({
         username: gameData.myData.username,
@@ -1347,24 +1363,24 @@ function App() {
         )}
 
         {/* モバイル用ステータスバー（上部固定） */}
-        <div className="md:hidden fixed top-0 left-0 right-0 z-[90] px-3 pt-3 pb-2 space-y-2 pointer-events-none">
+        <div className="md:hidden fixed top-0 left-0 right-0 z-[90] px-2 pt-2 pb-1 space-y-2 pointer-events-none bg-gradient-to-b from-white/60 to-white/30">
           {/* 相手ステータス */}
-          <div className="pointer-events-auto bg-white/90 border-4 border-black shadow-[6px_6px_0px_rgba(0,0,0,1)] p-3 rounded-lg">
-            <div className="flex items-center justify-between mb-2">
-              <p className="font-black text-sm">OPPONENT</p>
+          <div className="pointer-events-auto bg-white/95 border-3 border-black shadow-[4px_4px_0px_rgba(0,0,0,1)] p-2 rounded max-w-[90vw] mx-auto">
+            <div className="flex items-center justify-between mb-1">
+              <p className="font-black text-xs">OPPONENT</p>
               {opponentData.state.activeZone.type !== 'none' && (
-                <span className="text-xs font-black px-2 py-1 bg-yellow-200 border-2 border-black rounded">
+                <span className="text-[9px] font-black px-1.5 py-0.5 bg-yellow-200 border-2 border-black rounded">
                   {opponentData.state.activeZone.type}
                 </span>
               )}
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1">
               <div>
-                <div className="flex justify-between text-[10px] font-bold mb-1">
+                <div className="flex justify-between text-[9px] font-bold mb-0.5">
                   <span>HP</span>
-                  <span>{opponentData.state.hp}/{opponentData.state.maxHp}</span>
+                  <span className="text-[8px]">{opponentData.state.hp}/{opponentData.state.maxHp}</span>
                 </div>
-                <div className="h-3 border-2 border-black bg-gray-200 rounded">
+                <div className="h-2 border-2 border-black bg-gray-200 rounded">
                   <div
                     className="h-full bg-gradient-to-r from-red-500 to-red-400"
                     style={{ width: `${opponentHpPercent}%` }}
@@ -1372,11 +1388,11 @@ function App() {
                 </div>
               </div>
               <div>
-                <div className="flex justify-between text-[10px] font-bold mb-1">
+                <div className="flex justify-between text-[9px] font-bold mb-0.5">
                   <span>MP</span>
-                  <span>{opponentData.state.mp}/5</span>
+                  <span className="text-[8px]">{opponentData.state.mp}/5</span>
                 </div>
-                <div className="h-2 border-2 border-black bg-gray-200 rounded">
+                <div className="h-1.5 border-2 border-black bg-gray-200 rounded">
                   <div
                     className="h-full bg-gradient-to-r from-blue-500 to-blue-400"
                     style={{ width: `${opponentMpPercent}%` }}
@@ -1387,22 +1403,22 @@ function App() {
           </div>
 
           {/* 自分ステータス */}
-          <div className="pointer-events-auto bg-white/90 border-4 border-black shadow-[6px_6px_0px_rgba(0,0,0,1)] p-3 rounded-lg">
-            <div className="flex items-center justify-between mb-2">
-              <p className="font-black text-sm flex items-center gap-2">YOU {isMyTurn && <span className="text-xs">⭐</span>}</p>
+          <div className="pointer-events-auto bg-white/95 border-3 border-black shadow-[4px_4px_0px_rgba(0,0,0,1)] p-2 rounded max-w-[90vw] mx-auto">
+            <div className="flex items-center justify-between mb-1">
+              <p className="font-black text-xs flex items-center gap-1">YOU {isMyTurn && <span className="text-[8px] animate-pulse">⭐</span>}</p>
               {myData.state.activeZone.type !== 'none' && (
-                <span className="text-xs font-black px-2 py-1 bg-yellow-200 border-2 border-black rounded">
+                <span className="text-[9px] font-black px-1.5 py-0.5 bg-yellow-200 border-2 border-black rounded">
                   {myData.state.activeZone.type}
                 </span>
               )}
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1">
               <div>
                 <div className="flex justify-between text-[10px] font-bold mb-1">
                   <span>HP</span>
                   <span>{myData.state.hp}/{myData.state.maxHp}</span>
                 </div>
-                <div className="h-3 border-2 border-black bg-gray-200 rounded">
+                <div className="h-2 border-2 border-black bg-gray-200 rounded">
                   <div
                     className={`h-full ${healFlash ? 'animate-flash bg-white' : 'bg-gradient-to-r from-green-500 to-green-400'}`}
                     style={{ width: `${myHpPercent}%` }}
@@ -1410,11 +1426,11 @@ function App() {
                 </div>
               </div>
               <div>
-                <div className="flex justify-between text-[10px] font-bold mb-1">
+                <div className="flex justify-between text-[9px] font-bold mb-0.5">
                   <span>MP</span>
-                  <span>{myData.state.mp}/5</span>
+                  <span className="text-[8px]">{myData.state.mp}/5</span>
                 </div>
-                <div className="h-2 border-2 border-black bg-gray-200 rounded">
+                <div className="h-1.5 border-2 border-black bg-gray-200 rounded">
                   <div
                     className="h-full bg-gradient-to-r from-blue-500 to-blue-400"
                     style={{ width: `${myMpPercent}%` }}
@@ -1951,16 +1967,16 @@ function App() {
         </div>
 
         {/* スマホ時のボタンエリア（下部固定） */}
-        <div className="md:hidden fixed bottom-0 left-0 right-0 p-4 border-t-4 border-black space-y-3 max-h-[35vh] overflow-y-auto">
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-[85] bg-white/95 border-t-4 border-black space-y-2 max-h-[40vh] overflow-y-auto px-3 py-2">
             {/* ターン表示 */}
             {!isMyTurn && (
-              <div className="bg-orange-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-2 text-center">
-                <p className="font-black text-sm animate-pulse">⏳ 相手の行動を待っています...</p>
+              <div className="bg-orange-400 border-3 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-1.5 text-center">
+                <p className="font-black text-xs animate-pulse">⏳ 相手の行動を待っています...</p>
               </div>
             )}
             {isProcessing && isMyTurn && (
-              <div className="bg-blue-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-2 text-center">
-                <p className="font-black text-sm animate-pulse">⚡ 演出中...</p>
+              <div className="bg-blue-400 border-3 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-1.5 text-center">
+                <p className="font-black text-xs animate-pulse">⚡ 演出中...</p>
               </div>
             )}
 
@@ -1968,7 +1984,7 @@ function App() {
             <button
               onClick={handleUseSkill}
               disabled={gameState.turnIndex !== myIndex || isAnimating || isProcessing || myIndex === null || myData.state.isRiichi}
-              className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-6 font-black text-lg ${
+              className={`w-full border-3 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all py-3 font-black text-sm ${
                 myIndex !== null && turnIndex === myIndex && !isProcessing && !myData.state.isRiichi
                   ? 'bg-pink-500 hover:bg-pink-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
                   : 'bg-gray-400 cursor-not-allowed'
@@ -1983,27 +1999,27 @@ function App() {
 
             {/* 現在のゾーン効果表示 */}
             {myData.state.activeZone.type !== 'none' && (
-              <div className="bg-yellow-300 border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-2">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xl">{ZONE_DESCRIPTIONS[myData.state.activeZone.type].emoji}</span>
+              <div className="bg-yellow-300 border-3 border-black shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] p-1.5">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <span className="text-lg">{ZONE_DESCRIPTIONS[myData.state.activeZone.type].emoji}</span>
                   <div>
-                    <p className="font-black text-xs">{myData.state.activeZone.type}</p>
-                    <p className="text-xs font-bold text-red-600">残り {myData.state.activeZone.remainingTurns} ターン</p>
+                    <p className="font-black text-[10px]">{myData.state.activeZone.type}</p>
+                    <p className="text-[9px] font-bold text-red-600">残り {myData.state.activeZone.remainingTurns} ターン</p>
                   </div>
                 </div>
-                <p className="text-xs font-bold whitespace-pre-wrap leading-tight">
+                <p className="text-[9px] font-bold whitespace-pre-wrap leading-tight">
                   {ZONE_DESCRIPTIONS[myData.state.activeZone.type].details}
                 </p>
               </div>
             )}
 
             {/* ゾーン選択ドロップダウン + ?アイコン（スマホ） */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <select
                 value={selectedZoneType}
                 onChange={(e) => setSelectedZoneType(e.target.value as any)}
                 disabled={myIndex === null || turnIndex !== myIndex || isProcessing}
-                className="flex-1 px-2 py-2 border-2 border-black font-bold text-xs bg-white"
+                className="flex-1 px-2 py-1.5 border-2 border-black font-bold text-xs bg-white rounded"
               >
                 <option value="強攻のゾーン">🔥 強攻のゾーン</option>
                 <option value="集中のゾーン">🎯 集中のゾーン</option>
@@ -2013,7 +2029,7 @@ function App() {
               <button
                 type="button"
                 onClick={() => setMobileZoneInfoOpen(true)}
-                className="w-10 h-10 shrink-0 border-3 border-black bg-white font-black text-base rounded-full shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
+                className="w-8 h-8 shrink-0 border-2 border-black bg-white font-black text-xs rounded-full shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
               >
                 ?
               </button>
@@ -2023,28 +2039,28 @@ function App() {
             <button
               onClick={handleActivateZone}
               disabled={turnIndex !== myIndex || isProcessing || myData.state.mp < 5 || myIndex === null}
-              className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-3 font-black text-sm ${
+              className={`w-full border-3 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all py-2 font-black text-xs ${
                 myIndex !== null && turnIndex === myIndex && !isProcessing && myData.state.mp >= 5
                   ? 'bg-purple-400 hover:bg-purple-300 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0'
                   : 'bg-gray-400 cursor-not-allowed'
               }`}
             >
               {myIndex !== null && turnIndex === myIndex && !isProcessing ? '🌀 ゾーン展開' : '相手の行動を待っています...'}
-              {myIndex !== null && turnIndex === myIndex && !isProcessing && <span className="block text-xs">(MP 5消費)</span>}
+              {myIndex !== null && turnIndex === myIndex && !isProcessing && <span className="block text-[10px]">(MP 5消費)</span>}
             </button>
 
             {/* 立直ボタン */}
             <button
               onClick={handleRiichi}
               disabled={turnIndex !== myIndex || isProcessing || myData.state.mp < 5 || myIndex === null || myRiichiState}
-              className={`w-full border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all py-3 font-black text-sm ${
+              className={`w-full border-3 border-black shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] transition-all py-2 font-black text-xs ${
                 myIndex !== null && turnIndex === myIndex && !isProcessing && myData.state.mp >= 5 && !myRiichiState
                   ? 'bg-red-500 hover:bg-red-400 active:scale-90 active:shadow-none active:translate-x-0 active:translate-y-0 animate-pulse'
                   : 'bg-gray-400 cursor-not-allowed'
               }`}
             >
               {myIndex !== null && turnIndex === myIndex && !isProcessing && !myRiichiState ? '🀄 立直' : myRiichiState ? '🀄 立直中...' : '相手の行動を待っています...'}
-              {myIndex !== null && turnIndex === myIndex && !isProcessing && !myRiichiState && <span className="block text-xs">(MP 5消費)</span>}
+              {myIndex !== null && turnIndex === myIndex && !isProcessing && !myRiichiState && <span className="block text-[10px]">(MP 5消費)</span>}
             </button>
           </div>
 

@@ -314,7 +314,7 @@ const RealHand: React.FC<{ extendedFinger: 'index' | 'middle' }> = ({ extendedFi
         return (
           <group key={i} position={[xPos, yPos, zPos]}>
             <mesh rotation={[curlRotation, 0, 0]} castShadow>
-              <capsuleGeometry args={[0.09, length, 4, 8]} />
+              <capsuleGeometry args={[0.085, length, 4, 8]} />
               <primitive object={skinMat} attach="material" />
             </mesh>
           </group>
@@ -323,7 +323,7 @@ const RealHand: React.FC<{ extendedFinger: 'index' | 'middle' }> = ({ extendedFi
       
       {/* 親指：付け根から角度をつける */}
       <mesh position={[-0.45, -0.2, 0.1]} rotation={[0, 0.4, 0.6]} castShadow>
-        <capsuleGeometry args={[0.11, 0.4, 4, 8]} />
+        <capsuleGeometry args={[0.1, 0.4, 4, 8]} />
         <primitive object={skinMat} attach="material" />
       </mesh>
     </group>
