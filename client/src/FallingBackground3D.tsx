@@ -283,49 +283,58 @@ const Shield: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
   );
 };
 
-// --- 手のリアルモデル (改善版) ---
-const RealHand: React.FC<{ extendedFinger: 'index' | 'middle' }> = ({ extendedFinger }) => {
-  const skinMat = useMemo(() => new THREE.MeshPhysicalMaterial({
-    color: '#ffdbac',
-    roughness: 0.7,
-    metalness: 0,
-    reflectivity: 0.1,
-    sheen: 0.5
-  }), []);
+// --- リアルな手モデル (骨格シミュレーション版) ---
+const RealHand: React.FC<{ extendedFinger: "index" | "middle" }> = ({ extendedFinger }) => {
+  const skinMat = new THREE.MeshPhysicalMaterial({ color: '#ffdbac', roughness: 0.6 });
+
+  // 指一本分を描画する関数
+  const Finger = ({ index, isExtended }: { index: number, isExtended: boolean }) => {
+    const xPos = -0.35 + index * 0.22;
+    // 伸ばしている指は真っ直ぐ、握っている指は2段階で曲げる
+    const rootRotation = isExtended ? 0 : Math.PI * 0.5;
+    const tipRotation = isExtended ? 0 : Math.PI * 0.6;
+    const rootPos = isExtended ? 0.5 : 0.3;
+    const zPos = isExtended ? 0 : 0.25;
+
+    return (
+      <group position={[xPos, 0.45, 0]}>
+        {/* 指の根元パーツ */}
+        <mesh rotation={[rootRotation, 0, 0]} position={[0, rootPos/2, zPos/2]}>
+          <capsuleGeometry args={[0.08, 0.4, 4, 8]} />
+          <primitive object={skinMat} attach="material" />
+          {/* 指の先端パーツ（さらに関節を曲げる） */}
+          <mesh rotation={[tipRotation, 0, 0]} position={[0, 0.3, 0]}>
+            <capsuleGeometry args={[0.08, 0.35, 4, 8]} />
+            <primitive object={skinMat} attach="material" />
+          </mesh>
+        </mesh>
+      </group>
+    );
+  };
 
   return (
-    <group scale={[1.2, 1.2, 1.2]}>
-      {/* 手のひら：丸みを持たせる */}
-      <RoundedBox args={[0.8, 1.0, 0.4]} radius={0.15} smoothness={4}>
-        <meshPhysicalMaterial color="#ffdbac" roughness={0.7} reflectivity={0.1} />
+    <group scale={[1.3, 1.3, 1.3]}>
+      {/* 手のひら (厚みのあるベース) */}
+      <RoundedBox args={[0.85, 1.0, 0.4]} radius={0.15} smoothness={4}>
+        <meshPhysicalMaterial color="#ffdbac" roughness={0.6} />
       </RoundedBox>
-      
-      {/* 指の描画 */}
-      {[0, 1, 2, 3].map((i) => {
-        const isIndex = i === 0;
-        const isMiddle = i === 1;
-        const xPos = -0.3 + i * 0.22;
-        const isExtended = (extendedFinger === 'index' && isIndex) || (extendedFinger === 'middle' && isMiddle);
-        const curlRotation = isExtended ? 0 : (extendedFinger === 'middle' ? Math.PI * 1.1 : Math.PI / 1.5);
-        const yPos = isExtended ? 0.6 : (extendedFinger === 'middle' ? -0.05 : 0.2);
-        const zPos = isExtended ? 0 : (extendedFinger === 'middle' ? 0.35 : 0.25);
-        const length = isExtended ? 0.7 : (extendedFinger === 'middle' ? 0.28 : 0.3);
-        
-        return (
-          <group key={i} position={[xPos, yPos, zPos]}>
-            <mesh rotation={[curlRotation, 0, 0]} castShadow>
-              <capsuleGeometry args={[0.085, length, 4, 8]} />
-              <primitive object={skinMat} attach="material" />
-            </mesh>
-          </group>
-        );
-      })}
-      
-      {/* 親指：付け根から角度をつける */}
-      <mesh position={[-0.45, -0.2, 0.1]} rotation={[0, 0.4, 0.6]} castShadow>
-        <capsuleGeometry args={[0.1, 0.4, 4, 8]} />
-        <primitive object={skinMat} attach="material" />
-      </mesh>
+
+      {/* 4本の指 */}
+      {[0, 1, 2, 3].map((i) => (
+        <Finger 
+          key={i} 
+          index={i} 
+          isExtended={(extendedFinger === "index" && i === 0) || (extendedFinger === "middle" && i === 1)} 
+        />
+      ))}
+
+      {/* 親指 (横から出て内側に曲げる) */}
+      <group position={[-0.45, -0.1, 0.1]} rotation={[0, 0.5, 0.8]}>
+        <mesh rotation={[Math.PI * 0.3, 0, 0]}>
+          <capsuleGeometry args={[0.1, 0.4, 4, 8]} />
+          <primitive object={skinMat} attach="material" />
+        </mesh>
+      </group>
     </group>
   );
 };
