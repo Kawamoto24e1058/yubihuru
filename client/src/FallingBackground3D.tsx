@@ -89,7 +89,7 @@ const createRealMahjongTexture = (type: string, value: string | number) => {
   return texture;
 };
 
-// --- コンポーネント: 麻雀牌 (マテリアル配列で正面のみテクスチャ) ---
+// --- コンポーネント: 麻雀牌 (角丸・プラスチック光沢・パフォーマンス最適化版) ---
 const MahjongTile: React.FC<any> = ({ position, rotationSpeed, fallSpeed, tileType, tileValue }) => {
   const groupRef = useRef<THREE.Group>(null!);
   const texture = useMemo(() => createRealMahjongTexture(tileType, tileValue), [tileType, tileValue]);
@@ -106,22 +106,57 @@ const MahjongTile: React.FC<any> = ({ position, rotationSpeed, fallSpeed, tileTy
     }
   });
 
-  // マテリアル配列: 側面4つは白、正面はテクスチャ、背面は黄色
+  // マテリアル配列: 側面4つは白、正面はテクスチャ、背面は黄色 - プラスチック光沢強化
   const materials = useMemo(() => [
-    new THREE.MeshPhysicalMaterial({ color: '#ffffff', metalness: 0.05, roughness: 0.3, clearcoat: 0.8 }), // 右
-    new THREE.MeshPhysicalMaterial({ color: '#ffffff', metalness: 0.05, roughness: 0.3, clearcoat: 0.8 }), // 左
-    new THREE.MeshPhysicalMaterial({ color: '#ffffff', metalness: 0.05, roughness: 0.3, clearcoat: 0.8 }), // 上
-    new THREE.MeshPhysicalMaterial({ color: '#ffffff', metalness: 0.05, roughness: 0.3, clearcoat: 0.8 }), // 下
-    new THREE.MeshPhysicalMaterial({ map: texture, metalness: 0.1, roughness: 0.2, clearcoat: 1.0 }),      // 正面
-    new THREE.MeshPhysicalMaterial({ color: '#f0c040', metalness: 0.0, roughness: 0.3 })                    // 背面 (黄色)
+    new THREE.MeshPhysicalMaterial({ 
+      color: '#ffffff', 
+      metalness: 0.0, 
+      roughness: 0.15, 
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.1
+    }), // 右
+    new THREE.MeshPhysicalMaterial({ 
+      color: '#ffffff', 
+      metalness: 0.0, 
+      roughness: 0.15, 
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.1
+    }), // 左
+    new THREE.MeshPhysicalMaterial({ 
+      color: '#ffffff', 
+      metalness: 0.0, 
+      roughness: 0.15, 
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.1
+    }), // 上
+    new THREE.MeshPhysicalMaterial({ 
+      color: '#ffffff', 
+      metalness: 0.0, 
+      roughness: 0.15, 
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.1
+    }), // 下
+    new THREE.MeshPhysicalMaterial({ 
+      map: texture, 
+      metalness: 0.0, 
+      roughness: 0.12, 
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.08
+    }), // 正面
+    new THREE.MeshPhysicalMaterial({ 
+      color: '#f0c040', 
+      metalness: 0.0, 
+      roughness: 0.2,
+      clearcoat: 0.8
+    }) // 背面 (黄色)
   ], [texture]);
 
   return (
     <group ref={groupRef} position={position}>
-      <mesh castShadow>
-        <boxGeometry args={[1.6, 2.2, 1.2]} />
+      {/* RoundedBox で角丸を実現（低ポリゴン設定）*/}
+      <RoundedBox args={[1.6, 2.2, 1.2]} radius={0.08} smoothness={2}>
         <primitive object={materials} attach="material" />
-      </mesh>
+      </RoundedBox>
     </group>
   );
 };
@@ -142,15 +177,15 @@ const Flame: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
   return (
     <group ref={groupRef} position={position} scale={[0.8, 0.8, 0.8]}>
       {/* 炎の形を3つの円錐で表現 */}
-      <mesh position={[0, 0, 0]} castShadow>
+      <mesh position={[0, 0, 0]}>
         <coneGeometry args={[0.6, 1.8, 5]} />
         <meshPhysicalMaterial color="#ff3333" emissive="#ff0000" emissiveIntensity={0.8} />
       </mesh>
-      <mesh position={[0, 0.5, 0]} castShadow>
+      <mesh position={[0, 0.5, 0]}>
         <coneGeometry args={[0.4, 1.2, 5]} />
         <meshPhysicalMaterial color="#ff9933" emissive="#ff6600" emissiveIntensity={1.0} />
       </mesh>
-      <mesh position={[0, 0.9, 0]} castShadow>
+      <mesh position={[0, 0.9, 0]}>
         <coneGeometry args={[0.2, 0.7, 5]} />
         <meshPhysicalMaterial color="#ffff33" emissive="#ffcc00" emissiveIntensity={1.2} />
       </mesh>
@@ -175,12 +210,12 @@ const Bomb: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
   return (
     <group ref={groupRef} position={position} scale={[0.7, 0.7, 0.7]}>
       {/* 爆弾本体（球体）*/}
-      <mesh position={[0, 0, 0]} castShadow>
+      <mesh position={[0, 0, 0]}>
         <sphereGeometry args={[0.8, 16, 16]} />
         <meshPhysicalMaterial color="#111111" metalness={0.3} roughness={0.7} />
       </mesh>
       {/* 導火線 */}
-      <mesh position={[0, 0.8, 0]} castShadow>
+      <mesh position={[0, 0.8, 0]}>
         <cylinderGeometry args={[0.08, 0.08, 0.5, 8]} />
         <meshPhysicalMaterial color="#663300" />
       </mesh>
@@ -247,7 +282,7 @@ const GoldenMan: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
 
   return (
     <group ref={groupRef} position={position} scale={[1.2, 1.2, 1.2]}>
-      <mesh castShadow>
+      <mesh>
         <boxGeometry args={[1.6, 2.2, 1.2]} />
         <primitive object={materials} attach="material" />
       </mesh>
@@ -255,7 +290,7 @@ const GoldenMan: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
   );
 };
 
-// --- シンプルな剣コンポーネント（技演出用）---
+// --- リアルな剣コンポーネント（技演出用・パフォーマンス最適化版）---
 const SimpleSword: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
   const groupRef = useRef<THREE.Group>(null!);
   useFrame((_state, delta) => {
@@ -271,26 +306,43 @@ const SimpleSword: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
   
   return (
     <group ref={groupRef} position={position} scale={[0.6, 0.6, 0.6]} rotation={[0, 0, Math.PI / 4]}>
-      {/* 柄 */}
-      <mesh position={[0, -0.8, 0]} castShadow>
-        <cylinderGeometry args={[0.15, 0.15, 1.2, 8]} />
+      {/* 柄（持ち手）- 低ポリゴン */}
+      <mesh position={[0, -0.8, 0]}>
+        <cylinderGeometry args={[0.15, 0.15, 1.2, 6]} />
         <meshPhysicalMaterial color="#663300" roughness={0.8} />
       </mesh>
-      {/* 刃 */}
-      <mesh position={[0, 0.5, 0]} castShadow>
-        <boxGeometry args={[0.3, 2.5, 0.08]} />
-        <meshPhysicalMaterial color="#c0c0c0" metalness={0.9} roughness={0.2} />
-      </mesh>
-      {/* 鍔 */}
-      <mesh position={[0, -0.2, 0]} castShadow>
-        <boxGeometry args={[0.6, 0.1, 0.15]} />
+      {/* 鍔（つば）- 円盤 */}
+      <mesh position={[0, -0.15, 0]}>
+        <cylinderGeometry args={[0.35, 0.35, 0.08, 8]} />
         <meshPhysicalMaterial color="#ffd700" metalness={0.8} roughness={0.3} />
+      </mesh>
+      {/* 刃（先端が細くなる菱形に近い形状）- 円錐台 */}
+      <mesh position={[0, 0.8, 0]}>
+        <cylinderGeometry args={[0.05, 0.25, 2.5, 4]} />
+        <meshPhysicalMaterial 
+          color="#d0d0d0" 
+          metalness={0.8} 
+          roughness={0.2} 
+          clearcoat={0.5}
+          clearcoatRoughness={0.1}
+        />
+      </mesh>
+      {/* 刃の輝きエッジ */}
+      <mesh position={[0, 0.8, 0.01]}>
+        <cylinderGeometry args={[0.02, 0.15, 2.4, 4]} />
+        <meshPhysicalMaterial 
+          color="#ffffff" 
+          metalness={1.0} 
+          roughness={0.1}
+          emissive="#ffffff"
+          emissiveIntensity={0.3}
+        />
       </mesh>
     </group>
   );
 };
 
-// --- 足コンポーネント（バカゲー風）---
+// --- リアルな足コンポーネント（膝関節付き・パフォーマンス最適化版）---
 const Leg: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
   const groupRef = useRef<THREE.Group>(null!);
   useFrame((_state, delta) => {
@@ -306,21 +358,37 @@ const Leg: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
   
   return (
     <group ref={groupRef} position={position} scale={[0.8, 0.8, 0.8]}>
-      {/* 脚（円柱） */}
-      <mesh position={[0, 0, 0]} castShadow>
-        <cylinderGeometry args={[0.25, 0.22, 2.5, 16]} />
+      {/* 太もも（上部が太く下部が細い円錐台）*/}
+      <mesh position={[0, 0.6, 0]}>
+        <cylinderGeometry args={[0.22, 0.28, 1.3, 8]} />
         <meshPhysicalMaterial color="#ffcc99" roughness={0.7} />
       </mesh>
-      {/* 足首から先（横向きRoundedBox） */}
-      <mesh position={[0, -1.4, 0.3]} rotation={[Math.PI / 2, 0, 0]} castShadow>
-        <RoundedBox args={[0.5, 0.8, 0.35]} radius={0.05} smoothness={4}>
-          <meshPhysicalMaterial color="#8B4513" roughness={0.6} />
-        </RoundedBox>
+      {/* 膝（球体の膨らみ）*/}
+      <mesh position={[0, 0, 0]}>
+        <sphereGeometry args={[0.25, 8, 8]} />
+        <meshPhysicalMaterial color="#ffcc99" roughness={0.6} />
       </mesh>
-      {/* つま先（小さな球体） */}
-      <mesh position={[0, -1.4, 0.7]} castShadow>
-        <sphereGeometry args={[0.18, 12, 12]} />
-        <meshPhysicalMaterial color="#8B4513" roughness={0.6} />
+      {/* 膝下（細くなる円錐台・少し曲がった角度）*/}
+      <group position={[0, -0.7, 0.15]} rotation={[0.2, 0, 0]}>
+        <mesh>
+          <cylinderGeometry args={[0.18, 0.22, 1.4, 8]} />
+          <meshPhysicalMaterial color="#ffcc99" roughness={0.7} />
+        </mesh>
+      </group>
+      {/* 足首 */}
+      <mesh position={[0, -1.5, 0.25]}>
+        <cylinderGeometry args={[0.15, 0.18, 0.3, 8]} />
+        <meshPhysicalMaterial color="#ffcc99" roughness={0.7} />
+      </mesh>
+      {/* 靴（かかと）- 横長Box */}
+      <mesh position={[0, -1.75, 0.25]} rotation={[Math.PI / 2, 0, 0]}>
+        <boxGeometry args={[0.4, 0.7, 0.3]} />
+        <meshPhysicalMaterial color="#2d2d2d" roughness={0.5} />
+      </mesh>
+      {/* つま先（少し丸み）*/}
+      <mesh position={[0, -1.75, 0.65]}>
+        <sphereGeometry args={[0.2, 8, 8]} />
+        <meshPhysicalMaterial color="#2d2d2d" roughness={0.5} />
       </mesh>
     </group>
   );
@@ -343,17 +411,17 @@ const Sword: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
   return (
     <group ref={groupRef} position={position} scale={[0.7, 0.7, 0.7]}>
       {/* 刃: 先端を尖らせる */}
-      <mesh position={[0, 1.8, 0]} castShadow>
+      <mesh position={[0, 1.8, 0]}>
         <cylinderGeometry args={[0.22, 0.35, 3.2, 4]} />
         <meshPhysicalMaterial color="#e0e0e0" metalness={1.0} roughness={0.1} clearcoat={1.0} />
       </mesh>
       {/* 血溝 (溝): 刃の中後方に渝 */}
-      <mesh position={[0, 1.8, 0]} castShadow>
+      <mesh position={[0, 1.8, 0]}>
         <cylinderGeometry args={[0.05, 0.08, 3.0, 2]} />
         <meshPhysicalMaterial color="#a0a0a0" metalness={0.95} roughness={0.15} />
       </mesh>
       {/* 鍔: 豪華な装飾的な形 */}
-      <mesh position={[0, 0.3, 0]} castShadow>
+      <mesh position={[0, 0.3, 0]}>
         <torusGeometry args={[0.45, 0.12, 8, 20]} />
         <meshPhysicalMaterial color="#ffd700" metalness={1.0} roughness={0.2} clearcoat={0.8} />
       </mesh>
@@ -363,12 +431,12 @@ const Sword: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
         <meshPhysicalMaterial color="#c0a000" metalness={0.9} roughness={0.3} />
       </mesh>
       {/* 柄: 革巻き風 */}
-      <mesh position={[0, -0.95, 0]} castShadow>
+      <mesh position={[0, -0.95, 0]}>
         <cylinderGeometry args={[0.1, 0.1, 1.6, 8]} />
         <meshPhysicalMaterial color="#4a2c1a" roughness={0.9} />
       </mesh>
       {/* 柄頭: 重り */}
-      <mesh position={[0, -1.75, 0]} castShadow>
+      <mesh position={[0, -1.75, 0]}>
         <sphereGeometry args={[0.2, 12, 12]} />
         <meshPhysicalMaterial color="#ffd700" metalness={1.0} roughness={0.2} clearcoat={0.9} />
       </mesh>
@@ -392,21 +460,21 @@ const Axe: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
   return (
     <group ref={groupRef} position={position} scale={[0.8, 0.8, 0.8]}>
       {/* 柄: 木製 */}
-      <mesh position={[0, 0.2, 0]} castShadow>
+      <mesh position={[0, 0.2, 0]}>
         <cylinderGeometry args={[0.08, 0.12, 3.8, 8]} />
         <meshPhysicalMaterial color="#5d4037" roughness={0.85} />
       </mesh>
       {/* 刃: 三日月状 (模擬) */}
-      <mesh position={[0, 1.5, 0]} castShadow>
+      <mesh position={[0, 1.5, 0]}>
         <cylinderGeometry args={[1.0, 0.8, 0.7, 16]} />
         <meshPhysicalMaterial color="#383838" metalness={0.8} roughness={0.4} />
       </mesh>
       {/* 刃の鋭利な縁 */}
-      <mesh position={[0.9, 1.5, 0]} castShadow>
+      <mesh position={[0.9, 1.5, 0]}>
         <boxGeometry args={[0.15, 0.8, 0.08]} />
         <meshPhysicalMaterial color="#e8e8e8" metalness={1.0} roughness={0.08} clearcoat={0.95} />
       </mesh>
-      <mesh position={[-0.9, 1.5, 0]} castShadow>
+      <mesh position={[-0.9, 1.5, 0]}>
         <boxGeometry args={[0.15, 0.8, 0.08]} />
         <meshPhysicalMaterial color="#e8e8e8" metalness={1.0} roughness={0.08} clearcoat={0.95} />
       </mesh>
@@ -420,7 +488,7 @@ const Axe: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
         <meshPhysicalMaterial color="#707070" metalness={0.8} roughness={0.35} />
       </mesh>
       {/* 石突き: 柄の下の金属スパイク */}
-      <mesh position={[0, -1.9, 0]} castShadow>
+      <mesh position={[0, -1.9, 0]}>
         <coneGeometry args={[0.2, 0.6, 8]} />
         <meshPhysicalMaterial color="#555555" metalness={0.9} roughness={0.25} />
       </mesh>
@@ -443,11 +511,11 @@ const Spear: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
   
   return (
     <group ref={groupRef} position={position} scale={[0.7, 0.7, 0.7]}>
-      <mesh position={[0, 0, 0]} castShadow>
+      <mesh position={[0, 0, 0]}>
         <cylinderGeometry args={[0.08, 0.08, 4.5]} />
         <meshPhysicalMaterial color="#5a4a3a" roughness={0.9} />
       </mesh>
-      <mesh position={[0, 2.8, 0]} castShadow>
+      <mesh position={[0, 2.8, 0]}>
         <coneGeometry args={[0.25, 1.5, 4]} />
         <meshPhysicalMaterial color="#dddddd" metalness={0.95} roughness={0.15} clearcoat={0.7} />
       </mesh>
@@ -474,7 +542,7 @@ const Shield: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
   
   return (
     <group ref={groupRef} position={position}>
-      <mesh rotation={[Math.PI/2, 0, 0]} castShadow>
+      <mesh rotation={[Math.PI/2, 0, 0]}>
         <cylinderGeometry args={[1.3, 1.3, 0.25, 16]} />
         <meshPhysicalMaterial color="#2244aa" metalness={0.4} roughness={0.4} clearcoat={0.6} />
       </mesh>
@@ -653,10 +721,10 @@ export const FallingBackground3D: React.FC<FallingBackground3DProps> = ({ object
 
   return (
     <div id="canvas-container" style={{ opacity }}>
-      <Canvas camera={{ position: [0, 0, 18], fov: 45 }} shadows>
+      <Canvas camera={{ position: [0, 0, 18], fov: 45 }}>
         <Environment preset="city" />
         <ambientLight intensity={1.0} />
-        <directionalLight position={[10, 20, 10]} intensity={2.0} castShadow />
+        <directionalLight position={[10, 20, 10]} intensity={2.0} />
         <pointLight position={[-10, -5, -5]} intensity={1.5} color="#ffaa00" />
 
         {items.map((props, i) => {
