@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "generate:icons": "node scripts/generate-icons.mjs public/source-icon.png"
   },
   "dependencies": {
     "@yubifuru/shared": "file:../shared",
@@ -29,12 +30,5 @@
     "vite-plugin-pwa": "^1.2.0",
     "workbox-window": "^7.4.0",
     "sharp": "^0.33.4"
-  },
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview",
-    "generate:icons": "node scripts/generate-icons.mjs public/source-icon.png"
   }
 }

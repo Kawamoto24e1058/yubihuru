@@ -3,6 +3,7 @@ import { io, Socket } from 'socket.io-client'
 import './App.css'
 import type { GameStartData, PlayerData } from './types'
 import { FallingBackground3D } from './FallingBackground3D'
+import { BumpMatching } from './BumpMatching'
 
 // ゾーン効果の説明データ
 const ZONE_DESCRIPTIONS = {
@@ -98,7 +99,7 @@ function App() {
   const [glassBreak, setGlassBreak] = useState(false)
   const [slowMotion, setSlowMotion] = useState(false)
   const [buffedDamage, setBuffedDamage] = useState<number | null>(null)
-  const [screen, setScreen] = useState<'start' | 'game'>('start')
+  const [screen, setScreen] = useState<'start' | 'bump' | 'game'>('start')
   const [showMenu, setShowMenu] = useState(false)
   const [showQuitConfirm, setShowQuitConfirm] = useState(false)
   const [canReconnect, setCanReconnect] = useState(false)
@@ -504,6 +505,39 @@ function App() {
       console.log('Match found confirmation:', data)
       setWinner(null)
       setIsGameOver(false)
+    })
+
+    // Bump matching success handler
+    newSocket.on('match_success', (data: any) => {
+      console.log('Match success!', data)
+      const { roomId, opponentName, gameState } = data
+      
+      setCurrentRoomId(roomId)
+      setScreen('game')
+      setGameStarted(true)
+      setIsWaiting(false)
+      
+      // ゲーム状態をリセット
+      setIsGameOver(false)
+      setWinner(null)
+      setLogs([])
+      
+      // プレイヤーデータを設定
+      const mySocketId = newSocket.id || ''
+      const me = gameState.player1.socketId === mySocketId ? gameState.player1 : gameState.player2
+      const opponent = gameState.player1.socketId === mySocketId ? gameState.player2 : gameState.player1
+      
+      setMyData(me)
+      setOpponentData(opponent)
+      
+      // myIndex を設定
+      const myIndexValue = gameState.player1.socketId === mySocketId ? 0 : 1
+      setMyIndex(myIndexValue)
+      
+      // turnIndex を初期化
+      setTurnIndex(0)
+      
+      setLogs([`⚔️ バトル開始！ vs ${opponentName}`])
     })
 
     const handleSkillEffect = (payload: any) => {
@@ -1007,6 +1041,15 @@ function App() {
     }
   }
 
+  const handleMatchSuccess = (roomId: string, opponentName: string) => {
+    console.log('Bump match success:', roomId, opponentName)
+    setCurrentRoomId(roomId)
+    setScreen('game')
+    setGameStarted(true)
+    setIsWaiting(false)
+    setLogs([`⚔️ バトル開始！ vs ${opponentName}`])
+  }
+
   const handleReconnect = () => {
     const savedId = localStorage.getItem('yubihuru_player_id')
     if (socket && savedId) {
@@ -1287,6 +1330,18 @@ function App() {
           </button>
         </div>
       </div>
+    )
+  }
+
+  // Bump Matching 画面
+  if (screen === 'bump' && socket) {
+    return (
+      <BumpMatching 
+        socket={socket}
+        playerName={name}
+        onMatchSuccess={handleMatchSuccess}
+        onBack={() => setScreen('start')}
+      />
     )
   }
 
@@ -2195,6 +2250,18 @@ function App() {
                 className="w-full py-4 bg-blue-500 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-400 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black text-xl"
               >
                 ⚔️ 新しいバトルを始める
+              </button>
+
+              <button
+                onClick={() => setScreen('bump')}
+                disabled={!name.trim()}
+                className={`w-full py-4 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-xl ${
+                  name.trim()
+                    ? 'bg-orange-500 hover:bg-orange-400 active:translate-x-1 active:translate-y-1 active:shadow-none'
+                    : 'bg-gray-400 cursor-not-allowed'
+                }`}
+              >
+                📱 スマホをぶつけてマッチ
               </button>
             </>
           )}
