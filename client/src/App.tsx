@@ -230,8 +230,27 @@ function App() {
       setIsShaking(false)
       
       // 2. DOMに直接ついたクラスがあれば削除（念のため）
-      document.body.classList.remove('flash', 'rainbow', 'shake', 'animate-pulse', 'animate-shake')
+      const classesToClear = [
+        'flash',
+        'rainbow',
+        'shake',
+        'animate-pulse',
+        'animate-shake',
+        'animate-flash',
+        'animate-last-attack-flash',
+        'animate-slow-motion',
+        'animate-window-shake',
+        'animate-yakuman-pulse',
+        'animate-rainbow-glow',
+        'animate-dora-glow'
+      ]
+      classesToClear.forEach((cls) => {
+        document.body.classList.remove(cls)
+        document.documentElement.classList.remove(cls)
+      })
       document.documentElement.style.animation = 'none'
+      document.body.style.backgroundColor = 'transparent'
+      document.documentElement.style.backgroundColor = 'transparent'
       
       console.log('✅ All effects cleared')
     }
@@ -1240,7 +1259,7 @@ function App() {
     const myZoneBorder = zoneBorderMap[myData.state.activeZone.type] || 'border-black'
 
     return (
-      <div className={`min-h-screen p-4 transition-all relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${gameState.shakeTurns > 0 ? 'animate-window-shake' : ''} ${lastAttackGrayscale ? 'filter grayscale' : ''} ${slowMotion ? 'animate-slow-motion' : ''}`}>
+      <div className={`game-container min-h-screen p-4 pt-[150px] pb-[140px] md:pt-4 md:pb-0 transition-all relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${gameState.shakeTurns > 0 ? 'animate-window-shake' : ''} ${lastAttackGrayscale ? 'filter grayscale' : ''} ${slowMotion ? 'animate-slow-motion' : ''}`}>
         {/* メニューボタン（右上） */}
         <button
           onClick={() => setShowMenu(true)}
@@ -1294,6 +1313,85 @@ function App() {
             </div>
           </div>
         )}
+
+        {/* モバイル用ステータスバー（上部固定） */}
+        <div className="md:hidden fixed top-0 left-0 right-0 z-[90] px-3 pt-3 pb-2 space-y-2 pointer-events-none">
+          {/* 相手ステータス */}
+          <div className="pointer-events-auto bg-white/90 border-4 border-black shadow-[6px_6px_0px_rgba(0,0,0,1)] p-3 rounded-lg">
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-black text-sm">OPPONENT</p>
+              {opponentData.state.activeZone.type !== 'none' && (
+                <span className="text-xs font-black px-2 py-1 bg-yellow-200 border-2 border-black rounded">
+                  {opponentData.state.activeZone.type}
+                </span>
+              )}
+            </div>
+            <div className="space-y-2">
+              <div>
+                <div className="flex justify-between text-[10px] font-bold mb-1">
+                  <span>HP</span>
+                  <span>{opponentData.state.hp}/{opponentData.state.maxHp}</span>
+                </div>
+                <div className="h-3 border-2 border-black bg-gray-200 rounded">
+                  <div
+                    className="h-full bg-gradient-to-r from-red-500 to-red-400"
+                    style={{ width: `${opponentHpPercent}%` }}
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-[10px] font-bold mb-1">
+                  <span>MP</span>
+                  <span>{opponentData.state.mp}/5</span>
+                </div>
+                <div className="h-2 border-2 border-black bg-gray-200 rounded">
+                  <div
+                    className="h-full bg-gradient-to-r from-blue-500 to-blue-400"
+                    style={{ width: `${opponentMpPercent}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 自分ステータス */}
+          <div className="pointer-events-auto bg-white/90 border-4 border-black shadow-[6px_6px_0px_rgba(0,0,0,1)] p-3 rounded-lg">
+            <div className="flex items-center justify-between mb-2">
+              <p className="font-black text-sm flex items-center gap-2">YOU {isMyTurn && <span className="text-xs">⭐</span>}</p>
+              {myData.state.activeZone.type !== 'none' && (
+                <span className="text-xs font-black px-2 py-1 bg-yellow-200 border-2 border-black rounded">
+                  {myData.state.activeZone.type}
+                </span>
+              )}
+            </div>
+            <div className="space-y-2">
+              <div>
+                <div className="flex justify-between text-[10px] font-bold mb-1">
+                  <span>HP</span>
+                  <span>{myData.state.hp}/{myData.state.maxHp}</span>
+                </div>
+                <div className="h-3 border-2 border-black bg-gray-200 rounded">
+                  <div
+                    className={`h-full ${healFlash ? 'animate-flash bg-white' : 'bg-gradient-to-r from-green-500 to-green-400'}`}
+                    style={{ width: `${myHpPercent}%` }}
+                  />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-[10px] font-bold mb-1">
+                  <span>MP</span>
+                  <span>{myData.state.mp}/5</span>
+                </div>
+                <div className="h-2 border-2 border-black bg-gray-200 rounded">
+                  <div
+                    className="h-full bg-gradient-to-r from-blue-500 to-blue-400"
+                    style={{ width: `${myMpPercent}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         {/* 必殺技演出：3回フラッシュ（BAN用） */}
         {fatalFlash && (

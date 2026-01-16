@@ -1,6 +1,6 @@
 import React, { useRef, useMemo } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { Environment } from '@react-three/drei';
+import { Environment, RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
 
 // --- 描画ヘルパー: 竹 (索子) ---
@@ -283,39 +283,49 @@ const Shield: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
   );
 };
 
-// --- 手のモデル ---
-const HandModel: React.FC<{ extendedFinger: 'index' | 'middle' }> = ({ extendedFinger }) => {
-  const skinMat = new THREE.MeshPhysicalMaterial({ color: '#ffdbac', roughness: 0.5 });
-  
+// --- 手のリアルモデル (改善版) ---
+const RealHand: React.FC<{ extendedFinger: 'index' | 'middle' }> = ({ extendedFinger }) => {
+  const skinMat = useMemo(() => new THREE.MeshPhysicalMaterial({
+    color: '#ffdbac',
+    roughness: 0.7,
+    metalness: 0,
+    reflectivity: 0.1,
+    sheen: 0.5
+  }), []);
+
   return (
-    <group scale={[0.8, 0.8, 0.8]}>
-      {/* 手のひら */}
-      <mesh material={skinMat} position={[0, 0, 0]} castShadow>
-        <boxGeometry args={[1.0, 1.2, 0.4]} />
-      </mesh>
-      {/* 親指（曲げ） */}
-      <mesh material={skinMat} position={[-0.4, -0.1, 0.2]} rotation={[0, 0.5, 0.5]} castShadow>
-        <cylinderGeometry args={[0.12, 0.12, 0.5]} />
-      </mesh>
-      {/* 4本の指 */}
+    <group scale={[1.2, 1.2, 1.2]}>
+      {/* 手のひら：丸みを持たせる */}
+      <RoundedBox args={[0.8, 1.0, 0.4]} radius={0.15} smoothness={4}>
+        <meshPhysicalMaterial color="#ffdbac" roughness={0.7} reflectivity={0.1} />
+      </RoundedBox>
+      
+      {/* 指の描画 */}
       {[0, 1, 2, 3].map((i) => {
         const isIndex = i === 0;
         const isMiddle = i === 1;
-        const xPos = -0.3 + i * 0.25;
+        const xPos = -0.3 + i * 0.22;
         const isExtended = (extendedFinger === 'index' && isIndex) || (extendedFinger === 'middle' && isMiddle);
+        const curlRotation = isExtended ? 0 : (extendedFinger === 'middle' ? Math.PI * 1.1 : Math.PI / 1.5);
+        const yPos = isExtended ? 0.6 : (extendedFinger === 'middle' ? -0.05 : 0.2);
+        const zPos = isExtended ? 0 : (extendedFinger === 'middle' ? 0.35 : 0.25);
+        const length = isExtended ? 0.7 : (extendedFinger === 'middle' ? 0.28 : 0.3);
         
         return (
-          <mesh 
-            key={i} 
-            material={skinMat} 
-            position={[xPos, isExtended ? 0.8 : 0.4, isExtended ? 0 : 0.2]} 
-            rotation={[isExtended ? 0 : Math.PI / 2, 0, 0]}
-            castShadow
-          >
-            <cylinderGeometry args={[0.1, 0.1, isExtended ? 0.8 : 0.4]} />
-          </mesh>
+          <group key={i} position={[xPos, yPos, zPos]}>
+            <mesh rotation={[curlRotation, 0, 0]} castShadow>
+              <capsuleGeometry args={[0.09, length, 4, 8]} />
+              <primitive object={skinMat} attach="material" />
+            </mesh>
+          </group>
         );
       })}
+      
+      {/* 親指：付け根から角度をつける */}
+      <mesh position={[-0.45, -0.2, 0.1]} rotation={[0, 0.4, 0.6]} castShadow>
+        <capsuleGeometry args={[0.11, 0.4, 4, 8]} />
+        <primitive object={skinMat} attach="material" />
+      </mesh>
     </group>
   );
 };
@@ -336,7 +346,7 @@ const IndexFingerHand: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) 
   
   return (
     <group ref={groupRef} position={position}>
-      <HandModel extendedFinger="index" />
+      <RealHand extendedFinger="index" />
     </group>
   );
 };
@@ -357,7 +367,7 @@ const MiddleFingerHand: React.FC<any> = ({ position, rotationSpeed, fallSpeed })
   
   return (
     <group ref={groupRef} position={position}>
-      <HandModel extendedFinger="middle" />
+      <RealHand extendedFinger="middle" />
     </group>
   );
 };
