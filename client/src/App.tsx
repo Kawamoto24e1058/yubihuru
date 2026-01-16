@@ -108,6 +108,7 @@ function App() {
   const [currentStreak, setCurrentStreak] = useState(0) // 連勝数
   const [shakeTurns, setShakeTurns] = useState(0) // サーバー側のターンベースの画面揺れ管理
   const [canResume, setCanResume] = useState(false) // オートセーブデータから復帰可能かチェック
+  const [fallingType, setFallingType] = useState<'normal' | 'comeback' | 'yakuman'>('normal') // 3D背景のオブジェクトタイプ
 
   const gameState = { turnIndex, shakeTurns }
 
@@ -550,6 +551,17 @@ function App() {
     newSocket.on('battle_update', (data: any) => {
       console.log('Battle update:', data)
       setLogs(prev => [data.message, ...prev].slice(0, 10))
+
+      // 技に応じて3D背景のオブジェクトタイプを変更
+      if (data.skillName) {
+        if (data.skillName === '起死回生') {
+          setFallingType('comeback')
+          setTimeout(() => setFallingType('normal'), 3000) // 3秒後に通常に戻す
+        } else if (data.skillName.includes('役満') || data.skillName === '国士無双' || data.skillName === '九蓮宝燈' || data.skillName === '天和') {
+          setFallingType('yakuman')
+          setTimeout(() => setFallingType('normal'), 5000) // 5秒後に通常に戻す
+        }
+      }
 
       if (data.skillEffect) {
         setSkillEffect(data.skillEffect)
@@ -1363,6 +1375,11 @@ function App() {
 
     return (
       <div className={`game-container min-h-screen p-4 pt-[150px] pb-[140px] md:pt-4 md:pb-0 transition-all relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${gameState.shakeTurns > 0 ? 'animate-window-shake' : ''} ${lastAttackGrayscale ? 'filter grayscale' : ''} ${slowMotion ? 'animate-slow-motion' : ''}`}>
+        {/* 3D背景 (技に応じて変化) */}
+        <div className="fixed inset-0 z-0 pointer-events-none">
+          <FallingBackground3D objectType={fallingType} opacity={0.5} />
+        </div>
+
         {/* メニューボタン（右上） */}
         <button
           onClick={() => setShowMenu(true)}

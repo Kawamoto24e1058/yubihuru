@@ -3,6 +3,12 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { Environment, RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
 
+// --- Props型定義 ---
+interface FallingBackground3DProps {
+  objectType?: 'normal' | 'comeback' | 'yakuman';
+  opacity?: number;
+}
+
 // --- 描画ヘルパー: 竹 (索子) ---
 const drawBamboo = (ctx: CanvasRenderingContext2D, x: number, y: number, scale: number, color: string) => {
   ctx.fillStyle = color;
@@ -111,6 +117,135 @@ const MahjongTile: React.FC<any> = ({ position, rotationSpeed, fallSpeed, tileTy
 
   return (
     <group ref={groupRef} position={position}>
+      <mesh castShadow>
+        <boxGeometry args={[1.6, 2.2, 1.2]} />
+        <primitive object={materials} attach="material" />
+      </mesh>
+    </group>
+  );
+};
+
+// --- 炎コンポーネント（シンプルな炎）---
+const Flame: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
+  const groupRef = useRef<THREE.Group>(null!);
+  useFrame((_state, delta) => {
+    if(!groupRef.current) return;
+    groupRef.current.rotation.z += delta * rotationSpeed[0] * 2;
+    groupRef.current.position.y -= delta * fallSpeed;
+    if (groupRef.current.position.y < -20) {
+       groupRef.current.position.y = 20;
+       groupRef.current.position.x = (Math.random() - 0.5) * 25;
+    }
+  });
+  
+  return (
+    <group ref={groupRef} position={position} scale={[0.8, 0.8, 0.8]}>
+      {/* 炎の形を3つの円錐で表現 */}
+      <mesh position={[0, 0, 0]} castShadow>
+        <coneGeometry args={[0.6, 1.8, 5]} />
+        <meshPhysicalMaterial color="#ff3333" emissive="#ff0000" emissiveIntensity={0.8} />
+      </mesh>
+      <mesh position={[0, 0.5, 0]} castShadow>
+        <coneGeometry args={[0.4, 1.2, 5]} />
+        <meshPhysicalMaterial color="#ff9933" emissive="#ff6600" emissiveIntensity={1.0} />
+      </mesh>
+      <mesh position={[0, 0.9, 0]} castShadow>
+        <coneGeometry args={[0.2, 0.7, 5]} />
+        <meshPhysicalMaterial color="#ffff33" emissive="#ffcc00" emissiveIntensity={1.2} />
+      </mesh>
+    </group>
+  );
+};
+
+// --- 爆弾コンポーネント（チープな見た目）---
+const Bomb: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
+  const groupRef = useRef<THREE.Group>(null!);
+  useFrame((_state, delta) => {
+    if(!groupRef.current) return;
+    groupRef.current.rotation.x += delta * rotationSpeed[0];
+    groupRef.current.rotation.y += delta * rotationSpeed[1];
+    groupRef.current.position.y -= delta * fallSpeed;
+    if (groupRef.current.position.y < -20) {
+       groupRef.current.position.y = 20;
+       groupRef.current.position.x = (Math.random() - 0.5) * 25;
+    }
+  });
+  
+  return (
+    <group ref={groupRef} position={position} scale={[0.7, 0.7, 0.7]}>
+      {/* 爆弾本体（球体）*/}
+      <mesh position={[0, 0, 0]} castShadow>
+        <sphereGeometry args={[0.8, 16, 16]} />
+        <meshPhysicalMaterial color="#111111" metalness={0.3} roughness={0.7} />
+      </mesh>
+      {/* 導火線 */}
+      <mesh position={[0, 0.8, 0]} castShadow>
+        <cylinderGeometry args={[0.08, 0.08, 0.5, 8]} />
+        <meshPhysicalMaterial color="#663300" />
+      </mesh>
+      {/* 火花（先端）*/}
+      <mesh position={[0, 1.2, 0]}>
+        <sphereGeometry args={[0.15, 8, 8]} />
+        <meshPhysicalMaterial color="#ff6600" emissive="#ff3300" emissiveIntensity={2.0} />
+      </mesh>
+    </group>
+  );
+};
+
+// --- 金色萬コンポーネント（祝の文字付き）---
+const GoldenMan: React.FC<any> = ({ position, rotationSpeed, fallSpeed }) => {
+  const groupRef = useRef<THREE.Group>(null!);
+  
+  // 金色テクスチャ生成
+  const texture = useMemo(() => {
+    const size = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return new THREE.CanvasTexture(canvas);
+
+    // 背景（金色）
+    ctx.fillStyle = '#ffd700';
+    ctx.fillRect(0, 0, size, size);
+
+    // 中心に「萬」の文字
+    ctx.fillStyle = '#b8860b';
+    ctx.font = 'bold 320px serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('萬', size / 2, size / 2);
+    
+    // 上部に小さく「祝」
+    ctx.font = 'bold 80px serif';
+    ctx.fillStyle = '#ff0000';
+    ctx.fillText('祝', size / 2, size / 4);
+
+    return new THREE.CanvasTexture(canvas);
+  }, []);
+  
+  useFrame((_state, delta) => {
+    if(!groupRef.current) return;
+    groupRef.current.rotation.x += delta * rotationSpeed[0];
+    groupRef.current.rotation.z += delta * rotationSpeed[1];
+    groupRef.current.position.y -= delta * fallSpeed * 0.8; // やや遅く落ちる
+    if (groupRef.current.position.y < -20) {
+       groupRef.current.position.y = 20;
+       groupRef.current.position.x = (Math.random() - 0.5) * 25;
+    }
+  });
+
+  const materials = useMemo(() => [
+    new THREE.MeshPhysicalMaterial({ color: '#ffd700', metalness: 0.8, roughness: 0.2, clearcoat: 1.0 }), // 右
+    new THREE.MeshPhysicalMaterial({ color: '#ffd700', metalness: 0.8, roughness: 0.2, clearcoat: 1.0 }), // 左
+    new THREE.MeshPhysicalMaterial({ color: '#ffd700', metalness: 0.8, roughness: 0.2, clearcoat: 1.0 }), // 上
+    new THREE.MeshPhysicalMaterial({ color: '#ffd700', metalness: 0.8, roughness: 0.2, clearcoat: 1.0 }), // 下
+    new THREE.MeshPhysicalMaterial({ map: texture, metalness: 0.5, roughness: 0.1, clearcoat: 1.0 }),      // 正面
+    new THREE.MeshPhysicalMaterial({ color: '#b8860b', metalness: 0.7, roughness: 0.3 })                    // 背面
+  ], [texture]);
+
+  return (
+    <group ref={groupRef} position={position} scale={[1.2, 1.2, 1.2]}>
       <mesh castShadow>
         <boxGeometry args={[1.6, 2.2, 1.2]} />
         <primitive object={materials} attach="material" />
@@ -382,7 +517,7 @@ const MiddleFingerHand: React.FC<any> = ({ position, rotationSpeed, fallSpeed })
 };
 
 // --- メインコンポーネント ---
-export const FallingBackground3D: React.FC = () => {
+export const FallingBackground3D: React.FC<FallingBackground3DProps> = ({ objectType = 'normal', opacity = 1.0 }) => {
   const count = 40;
 
   const items = useMemo(() => {
@@ -401,19 +536,28 @@ export const FallingBackground3D: React.FC = () => {
       const r = Math.random();
       let type = 'tile';
       
-      // 武器 50%, 牌 20%, 人差し指 20%, 中指 10%
-      if (r < 0.5) {
-        const weaponR = Math.random();
-        if (weaponR > 0.75) type = 'shield';
-        else if (weaponR > 0.5) type = 'spear';
-        else if (weaponR > 0.25) type = 'axe';
-        else type = 'sword';
-      } else if (r < 0.7) {
-        type = 'tile';
-      } else if (r < 0.9) {
-        type = 'index_hand';
+      // objectTypeに応じてオブジェクトを変更
+      if (objectType === 'comeback') {
+        // 起死回生：炎70%、爆弾30%
+        type = r < 0.7 ? 'flame' : 'bomb';
+      } else if (objectType === 'yakuman') {
+        // 役満：金色萬100%
+        type = 'golden_man';
       } else {
-        type = 'middle_hand';
+        // 通常：武器 50%, 牌 20%, 人差し指 20%, 中指 10%
+        if (r < 0.5) {
+          const weaponR = Math.random();
+          if (weaponR > 0.75) type = 'shield';
+          else if (weaponR > 0.5) type = 'spear';
+          else if (weaponR > 0.25) type = 'axe';
+          else type = 'sword';
+        } else if (r < 0.7) {
+          type = 'tile';
+        } else if (r < 0.9) {
+          type = 'index_hand';
+        } else {
+          type = 'middle_hand';
+        }
       }
 
       const tileData = tileOptions[Math.floor(Math.random() * tileOptions.length)];
@@ -427,10 +571,10 @@ export const FallingBackground3D: React.FC = () => {
         fallSpeed: Math.random() * 1.5 + 1.0,
       };
     });
-  }, []);
+  }, [objectType]);
 
   return (
-    <div id="canvas-container">
+    <div id="canvas-container" style={{ opacity }}>
       <Canvas camera={{ position: [0, 0, 18], fov: 45 }} shadows>
         <Environment preset="city" />
         <ambientLight intensity={1.0} />
@@ -439,6 +583,9 @@ export const FallingBackground3D: React.FC = () => {
 
         {items.map((props, i) => {
           switch (props.type) {
+            case 'flame': return <Flame key={i} {...props} />;
+            case 'bomb': return <Bomb key={i} {...props} />;
+            case 'golden_man': return <GoldenMan key={i} {...props} />;
             case 'sword': return <Sword key={i} {...props} />;
             case 'axe': return <Axe key={i} {...props} />;
             case 'spear': return <Spear key={i} {...props} />;
