@@ -17,7 +17,7 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
   const [maxBump, setMaxBump] = useState(0);
   const [showFlash, setShowFlash] = useState(false);
   const animationFrameRef = useRef<number>();
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null); // タイムアウトIDを保持
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null); // タイムアウトIDを保持
 
   // 判定パラメータ
   const bumpThreshold = 10; // 1. しきい値を高く設定 (旧: 1.5)

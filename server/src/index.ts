@@ -76,7 +76,7 @@ const activeGames = new Map<string, GameState>();
 const offlinePlayers = new Map<string, { roomId: string; lastSeen: number; username: string; socketId: string }>();
 const socketToPlayerId = new Map<string, string>();
 // マッチング確認待ち: roomId -> { player1_ready, player2_ready, timeout }
-const matchingWaitingRooms = new Map<string, { player1_ready: boolean; player2_ready: boolean; timeout: NodeJS.Timeout; roomData: any }>();
+const matchingWaitingRooms = new Map<string, { player1_ready: boolean; player2_ready: boolean; timeout: ReturnType<typeof setTimeout>; roomData: any }>();
 
 // 【飯テロ】画像URLリスト
 const FOOD_IMAGES = [
@@ -1610,7 +1610,7 @@ io.on('connection', (socket) => {
   });
 
   // 【スマホ衝突マッチング】関連
-const bumpWaiters = new Map<string, { data: BumpData; timeoutId: NodeJS.Timeout }>();
+const bumpWaiters = new Map<string, { data: BumpData; timeoutId: ReturnType<typeof setTimeout> }>();
 const BUMP_MATCH_WINDOW_MS = 3000; // 衝撃検知の許容時間差（3秒）
 const BUMP_MATCH_DISTANCE_THRESHOLD = 0.001; // 許容距離（約100m）
 
