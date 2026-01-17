@@ -24,6 +24,7 @@
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@types/socket.io": "^3.0.1",
     "@yubifuru/shared": "file:../shared",
     "cors": "^2.8.5",
     "express": "^5.2.1",

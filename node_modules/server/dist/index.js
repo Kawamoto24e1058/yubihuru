@@ -3,7 +3,7 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
-import { SKILLS } from './data/skills.js';
+import { SKILLS } from './data/skills';
 const app = express();
 const httpServer = createServer(app);
 // Configure Socket.io with CORS
@@ -29,6 +29,14 @@ const offlinePlayers = new Map();
 const socketToPlayerId = new Map();
 // マッチング確認待ち: roomId -> { player1_ready, player2_ready, timeout }
 const matchingWaitingRooms = new Map();
+// 【飯テロ】画像URLリスト
+const FOOD_IMAGES = [
+    "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=800&q=80", // ピザ
+    "https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=800&q=80", // ケーキ
+    "https://images.unsplash.com/photo-1553621042-f6e147245754?w=800&q=80", // 寿司
+    "https://images.unsplash.com/photo-1594007654729-407eedc4be65?w=800&q=80", // ラーメン
+    "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&q=80" // ステーキ
+];
 // Helper function to create initial player state
 function createPlayerState() {
     return {
@@ -55,11 +63,12 @@ function createPlayerState() {
 }
 // Helper: weighted random pick according to zone rules
 function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 500, currentTurn = 1) {
-    // 【天和】究極のレア技：1ターン目のみ、0.01%の確率で出現
+    // 【天和】究極のレア技：ゲーム開始直後の1ターン目のみ、0.01%の確率で出現
+    // ※ currentTurn は累計ターン数（1から開始）
     if (currentTurn === 1) {
         const tenpaiLuck = Math.random();
         if (tenpaiLuck < 0.0001) { // 0.01%（1/10000）
-            const tenpai = SKILLS.find(skill => skill.id === 131);
+            const tenpai = SKILLS.find((skill) => skill.id === 131);
             console.log('🌟✨ 天和（テンホウ）が発動！究極のレア技！！！');
             return tenpai;
         }
@@ -67,8 +76,8 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
     // 博打のゾーン判定を最初に実行
     if (activeZone.type === '博打のゾーン') {
         const random = Math.random();
-        const gigaImpact = SKILLS.find(skill => skill.id === 200); // ギガインパクト
-        const doNothing = SKILLS.find(skill => skill.id === 201); // 何もしない
+        const gigaImpact = SKILLS.find((skill) => skill.id === 200); // ギガインパクト
+        const doNothing = SKILLS.find((skill) => skill.id === 201); // 何もしない
         if (random < 0.3) {
             // 30%の確率でギガインパクト
             console.log('🎰 博打判定：成功（ギガインパクト発動 / 30%）');
@@ -85,45 +94,49 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
     if (currentHpPercent <= 0.25) {
         const comebackChance = Math.random();
         if (comebackChance < 0.4) { // 40%の確率で起死回生
-            const comeback = SKILLS.find(skill => skill.id === 119);
+            const comeback = SKILLS.find((skill) => skill.id === 119);
             console.log('🔄 HP危機的！起死回生が出現！');
             return comeback;
         }
     }
-    // 【特殊勝利】出禁の超レア抽選（0.15%）
-    const rareLuck = Math.random();
-    if (rareLuck < 0.0015) { // 0.15%
-        const kinshi = SKILLS.find(skill => skill.id === 120);
-        console.log('⛔ 出禁が発動！相手を場外へ！');
-        return kinshi;
+    // 【一撃必殺】超激レア抽選（0.1%）
+    const ichigekiLuck = Math.random();
+    if (ichigekiLuck < 0.001) { // 0.1%
+        const ichigeki = SKILLS.find((skill) => skill.id === 120); // id:120 = 出禁/一撃必殺
+        if (ichigeki) {
+            console.log('💥 一撃必殺（超激レア0.1%）が発動！');
+            return ichigeki;
+        }
     }
     // 【麻雀役満】九蓮宝燈の超超超レア抽選（0.05%）
     const chuurenLuck = Math.random();
     if (chuurenLuck < 0.0005) { // 0.05%
-        const chuuren = SKILLS.find(skill => skill.id === 130);
+        const chuuren = SKILLS.find((skill) => skill.id === 130);
         console.log('🀄✨ 幻の役満！九蓮宝燈が出現！');
         return chuuren;
     }
     // 【麻雀役満】国士無双のレア抽選（0.1%）
     const kokushiLuck = Math.random();
     if (kokushiLuck < 0.001) { // 0.1%
-        const kokushi = SKILLS.find(skill => skill.id === 129);
+        const kokushi = SKILLS.find((skill) => skill.id === 129);
         console.log('🀄 役満！国士無双が出現！');
         return kokushi;
     }
     // 【麻雀役】清一色の低確率抽選（2%）
     const chinItsuLuck = Math.random();
     if (chinItsuLuck < 0.02) { // 2%
-        const chinItsu = SKILLS.find(skill => skill.id === 128);
+        const chinItsu = SKILLS.find((skill) => skill.id === 128);
         console.log('🀄 清一色が出現！');
         return chinItsu;
     }
-    // 通常技リスト（ギガインパクトと何もしないを除外 - id 200, 201）
-    let availableSkills = SKILLS.filter(skill => skill.id < 200);
+    // 通常技リスト（ギガインパクト、何もしない、天和を除外 - id 200, 201, 131）
+    // 天和（id:131）は1ターン目の特殊抽選でのみ出現
+    let availableSkills = SKILLS.filter((skill) => skill.id < 200 && skill.id !== 131 // 天和を除外
+    );
     // 立直状態の場合、ロン/ツモを追加
     if (isRiichi) {
-        const ron = SKILLS.find(skill => skill.id === 112); // ロン
-        const tsumo = SKILLS.find(skill => skill.id === 113); // ツモ
+        const ron = SKILLS.find((skill) => skill.id === 112); // ロン
+        const tsumo = SKILLS.find((skill) => skill.id === 113); // ツモ
         if (ron && tsumo) {
             availableSkills = [...availableSkills, ron, tsumo];
             console.log('🀄 立直状態：ロン/ツモが出現可能！');
@@ -132,7 +145,7 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
     // ゾーン効果：条件に合う技のみに絞り込む
     if (activeZone.type === '強攻のゾーン') {
         // 威力50以上の技のみ
-        const powerSkills = availableSkills.filter(skill => skill.power >= 50);
+        const powerSkills = availableSkills.filter((skill) => skill.power >= 50);
         if (powerSkills.length > 0) {
             availableSkills = powerSkills;
             console.log(`🔥 強攻のゾーン: 威力50以上の技のみ抽選 (${powerSkills.length}種類)`);
@@ -140,7 +153,7 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
     }
     else if (activeZone.type === '集中のゾーン') {
         // 回復・最大HP増加・補助系のみ
-        const supportSkills = availableSkills.filter(skill => skill.type === 'heal' ||
+        const supportSkills = availableSkills.filter((skill) => skill.type === 'heal' ||
             skill.type === 'buff' ||
             skill.effect === 'max_hp_boost' ||
             skill.effect === 'max_hp_boost_with_heal' ||
@@ -152,7 +165,7 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
     }
     else if (activeZone.type === '乱舞のゾーン') {
         // 攻撃技のみ
-        const attackSkills = availableSkills.filter(skill => skill.type === 'attack');
+        const attackSkills = availableSkills.filter((skill) => skill.type === 'attack');
         if (attackSkills.length > 0) {
             availableSkills = attackSkills;
             console.log(`🌪️ 乱舞のゾーン: 攻撃技のみ抽選 (${attackSkills.length}種類)`);
@@ -221,7 +234,7 @@ function applySkillEffect(skill, attacker, defender, isAttackerRiichi = false, i
                 logs.push(`🤖 全自動で卵を割る機械で攻撃... ${defender.username}に${damage}ダメージ！`);
             }
             else {
-                logs.push(`${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ与えた！`);
+                logs.push(`${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージを与えた！`);
             }
             // ひっかく：10%で2回連続攻撃
             if (skill.effect === 'multi_hit' && skill.multiHitChance) {
@@ -361,10 +374,19 @@ function applySkillEffect(skill, attacker, defender, isAttackerRiichi = false, i
             }
             // 【逆転の目】起死回生
             if (skill.effect === 'comeback') {
-                // 威力 = (最大HP - 現在HP) * 0.8（減っているHPが多いほど強い）
-                const hpDeficit = attacker.state.maxHp - attacker.state.hp;
-                damage = Math.max(20, Math.floor(hpDeficit * 0.8)); // 最低威力20を保証
-                defender.state.hp = Math.max(0, defender.state.hp - damage);
+                // 新計算式：(maxHP - currentHP) * 2.5 + 30
+                const maxHp = Number(attacker.state.maxHp) || 100;
+                const currentHp = Number(attacker.state.hp) || 0;
+                const rawDamage = (maxHp - currentHp) * 2.5 + 30;
+                damage = Math.floor(rawDamage);
+                // デバッグログ
+                console.log(`🔄 起死回生発動計算:`);
+                console.log(`   現在HP: ${currentHp}`);
+                console.log(`   最大HP: ${maxHp}`);
+                console.log(`   失ったHP: ${maxHp - currentHp}`);
+                console.log(`   計算式: (${maxHp} - ${currentHp}) * 2.5 + 30 = ${rawDamage}`);
+                console.log(`   最終ダメージ: ${damage}`);
+                defender.state.hp = Math.max(0, Number(defender.state.hp) - damage);
                 logs.push(`🔄 ${attacker.username}の${skill.name}！！！`);
                 logs.push(`💫 絶望から蘇る... ${defender.username}に${damage}ダメージ！`);
             }
@@ -456,7 +478,7 @@ function applySkillEffect(skill, attacker, defender, isAttackerRiichi = false, i
             }
             // 「何もしない」技の特別処理
             else if (skill.id === 201) {
-                // 博打ゾーンのスカ（何も起きない）時の明確なログ
+                // 博打ゾーン의スカ（何も起きない）時の明確なログ
                 logs.push(`💫 運が悪すぎる！何も起きなかった！`);
             }
             // ネタ技の処理
@@ -476,29 +498,34 @@ function applySkillEffect(skill, attacker, defender, isAttackerRiichi = false, i
             break;
         }
     }
-    // 【立直システム】
-    // 1. 立直中の役の最低保証：普通の技（威力40以下）を引いた場合、50%の確率で「断幺九（威力40）」へ昇格させる
-    if (isAttackerRiichi && skill.type === 'attack' && skill.power <= 40 && Math.random() < 0.5) {
-        const baseUpgradeDamage = calculateDamage(40); // 断幺九の威力40をダメージに
-        const upgradeDamageIncrease = baseUpgradeDamage - damage;
-        damage = baseUpgradeDamage;
-        defender.state.hp = Math.max(0, defender.state.hp - upgradeDamageIncrease);
-        logs.push(`🀄 立直による役の最低保証！ 断幺九へ昇格！ さらに${upgradeDamageIncrease}ダメージ！`);
-    }
-    // 2. 立直中の裏ドラ判定：技のダメージ計算後、10～50 のランダムダメージを加算
-    if (isAttackerRiichi && damage > 0) {
-        const uraDoraBonus = Math.floor(Math.random() * 41) + 10; // 10～50のランダム値
-        damage += uraDoraBonus;
-        defender.state.hp = Math.max(0, defender.state.hp - uraDoraBonus);
-        logs.push(`🀄 裏ドラ！ ${uraDoraBonus}の追加ダメージ！`);
-    }
-    // 3. フィールド効果：誰かが立直している間、フィールド全体の「役の威力」を 1.5倍
-    if ((isAttackerRiichi || isOpponentRiichi) && skill.type === 'special') {
-        const riichiBuff = Math.floor(damage * 0.5); // 1.5倍 = 元のダメージ + 0.5倍
-        if (riichiBuff > 0) {
-            damage += riichiBuff;
-            defender.state.hp = Math.max(0, defender.state.hp - riichiBuff);
-            logs.push(`🀄 立直フィールド効果！ 役の威力が1.5倍に！ ${riichiBuff}の追加ダメージ！`);
+    // 【立直システム】排他的なダメージ計算
+    const YAKU_NAMES = ['断幺九', '清一色', '国士無双', '九蓮宝燈'];
+    const isYaku = YAKU_NAMES.includes(skill.name);
+    // 特殊技（起死回生、天和など）は立直ボーナスをスキップ
+    const SPECIAL_SKILLS_SKIP_RIICHI = ['起死回生', '天和', '出禁', '九蓮宝燈'];
+    const shouldSkipRiichiBonus = SPECIAL_SKILLS_SKIP_RIICHI.includes(skill.name);
+    // 立直中の計算ロジック（特殊技以外）
+    if (isAttackerRiichi && damage > 0 && !shouldSkipRiichiBonus) {
+        if (isYaku) {
+            // ケースA: 役の場合
+            // ・ダメージを 1.5倍 にする
+            // ・「裏ドラ（追加ダメージ）」は加算しない
+            const finalDamage = Math.floor(damage * 1.5);
+            const yakuBonus = finalDamage - damage;
+            damage = finalDamage;
+            defender.state.hp = Math.max(0, defender.state.hp - yakuBonus);
+            console.log(`🀄 役ボーナス適用: 1.5倍 -> ${finalDamage}`);
+            logs.push(`🀄 役が確定！ダメージが1.5倍に！ ${yakuBonus}の追加ダメージ！`);
+        }
+        else {
+            // ケースB: 通常技の場合
+            // ・ダメージ倍率はかけない（1.0倍）
+            // ・「裏ドラ（ランダム追加ダメージ 10〜50）」を加算する
+            const uraDora = Math.floor(Math.random() * 41) + 10; // 10〜50の範囲
+            damage += uraDora;
+            defender.state.hp = Math.max(0, defender.state.hp - uraDora);
+            console.log(`🀄 裏ドラ適用: +${uraDora} -> ${damage}`);
+            logs.push(`🀄 裏ドラが発動！ さらに${uraDora}ダメージ！`);
         }
     }
     return {
@@ -515,6 +542,449 @@ function applySkillEffect(skill, attacker, defender, isAttackerRiichi = false, i
 }
 io.on('connection', (socket) => {
     console.log(`✅ User connected: ${socket.id}`);
+    // 共通：技発動処理（手動/自動どちらもここで実行）
+    function processUseSkill(actingSocketId, roomIdHint, options = {}) {
+        const actingSocket = io.sockets.sockets.get(actingSocketId);
+        console.log(`⚔️ ${actingSocketId} used a skill${options.isAuto ? ' (auto)' : ''}`);
+        // 対象ゲームを特定
+        let currentGame;
+        let currentRoomId;
+        if (roomIdHint) {
+            const hinted = activeGames.get(roomIdHint);
+            if (hinted && (hinted.player1.socketId === actingSocketId || hinted.player2.socketId === actingSocketId)) {
+                currentGame = hinted;
+                currentRoomId = roomIdHint;
+            }
+        }
+        if (!currentGame || !currentRoomId) {
+            activeGames.forEach((game, roomId) => {
+                if (game.player1.socketId === actingSocketId || game.player2.socketId === actingSocketId) {
+                    currentGame = game;
+                    currentRoomId = roomId;
+                }
+            });
+        }
+        if (!currentGame || !currentRoomId) {
+            actingSocket?.emit('error', { message: 'Game not found' });
+            return;
+        }
+        if (currentGame.isGameOver) {
+            actingSocket?.emit('error', { message: 'Game is already over' });
+            return;
+        }
+        // ターンチェック
+        if (currentGame.currentTurnPlayerId !== actingSocketId) {
+            console.log(`❌ ${actingSocketId} tried to use skill on opponent's turn`);
+            actingSocket?.emit('error', { message: 'Not your turn!' });
+            return;
+        }
+        const isPlayer1 = currentGame.player1.socketId === actingSocketId;
+        const attacker = isPlayer1 ? currentGame.player1 : currentGame.player2;
+        const defender = isPlayer1 ? currentGame.player2 : currentGame.player1;
+        if (!defender || !defender.state) {
+            console.warn(`⚠️ Defender missing for socket ${actingSocketId}`);
+            actingSocket?.emit('error', { message: 'Opponent not found' });
+            return;
+        }
+        // ターン開始時の状態異常処理（毒など）
+        const preMessages = [];
+        if (attacker.state.status.poison) {
+            const poisonDamage = attacker.state.status.poison.damagePerTurn;
+            attacker.state.hp = Math.max(0, attacker.state.hp - poisonDamage);
+            attacker.state.status.poison.turns -= 1;
+            preMessages.push(`☠️ 毒のダメージで${poisonDamage}を受けた！`);
+            if (attacker.state.status.poison.turns <= 0) {
+                attacker.state.status.poison = null;
+                preMessages.push('☠️ 毒が解除された！');
+            }
+            if (attacker.state.hp <= 0) {
+                currentGame.isGameOver = true;
+                currentGame.winner = defender.username;
+                io.to(currentRoomId).emit('game_over', {
+                    winner: defender.username,
+                    gameState: currentGame,
+                });
+                activeGames.delete(currentRoomId);
+                return;
+            }
+        }
+        // 【指が折れる】行動不能チェック
+        if (attacker.state.isBroken && attacker.state.brokenTurns && attacker.state.brokenTurns > 0) {
+            const messageParts = [];
+            messageParts.push(`🦴 ${attacker.username}は指が折れている！このターンは行動不能！`);
+            attacker.state.brokenTurns--;
+            if (attacker.state.brokenTurns === 0) {
+                attacker.state.isBroken = false;
+                messageParts.push(`🦴 ${attacker.username}の指が回復した！`);
+            }
+            let regenAmount = attacker.state.activeZone.type === '乱舞のゾーン' ? 0 : 1;
+            if (attacker.state.status.mpRegenBonus) {
+                regenAmount += attacker.state.status.mpRegenBonus.amount;
+                attacker.state.status.mpRegenBonus.turns -= 1;
+                if (attacker.state.status.mpRegenBonus.turns <= 0) {
+                    attacker.state.status.mpRegenBonus = null;
+                }
+            }
+            if (regenAmount > 0) {
+                attacker.state.mp = Math.min(5, attacker.state.mp + regenAmount);
+            }
+            if (attacker.state.activeZone.remainingTurns > 0) {
+                attacker.state.activeZone.remainingTurns--;
+                if (attacker.state.activeZone.remainingTurns === 0) {
+                    attacker.state.activeZone.type = 'none';
+                    io.to(currentRoomId).emit('zone_expired', {
+                        username: attacker.username,
+                        socketId: attacker.socketId,
+                    });
+                }
+            }
+            if (attacker.state.activeEffectTurns && attacker.state.activeEffectTurns > 0) {
+                attacker.state.activeEffectTurns--;
+                if (attacker.state.activeEffectTurns === 0)
+                    attacker.state.activeEffect = 'none';
+            }
+            if (defender.state.activeEffectTurns && defender.state.activeEffectTurns > 0) {
+                defender.state.activeEffectTurns--;
+                if (defender.state.activeEffectTurns === 0)
+                    defender.state.activeEffect = 'none';
+            }
+            currentGame.currentTurn++;
+            const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId
+                ? currentGame.player2
+                : currentGame.player1;
+            currentGame.currentTurnPlayerId = nextPlayer.socketId;
+            const battleUpdate = {
+                turn: currentGame.currentTurn,
+                attacker: { username: attacker.username, socketId: attacker.socketId, state: attacker.state },
+                defender: { username: defender.username, socketId: defender.socketId, state: defender.state },
+                skillName: '行動不能',
+                skillPower: 0,
+                damage: 0,
+                healing: 0,
+                message: messageParts.join('\n'),
+                gameState: currentGame,
+            };
+            io.to(currentRoomId).emit('battle_update', battleUpdate);
+            io.to(currentRoomId).emit('turn_change', {
+                currentTurnPlayerId: currentGame.currentTurnPlayerId,
+                currentTurnPlayerName: nextPlayer.username,
+            });
+            return;
+        }
+        const selectedSkill = getRandomSkill(attacker.state.activeZone, attacker.state.isRiichi, attacker.state.hp, attacker.state.maxHp, currentGame.currentTurn);
+        console.log(`🎲 Random skill selected: ${selectedSkill.name} (${selectedSkill.type})`);
+        console.log(`   Current zone: ${attacker.state.activeZone.type} (${attacker.state.activeZone.remainingTurns} turns remaining)`);
+        if (attacker.state.isRiichi) {
+            console.log(`   🀄 立直状態: ${attacker.username}`);
+        }
+        // 【立直中の役昇格ロジック】
+        // 立直中かつ弱い技（威力40以下）が出た場合、確率で役に昇格
+        let upgradedSkill = selectedSkill;
+        let riichiResolved = false; // 役が確定したかどうか
+        if (attacker.state.isRiichi && selectedSkill.power <= 40) {
+            const upgradeRoll = Math.random();
+            if (upgradeRoll < 0.01) {
+                // 1%: 九蓮宝燈（威力999, rainbow）
+                const chuuren = SKILLS.find((skill) => skill.id === 130);
+                if (chuuren) {
+                    upgradedSkill = chuuren;
+                    riichiResolved = true;
+                    console.log(`🀄✨ 立直昇格: 九蓮宝燈！（1%）`);
+                }
+            }
+            else if (upgradeRoll < 0.04) {
+                // 3%: 国士無双（威力130, flash）
+                const kokushi = SKILLS.find((skill) => skill.id === 129);
+                if (kokushi) {
+                    upgradedSkill = kokushi;
+                    riichiResolved = true;
+                    console.log(`🀄✨ 立直昇格: 国士無双！（3%）`);
+                }
+            }
+            else if (upgradeRoll < 0.09) {
+                // 5%: 清一色（威力80, blue）
+                const chinItsu = SKILLS.find((skill) => skill.id === 128);
+                if (chinItsu) {
+                    upgradedSkill = chinItsu;
+                    riichiResolved = true;
+                    console.log(`🀄✨ 立直昇格: 清一色！（5%）`);
+                }
+            }
+            else if (upgradeRoll < 0.19) {
+                // 10%: 断幺九（威力40, yellow）
+                const tanYao = SKILLS.find((skill) => skill.id === 127);
+                if (tanYao) {
+                    upgradedSkill = tanYao;
+                    riichiResolved = true;
+                    console.log(`🀄✨ 立直昇格: 断幺九！（10%）`);
+                }
+            }
+            else {
+                console.log(`🀄 立直中だが昇格せず（~81%）`);
+            }
+        }
+        const punchSkills = ['パンチ', 'ストレート', 'ジャブ', 'アッパーカット', 'フック', 'ボディブロー', 'ダッシュパンチ'];
+        const isPunch = punchSkills.includes(upgradedSkill.name);
+        if (attacker.state.isRiichi && isPunch) {
+            if (!attacker.state.riichiBombCount) {
+                attacker.state.riichiBombCount = 0;
+            }
+            attacker.state.riichiBombCount++;
+            console.log(`🀄 パンチ連続カウント: ${attacker.state.riichiBombCount}/3`);
+            if (attacker.state.riichiBombCount >= 3) {
+                currentGame.isGameOver = true;
+                currentGame.winner = attacker.username;
+                console.log(`🏆 数え役満成立！${attacker.username}の勝利！`);
+                io.to(currentRoomId).emit('battle_update', {
+                    turn: currentGame.currentTurn,
+                    skillName: upgradedSkill.name,
+                    skillPower: upgradedSkill.power,
+                    message: `🀄💥 ${attacker.username}は立直からのパンチ技を3回連続！\n\n🏆 数え役満成立！${attacker.username}の勝利！`,
+                    gameState: currentGame,
+                });
+                io.to(currentRoomId).emit('game_over', {
+                    winner: attacker.username,
+                    gameState: currentGame,
+                });
+                activeGames.delete(currentRoomId);
+                return;
+            }
+        }
+        else {
+            if (attacker.state.riichiBombCount && attacker.state.riichiBombCount > 0) {
+                console.log(`🀄 パンチ連続カウント: リセット`);
+                attacker.state.riichiBombCount = 0;
+            }
+        }
+        let zoneEffectMessage = '';
+        if (attacker.state.activeZone.type !== 'none') {
+            if (attacker.state.activeZone.type === '強攻のゾーン') {
+                zoneEffectMessage = `💥 ゾーン効果: 高威力技が出現！`;
+            }
+            else if (attacker.state.activeZone.type === '集中のゾーン') {
+                zoneEffectMessage = `🎯 ゾーン効果: 支援技が出現！`;
+            }
+        }
+        let result = applySkillEffect(upgradedSkill, attacker, defender, attacker.state.isRiichi, defender.state.isRiichi);
+        const messageParts = [...preMessages];
+        if (zoneEffectMessage) {
+            messageParts.push(zoneEffectMessage);
+        }
+        messageParts.push(result.message);
+        if (attacker.state.activeZone.type === '強攻のゾーン') {
+            const selfDamageChance = Math.random();
+            if (selfDamageChance < 0.2) {
+                const selfDamage = Math.floor(result.damage * 0.2) || 10;
+                attacker.state.hp = Math.max(0, attacker.state.hp - selfDamage);
+                messageParts.push(`💢 強攻の反動！ ${attacker.username}は${selfDamage}ダメージを受けた！`);
+                console.log(`💢 強攻の反動: ${attacker.username} -${selfDamage} HP`);
+            }
+        }
+        result.message = messageParts.join('\n');
+        console.log(`🧪 HP after action -> ${attacker.username}: ${attacker.state.hp}, ${defender.username}: ${defender.state.hp}`);
+        let regenAmount = attacker.state.activeZone.type === '乱舞のゾーン' ? 0 : attacker.state.isRiichi ? 0 : 1;
+        if (attacker.state.status.mpRegenBonus) {
+            regenAmount += attacker.state.status.mpRegenBonus.amount;
+            attacker.state.status.mpRegenBonus.turns -= 1;
+            if (attacker.state.status.mpRegenBonus.turns <= 0) {
+                attacker.state.status.mpRegenBonus = null;
+            }
+        }
+        if (regenAmount > 0) {
+            attacker.state.mp = Math.min(5, attacker.state.mp + regenAmount);
+        }
+        if (attacker.state.isRiichi) {
+            console.log(`💧 ${attacker.username} MP: ${attacker.state.mp} (max 5) - 立直中のため回復停止`);
+        }
+        else {
+            console.log(`💧 ${attacker.username} MP: ${attacker.state.mp} (max 5)`);
+        }
+        if (attacker.state.activeZone.remainingTurns > 0) {
+            attacker.state.activeZone.remainingTurns--;
+            console.log(`⏱️ Zone turns remaining: ${attacker.state.activeZone.remainingTurns}`);
+            if (attacker.state.activeZone.remainingTurns === 0) {
+                attacker.state.activeZone.type = 'none';
+                console.log(`🔄 ${attacker.username} zone expired!`);
+                io.to(currentRoomId).emit('zone_expired', {
+                    username: attacker.username,
+                    socketId: attacker.socketId,
+                });
+            }
+        }
+        const battleUpdate = {
+            turn: currentGame.currentTurn,
+            attacker: {
+                username: attacker.username,
+                socketId: attacker.socketId,
+                state: attacker.state,
+            },
+            defender: {
+                username: defender.username,
+                socketId: defender.socketId,
+                state: defender.state,
+            },
+            skill: upgradedSkill,
+            skillName: upgradedSkill.name,
+            skillPower: upgradedSkill.power,
+            damage: result.damage,
+            healing: result.healing,
+            message: result.message,
+            skillEffect: result.skillEffect,
+            wasBuffedAttack: result.wasBuffedAttack,
+            gameState: currentGame,
+        };
+        // 【飯テロ】画像URLをランダムに選んで追加
+        if (upgradedSkill.effect === 'food_terror' || upgradedSkill.name === '飯テロ') {
+            const foodImageUrl = FOOD_IMAGES[Math.floor(Math.random() * FOOD_IMAGES.length)];
+            battleUpdate.extraImage = foodImageUrl;
+            console.log(`🍱 飯テロ発動！画像URL: ${foodImageUrl}`);
+            console.log(`🍱 飯テロスキル詳細: name="${upgradedSkill.name}", effect="${upgradedSkill.effect}"`);
+        }
+        io.to(currentRoomId).emit('battle_update', battleUpdate);
+        io.to(currentRoomId).emit('skill_effect', {
+            skill: upgradedSkill,
+            attacker: { username: attacker.username, socketId: attacker.socketId },
+            defender: { username: defender.username, socketId: defender.socketId },
+            turn: currentGame.currentTurn,
+        });
+        // 【画面揺れ】shake_effect が発動した場合、shakeTurns を 4 に設定
+        if (upgradedSkill.effect === 'shake_effect') {
+            currentGame.shakeTurns = 4;
+            console.log(`📳 shake_effect detected: shakeTurns set to 4`);
+        }
+        // ★【絶対確実なゲーム終了判定】
+        // 1. HPのマイナス補正（0で止める）
+        if (attacker.state.hp < 0)
+            attacker.state.hp = 0;
+        if (defender.state.hp < 0)
+            defender.state.hp = 0;
+        // 2. ゲーム終了判定（HPが0になったら即座に終了プロセスへ）
+        if (attacker.state.hp === 0 || defender.state.hp === 0) {
+            if (!currentGame.isGameOver) {
+                console.log("🏆 Game Over Condition Met!");
+                currentGame.isGameOver = true; // 二重発動防止
+                // 勝者判定: HPが残っている方、両方0なら攻撃側の勝ち
+                let winnerName;
+                if (attacker.state.hp > 0 && defender.state.hp === 0) {
+                    winnerName = attacker.username;
+                }
+                else if (defender.state.hp > 0 && attacker.state.hp === 0) {
+                    winnerName = defender.username;
+                }
+                else {
+                    winnerName = attacker.username; // 相打ちは攻撃側勝利
+                }
+                console.log(`🏆 Winner: ${winnerName}`);
+                const roomIdForTimeout = currentRoomId;
+                const gameStateSnapshot = currentGame;
+                // 最新のHP状態（0になった状態）を送信
+                io.to(roomIdForTimeout).emit('game_state_update', gameStateSnapshot);
+                // 4秒後にリザルト画面へ遷移させる
+                setTimeout(() => {
+                    gameStateSnapshot.winner = winnerName;
+                    console.log(`🏁 Sending game_over event. Winner: ${winnerName}`);
+                    io.to(roomIdForTimeout).emit('game_state_update', gameStateSnapshot);
+                    io.to(roomIdForTimeout).emit('game_over', {
+                        winner: winnerName,
+                        gameState: gameStateSnapshot
+                    });
+                    activeGames.delete(roomIdForTimeout);
+                }, 4000);
+                return; // ここで処理終了（ターン交代させない）
+            }
+            return; // 既に終了処理中の場合も抜ける
+        }
+        // ★【ゲームが続いている場合のみ以下を実行】
+        // 3. ターン交代処理
+        currentGame.currentTurn++;
+        const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId
+            ? currentGame.player2
+            : currentGame.player1;
+        currentGame.currentTurnPlayerId = nextPlayer.socketId;
+        // 4. エフェクトターン数の減算
+        if (attacker.state.activeEffectTurns && attacker.state.activeEffectTurns > 0) {
+            attacker.state.activeEffectTurns--;
+            if (attacker.state.activeEffectTurns === 0) {
+                attacker.state.activeEffect = 'none';
+            }
+        }
+        if (defender.state.activeEffectTurns && defender.state.activeEffectTurns > 0) {
+            defender.state.activeEffectTurns--;
+            if (defender.state.activeEffectTurns === 0) {
+                defender.state.activeEffect = 'none';
+            }
+        }
+        // 5. ターン変更通知
+        io.to(currentRoomId).emit('turn_change', {
+            currentTurnPlayerId: currentGame.currentTurnPlayerId,
+            currentTurnPlayerName: nextPlayer.username,
+        });
+        currentGame.turnIndex = currentGame.turnIndex === 0 ? 1 : 0;
+        console.log(`🔄 ターン交代: ${currentGame.turnIndex} -> ${nextPlayer.username}`);
+        // 6. 画面揺れターン数の減算
+        if (currentGame.shakeTurns > 0) {
+            currentGame.shakeTurns--;
+            console.log(`📳 shakeTurns decremented to ${currentGame.shakeTurns}`);
+        }
+        // 7. 役が出た場合の立直強制終了
+        const yakuNames = ['断幺九', '清一色', '国士無双', '九蓮宝燈'];
+        if (yakuNames.includes(upgradedSkill.name)) {
+            const roomId = currentRoomId;
+            [currentGame.player1, currentGame.player2].forEach((p) => {
+                if (p.state.isRiichi) {
+                    p.state.isRiichi = false;
+                    p.state.riichiBombCount = 0;
+                    io.to(roomId).emit('riichi_cleared', {
+                        username: p.username,
+                        socketId: p.socketId,
+                        yakuName: upgradedSkill.name,
+                    });
+                }
+            });
+            currentGame.riichiPlayerId = null;
+            console.log(`役「${upgradedSkill.name}」が出たため、立直状態を強制解除`);
+        }
+        // 8. ゲーム状態の更新通知
+        io.to(currentRoomId).emit('game_state_update', currentGame);
+        // 9. 立直昇格による立直解除
+        if (riichiResolved) {
+            attacker.state.isRiichi = false;
+            attacker.state.riichiBombCount = 0;
+            console.log(`🀄 立直解除: 役が確定したため立直状態を解除`);
+            io.to(currentRoomId).emit('riichi_cleared', {
+                username: attacker.username,
+                socketId: attacker.socketId,
+                yakuName: upgradedSkill.name,
+            });
+        }
+        // 10. デバッグログ
+        console.log(`📊 Turn ${currentGame.currentTurn}:`);
+        console.log(`   ${attacker.username}: HP ${attacker.state.hp}, MP ${attacker.state.mp}`);
+        console.log(`   ${defender.username}: HP ${defender.state.hp}, MP ${defender.state.mp}`);
+        // 11. 立直中の自動ツモ切りスケジュール
+        scheduleAutoTsumoIfRiichi(currentRoomId);
+    }
+    // 立直中の自動ツモ切り（AUTO発動）をスケジュールする
+    function scheduleAutoTsumoIfRiichi(roomId) {
+        const game = activeGames.get(roomId);
+        if (!game || game.isGameOver)
+            return;
+        const currentId = game.currentTurnPlayerId;
+        const currentPlayer = game.player1.socketId === currentId ? game.player1 : game.player2;
+        if (!currentPlayer.state.isRiichi)
+            return;
+        setTimeout(() => {
+            const latest = activeGames.get(roomId);
+            if (!latest || latest.isGameOver)
+                return;
+            // ターンが進んでいたら中断
+            if (latest.currentTurnPlayerId !== currentId)
+                return;
+            console.log(`🀄 AUTO ツモ切り発動: ${currentPlayer.username}`);
+            // 自動で技を実行し、ターン反転と同期を行う
+            processUseSkill(currentId, roomId, { isAuto: true });
+        }, 2000);
+    }
     socket.on('joinGame', (payload) => {
         console.log(`🎮 ${payload.username} (${socket.id}) joining game...`);
         const playerId = uuidv4();
@@ -564,6 +1034,7 @@ io.on('connection', (socket) => {
                     currentTurn: 0,
                     currentTurnPlayerId: player1.socketId, // player1が最初のターン
                     turnIndex: 0, // player1 from start
+                    shakeTurns: 0, // 初期値：揺れなし
                     isGameOver: false,
                     winner: null,
                     startedAt: Date.now(), // マッチング直後の保護用
@@ -728,11 +1199,8 @@ io.on('connection', (socket) => {
         };
         console.log(`✨ ${player.username} activated ${payload.zoneType} for ${duration} turns`);
         console.log(`   MP: ${player.state.mp + ZONE_MP_COST} -> ${player.state.mp}`);
-        // ターンを交代
-        const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId
-            ? currentGame.player2
-            : currentGame.player1;
-        currentGame.currentTurnPlayerId = nextPlayer.socketId;
+        // ★重要1: ゾーン発動直後の状態をクライアントに通知（演出が動く）
+        io.to(currentRoomId).emit('game_state_update', currentGame);
         // Send zone_activated event to both players
         io.to(currentRoomId).emit('zone_activated', {
             username: player.username,
@@ -742,14 +1210,24 @@ io.on('connection', (socket) => {
             remainingTurns: duration,
             playerState: player.state,
         });
+        // ★重要2: ターン交代処理
+        const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId
+            ? currentGame.player2
+            : currentGame.player1;
+        currentGame.currentTurnPlayerId = nextPlayer.socketId;
+        currentGame.turnIndex = currentGame.turnIndex === 0 ? 1 : 0;
         // ターン変更を通知
         io.to(currentRoomId).emit('turn_change', {
             currentTurnPlayerId: currentGame.currentTurnPlayerId,
             currentTurnPlayerName: nextPlayer.username,
         });
         console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.socketId})`);
+        // ゲーム状態の最終同期
+        io.to(currentRoomId).emit('game_state_update', currentGame);
+        // 立直中なら自動ツモ切りをスケジュール
+        scheduleAutoTsumoIfRiichi(currentRoomId);
     });
-    // Handle action_riichi event - 立直発動（MP 3 消費）
+    // Handle action_riichi event - 立直発動（MP 5 消費）
     socket.on('action_riichi', () => {
         console.log(`🀄 ${socket.id} attempting to activate riichi (立直)`);
         // Find the game this player is in
@@ -779,7 +1257,7 @@ io.on('connection', (socket) => {
         const isPlayer1 = currentGame.player1.socketId === socket.id;
         const player = isPlayer1 ? currentGame.player1 : currentGame.player2;
         // 立直のMPコスト
-        const RIICHI_MP_COST = 3;
+        const RIICHI_MP_COST = 5;
         // Check if already in riichi state
         if (player.state.isRiichi) {
             socket.emit('error', { message: 'Already in riichi state!' });
@@ -797,6 +1275,7 @@ io.on('connection', (socket) => {
         // Activate riichi state
         player.state.isRiichi = true;
         player.state.riichiBombCount = 0; // パンチ連続カウントをリセット
+        currentGame.riichiPlayerId = player.playerId;
         console.log(`🀄 ${player.username} activated riichi! (MP: ${player.state.mp + RIICHI_MP_COST} -> ${player.state.mp})`);
         console.log(`   立直中: MP自然回復停止、役の最低保証と裏ドラ判定が有効`);
         // Send riichi_activated event to both players
@@ -810,349 +1289,22 @@ io.on('connection', (socket) => {
             ? currentGame.player2
             : currentGame.player1;
         currentGame.currentTurnPlayerId = nextPlayer.socketId;
+        // turnIndexを反転
+        currentGame.turnIndex = currentGame.turnIndex === 0 ? 1 : 0;
         // ターン変更を通知
         io.to(currentRoomId).emit('turn_change', {
             currentTurnPlayerId: currentGame.currentTurnPlayerId,
             currentTurnPlayerName: nextPlayer.username,
         });
         console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.socketId})`);
+        // game_state_updateを送信してターン交代を同期
+        io.to(currentRoomId).emit('game_state_update', currentGame);
+        // 立直中なら自動ツモ切りをスケジュール
+        scheduleAutoTsumoIfRiichi(currentRoomId);
     });
     // Handle action_use_skill event
     socket.on('action_use_skill', () => {
-        console.log(`⚔️ ${socket.id} used a skill`);
-        // Find the game this player is in
-        let currentGame;
-        let currentRoomId;
-        activeGames.forEach((game, roomId) => {
-            if (game.player1.socketId === socket.id || game.player2.socketId === socket.id) {
-                currentGame = game;
-                currentRoomId = roomId;
-            }
-        });
-        if (!currentGame || !currentRoomId) {
-            socket.emit('error', { message: 'Game not found' });
-            return;
-        }
-        if (currentGame.isGameOver) {
-            socket.emit('error', { message: 'Game is already over' });
-            return;
-        }
-        // ターンチェック：自分のターンかどうか
-        if (currentGame.currentTurnPlayerId !== socket.id) {
-            console.log(`❌ ${socket.id} tried to use skill on opponent's turn`);
-            socket.emit('error', { message: 'Not your turn!' });
-            return;
-        }
-        // Determine attacker and defender
-        const isPlayer1 = currentGame.player1.socketId === socket.id;
-        const attacker = isPlayer1 ? currentGame.player1 : currentGame.player2;
-        const defender = isPlayer1 ? currentGame.player2 : currentGame.player1;
-        // Safety: ensure opponent exists before proceeding
-        if (!defender || !defender.state) {
-            console.warn(`⚠️ Defender missing for socket ${socket.id}`);
-            socket.emit('error', { message: 'Opponent not found' });
-            return;
-        }
-        // ターン開始時の状態異常処理（毒など）
-        const preMessages = [];
-        if (attacker.state.status.poison) {
-            const poisonDamage = attacker.state.status.poison.damagePerTurn;
-            attacker.state.hp = Math.max(0, attacker.state.hp - poisonDamage);
-            attacker.state.status.poison.turns -= 1;
-            preMessages.push(`☠️ 毒のダメージで${poisonDamage}を受けた！`);
-            if (attacker.state.status.poison.turns <= 0) {
-                attacker.state.status.poison = null;
-                preMessages.push('☠️ 毒が解除された！');
-            }
-            // 毒で戦闘不能になった場合は即終了
-            if (attacker.state.hp <= 0) {
-                currentGame.isGameOver = true;
-                currentGame.winner = defender.username;
-                io.to(currentRoomId).emit('game_over', {
-                    winner: defender.username,
-                    gameState: currentGame,
-                });
-                activeGames.delete(currentRoomId);
-                return;
-            }
-        }
-        // 【指が折れる】行動不能チェック（威力0としてターン消費）
-        if (attacker.state.isBroken && attacker.state.brokenTurns && attacker.state.brokenTurns > 0) {
-            const messageParts = [];
-            messageParts.push(`🦴 ${attacker.username}は指が折れている！このターンは行動不能！`);
-            // 行動不能ターンを進める
-            attacker.state.brokenTurns--;
-            if (attacker.state.brokenTurns === 0) {
-                attacker.state.isBroken = false;
-                messageParts.push(`🦴 ${attacker.username}の指が回復した！`);
-            }
-            // MP回復（乱舞ゾーン中は0、ボーナス適用）
-            let regenAmount = attacker.state.activeZone.type === '乱舞のゾーン' ? 0 : 1;
-            if (attacker.state.status.mpRegenBonus) {
-                regenAmount += attacker.state.status.mpRegenBonus.amount;
-                attacker.state.status.mpRegenBonus.turns -= 1;
-                if (attacker.state.status.mpRegenBonus.turns <= 0) {
-                    attacker.state.status.mpRegenBonus = null;
-                }
-            }
-            if (regenAmount > 0) {
-                attacker.state.mp = Math.min(5, attacker.state.mp + regenAmount);
-            }
-            // ゾーン残りターンを進める（ターンは経過する）
-            if (attacker.state.activeZone.remainingTurns > 0) {
-                attacker.state.activeZone.remainingTurns--;
-                if (attacker.state.activeZone.remainingTurns === 0) {
-                    attacker.state.activeZone.type = 'none';
-                    io.to(currentRoomId).emit('zone_expired', {
-                        username: attacker.username,
-                        socketId: attacker.socketId,
-                    });
-                }
-            }
-            // メタ演出の残りターンも進める
-            if (attacker.state.activeEffectTurns && attacker.state.activeEffectTurns > 0) {
-                attacker.state.activeEffectTurns--;
-                if (attacker.state.activeEffectTurns === 0)
-                    attacker.state.activeEffect = 'none';
-            }
-            if (defender.state.activeEffectTurns && defender.state.activeEffectTurns > 0) {
-                defender.state.activeEffectTurns--;
-                if (defender.state.activeEffectTurns === 0)
-                    defender.state.activeEffect = 'none';
-            }
-            // ターンカウントと交代
-            currentGame.currentTurn++;
-            const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId
-                ? currentGame.player2
-                : currentGame.player1;
-            currentGame.currentTurnPlayerId = nextPlayer.socketId;
-            // 行動不能の battle_update を送信
-            const battleUpdate = {
-                turn: currentGame.currentTurn,
-                attacker: { username: attacker.username, socketId: attacker.socketId, state: attacker.state },
-                defender: { username: defender.username, socketId: defender.socketId, state: defender.state },
-                skillName: '行動不能',
-                skillPower: 0,
-                damage: 0,
-                healing: 0,
-                message: messageParts.join('\n'),
-                gameState: currentGame,
-            };
-            io.to(currentRoomId).emit('battle_update', battleUpdate);
-            io.to(currentRoomId).emit('turn_change', {
-                currentTurnPlayerId: currentGame.currentTurnPlayerId,
-                currentTurnPlayerName: nextPlayer.username,
-            });
-            return;
-        }
-        // Get random skill from SKILLS array with zone effects and riichi state
-        const selectedSkill = getRandomSkill(attacker.state.activeZone, attacker.state.isRiichi, attacker.state.hp, attacker.state.maxHp, currentGame.currentTurn);
-        console.log(`🎲 Random skill selected: ${selectedSkill.name} (${selectedSkill.type})`);
-        console.log(`   Current zone: ${attacker.state.activeZone.type} (${attacker.state.activeZone.remainingTurns} turns remaining)`);
-        if (attacker.state.isRiichi) {
-            console.log(`   🀄 立直状態: ${attacker.username}`);
-        }
-        // 【特殊勝利】数え役満：立直状態でパンチ系技を3回連続成功
-        const punchSkills = ['パンチ', 'ストレート', 'ジャブ', 'アッパーカット', 'フック', 'ボディブロー', 'ダッシュパンチ'];
-        const isPunch = punchSkills.includes(selectedSkill.name);
-        if (attacker.state.isRiichi && isPunch) {
-            if (!attacker.state.riichiBombCount) {
-                attacker.state.riichiBombCount = 0;
-            }
-            attacker.state.riichiBombCount++;
-            console.log(`🀄 パンチ連続カウント: ${attacker.state.riichiBombCount}/3`);
-            if (attacker.state.riichiBombCount >= 3) {
-                // 数え役満成立！即勝利
-                currentGame.isGameOver = true;
-                currentGame.winner = attacker.username;
-                console.log(`🏆 数え役満成立！${attacker.username}の勝利！`);
-                io.to(currentRoomId).emit('battle_update', {
-                    turn: currentGame.currentTurn,
-                    skillName: selectedSkill.name,
-                    skillPower: selectedSkill.power,
-                    message: `🀄💥 ${attacker.username}は立直からのパンチ技を3回連続！\n\n🏆 数え役満成立！${attacker.username}の勝利！`,
-                    gameState: currentGame,
-                });
-                io.to(currentRoomId).emit('game_over', {
-                    winner: attacker.username,
-                    gameState: currentGame,
-                });
-                activeGames.delete(currentRoomId);
-                return;
-            }
-        }
-        else {
-            // パンチ以外の技が出たらカウントリセット
-            if (attacker.state.riichiBombCount && attacker.state.riichiBombCount > 0) {
-                console.log(`🀄 パンチ連続カウント: リセット`);
-                attacker.state.riichiBombCount = 0;
-            }
-        }
-        // ゾーン効果によるログメッセージ生成
-        let zoneEffectMessage = '';
-        if (attacker.state.activeZone.type !== 'none') {
-            if (attacker.state.activeZone.type === '強攻のゾーン') {
-                zoneEffectMessage = `💥 ゾーン効果: 高威力技が出現！`;
-            }
-            else if (attacker.state.activeZone.type === '集中のゾーン') {
-                zoneEffectMessage = `🎯 ゾーン効果: 支援技が出現！`;
-            }
-        }
-        // Apply skill effect
-        let result = applySkillEffect(selectedSkill, attacker, defender, attacker.state.isRiichi, defender.state.isRiichi);
-        const messageParts = [...preMessages];
-        if (zoneEffectMessage) {
-            messageParts.push(zoneEffectMessage);
-        }
-        messageParts.push(result.message);
-        // 強攻のゾーン：20%の確率で自傷ダメージ
-        if (attacker.state.activeZone.type === '強攻のゾーン') {
-            const selfDamageChance = Math.random();
-            if (selfDamageChance < 0.2) {
-                const selfDamage = Math.floor(result.damage * 0.2) || 10; // 与えたダメージの20%、または最低10
-                attacker.state.hp = Math.max(0, attacker.state.hp - selfDamage);
-                messageParts.push(`💢 強攻の反動！ ${attacker.username}は${selfDamage}ダメージを受けた！`);
-                console.log(`💢 強攻の反動: ${attacker.username} -${selfDamage} HP`);
-            }
-        }
-        result.message = messageParts.join('\n');
-        // Debug: log HP state right after damage/heal is applied
-        console.log(`🧪 HP after action -> ${attacker.username}: ${attacker.state.hp}, ${defender.username}: ${defender.state.hp}`);
-        // MP回復計算（乱舞ゾーン中は0、立直中は0、瞑想バフで加算）
-        let regenAmount = attacker.state.activeZone.type === '乱舞のゾーン' ? 0 : attacker.state.isRiichi ? 0 : 1;
-        if (attacker.state.status.mpRegenBonus) {
-            regenAmount += attacker.state.status.mpRegenBonus.amount;
-            attacker.state.status.mpRegenBonus.turns -= 1;
-            if (attacker.state.status.mpRegenBonus.turns <= 0) {
-                attacker.state.status.mpRegenBonus = null;
-            }
-        }
-        if (regenAmount > 0) {
-            attacker.state.mp = Math.min(5, attacker.state.mp + regenAmount);
-        }
-        if (attacker.state.isRiichi) {
-            console.log(`💧 ${attacker.username} MP: ${attacker.state.mp} (max 5) - 立直中のため回復停止`);
-        }
-        else {
-            console.log(`💧 ${attacker.username} MP: ${attacker.state.mp} (max 5)`);
-        }
-        // ターン経過処理：ゾーンの残りターン数を減らす
-        if (attacker.state.activeZone.remainingTurns > 0) {
-            attacker.state.activeZone.remainingTurns--;
-            console.log(`⏱️ Zone turns remaining: ${attacker.state.activeZone.remainingTurns}`);
-            // remainingTurnsが0になったらゾーンを解除
-            if (attacker.state.activeZone.remainingTurns === 0) {
-                attacker.state.activeZone.type = 'none';
-                console.log(`🔄 ${attacker.username} zone expired!`);
-                // ゾーン解除通知を送信
-                io.to(currentRoomId).emit('zone_expired', {
-                    username: attacker.username,
-                    socketId: attacker.socketId,
-                });
-            }
-        }
-        // Send battle_update event to both players
-        const battleUpdate = {
-            turn: currentGame.currentTurn,
-            attacker: {
-                username: attacker.username,
-                socketId: attacker.socketId,
-                state: attacker.state,
-            },
-            defender: {
-                username: defender.username,
-                socketId: defender.socketId,
-                state: defender.state,
-            },
-            skill: selectedSkill,
-            skillName: selectedSkill.name,
-            skillPower: selectedSkill.power,
-            damage: result.damage,
-            healing: result.healing,
-            message: result.message,
-            skillEffect: result.skillEffect,
-            wasBuffedAttack: result.wasBuffedAttack,
-            gameState: currentGame,
-        };
-        io.to(currentRoomId).emit('battle_update', battleUpdate);
-        // Check for game over (only while battle is active and after HP updates)
-        // 2秒間のディレイを設けて、クライアント側の演出が完了するのを待つ
-        if (!currentGame.isGameOver && defender.state.hp <= 0) {
-            currentGame.isGameOver = true;
-            currentGame.winner = attacker.username;
-            console.log(`🏆 Game Over! ${attacker.username} wins! (waiting 2s for client演出)`);
-            // 2秒待機してから最終的な勝利イベントを送信
-            const roomIdForTimeout = currentRoomId;
-            setTimeout(() => {
-                io.to(roomIdForTimeout).emit('game_over', {
-                    winner: attacker.username,
-                    gameState: currentGame,
-                });
-                // Remove game from active games
-                activeGames.delete(roomIdForTimeout);
-            }, 2000);
-            return;
-        }
-        // Check if attacker also died (from special moves like 自爆)
-        if (!currentGame.isGameOver && attacker.state.hp <= 0) {
-            currentGame.isGameOver = true;
-            currentGame.winner = defender.username;
-            console.log(`🏆 Game Over! ${defender.username} wins! (waiting 2s for client演出)`);
-            // 2秒待機してから最終的な勝利イベントを送信
-            const roomIdForTimeout = currentRoomId;
-            setTimeout(() => {
-                io.to(roomIdForTimeout).emit('game_over', {
-                    winner: defender.username,
-                    gameState: currentGame,
-                });
-                activeGames.delete(roomIdForTimeout);
-            }, 2000);
-            return;
-        }
-        // Increment turn counter
-        currentGame.currentTurn++;
-        // 【立直システム】立直中に役（special技）を出した場合、立直を解除
-        const yakuSkills = ['断幺九', '清一色', '国士無双', '九蓮宝燈', '天和'];
-        if (attacker.state.isRiichi && yakuSkills.includes(selectedSkill.name)) {
-            attacker.state.isRiichi = false;
-            console.log(`🀄 ${attacker.username}が役「${selectedSkill.name}」を出したため、立直状態が解除されました！`);
-            io.to(currentRoomId).emit('riichi_cleared', {
-                username: attacker.username,
-                yakuName: selectedSkill.name,
-            });
-        }
-        // ターンを交代
-        const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId
-            ? currentGame.player2
-            : currentGame.player1;
-        currentGame.currentTurnPlayerId = nextPlayer.socketId;
-        // 【メタ要素】activeEffectの期間を減らす
-        if (attacker.state.activeEffectTurns && attacker.state.activeEffectTurns > 0) {
-            attacker.state.activeEffectTurns--;
-            if (attacker.state.activeEffectTurns === 0) {
-                attacker.state.activeEffect = 'none';
-            }
-        }
-        if (defender.state.activeEffectTurns && defender.state.activeEffectTurns > 0) {
-            defender.state.activeEffectTurns--;
-            if (defender.state.activeEffectTurns === 0) {
-                defender.state.activeEffect = 'none';
-            }
-        }
-        // ターン変更を通知
-        io.to(currentRoomId).emit('turn_change', {
-            currentTurnPlayerId: currentGame.currentTurnPlayerId,
-            currentTurnPlayerName: nextPlayer.username,
-        });
-        // ターンインデックスをトグル（0 ↔ 1）
-        currentGame.turnIndex = currentGame.turnIndex === 0 ? 1 : 0;
-        console.log(`🔄 ターン交代: ${currentGame.turnIndex}`);
-        // 更新した gameState を全員に通知
-        io.to(currentRoomId).emit('game_state_update', currentGame);
-        console.log(`📊 Turn ${currentGame.currentTurn}:`);
-        console.log(`   ${attacker.username}: HP ${attacker.state.hp}, MP ${attacker.state.mp}`);
-        console.log(`   ${defender.username}: HP ${defender.state.hp}, MP ${defender.state.mp}`);
-        console.log(`🔄 Turn changed to: ${nextPlayer.username} (${nextPlayer.socketId})`);
+        processUseSkill(socket.id);
     });
     // マッチング準備完了を受け取る
     socket.on('battle_ready_ack', (data) => {
@@ -1185,6 +1337,9 @@ io.on('connection', (socket) => {
                 currentTurn: 0,
                 currentTurnPlayerId: gameData.player1.socketId,
                 turnIndex: 0, // player1 from start
+                shakeTurns: 0, //
+                // 初期値：揺れなし
+                riichiPlayerId: null,
                 isGameOver: false,
                 winner: null,
                 startedAt: Date.now(),
@@ -1230,6 +1385,106 @@ io.on('connection', (socket) => {
                 gameState: null,
                 roomId: null
             });
+        }
+    });
+    // 【スマホ衝突マッチング】関連
+    const bumpWaiters = new Map();
+    const BUMP_MATCH_WINDOW_MS = 3000; // 衝撃検知の許容時間差（3秒）
+    const BUMP_MATCH_DISTANCE_THRESHOLD = 0.001; // 許容距離（約100m）
+    // 【スマホ衝突マッチング】bump_attempt ハンドラー
+    socket.on('bump_attempt', (data) => {
+        const playerId = socketToPlayerId.get(socket.id);
+        if (!playerId) {
+            console.log('❌ Bump attempt without playerId');
+            return;
+        }
+        // 既に自分が待機リストにいたら、多重送信なので無視
+        if (bumpWaiters.has(socket.id)) {
+            console.log(`⏩ Bump attempt from ${data.username} ignored due to already waiting.`);
+            return;
+        }
+        const { username, timestamp, lat, lng } = data;
+        console.log(`🤜 Bump attempt from ${username} (${socket.id}) at (${lat}, ${lng}), timestamp: ${timestamp}`);
+        // 待機リストから条件に合う相手を検索
+        let matchedOpponentId = null;
+        let matchedOpponentData = null;
+        for (const [opponentSocketId, waiter] of bumpWaiters.entries()) {
+            const timeDiff = Math.abs(timestamp - waiter.data.timestamp);
+            const latDiff = Math.abs(lat - waiter.data.lat);
+            const lngDiff = Math.abs(lng - waiter.data.lng);
+            console.log(`   - Comparing with ${waiter.data.username}: timeDiff=${timeDiff}ms, distDiff=${(latDiff + lngDiff).toFixed(5)}`);
+            if (timeDiff < BUMP_MATCH_WINDOW_MS && latDiff < BUMP_MATCH_DISTANCE_THRESHOLD && lngDiff < BUMP_MATCH_DISTANCE_THRESHOLD) {
+                matchedOpponentId = opponentSocketId;
+                matchedOpponentData = waiter;
+                break;
+            }
+        }
+        if (matchedOpponentId && matchedOpponentData) {
+            // --- マッチング成功 ---
+            const opponent = matchedOpponentData;
+            bumpWaiters.delete(matchedOpponentId);
+            clearTimeout(opponent.timeoutId);
+            const opponentSocket = io.sockets.sockets.get(matchedOpponentId);
+            if (!opponentSocket) {
+                console.log(`❌ Matched opponent ${matchedOpponentId} not found, but was in waiters list. Aborting match.`);
+                return; // 相手のソケットが消えていたら中止
+            }
+            console.log(`✅ Bump match success! ${username} (${socket.id}) <-> ${opponent.data.username} (${matchedOpponentId})`);
+            const roomId = `bump_${uuidv4()}`;
+            // ゲーム状態作成
+            const player1 = {
+                playerId,
+                socketId: socket.id,
+                username: username || 'Player1',
+            };
+            const player2 = {
+                playerId: socketToPlayerId.get(matchedOpponentId) || 'unknown',
+                socketId: matchedOpponentId,
+                username: opponent.data.username,
+            };
+            const gameState = {
+                roomId,
+                player1: {
+                    ...player1,
+                    state: createPlayerState(),
+                },
+                player2: {
+                    ...player2,
+                    state: createPlayerState(),
+                },
+                currentTurn: 1,
+                currentTurnPlayerId: socket.id, // 先にバンプした方が先攻（要調整）
+                turnIndex: 0,
+                shakeTurns: 0,
+                isGameOver: false,
+                winner: null,
+                startedAt: Date.now(),
+            };
+            activeGames.set(roomId, gameState);
+            // 両者にマッチング成功通知
+            socket.emit('match_success', {
+                roomId,
+                opponentName: player2.username,
+                gameState,
+            });
+            opponentSocket.emit('match_success', {
+                roomId,
+                opponentName: player1.username,
+                gameState,
+            });
+            // ルームに参加
+            socket.join(roomId);
+            opponentSocket.join(roomId);
+            console.log(`🎮 Bump match game started in room ${roomId}`);
+        }
+        else {
+            // --- マッチング相手が見つからない -> 待機リストに追加 ---
+            console.log(`⏳ No match found for ${username}, adding to bump waiting list.`);
+            const timeoutId = setTimeout(() => {
+                bumpWaiters.delete(socket.id);
+                console.log(`⌛️ Bump wait timed out for ${username}. Removed from list.`);
+            }, BUMP_MATCH_WINDOW_MS + 500); // 許容時間より少し長く待つ
+            bumpWaiters.set(socket.id, { data, timeoutId });
         }
     });
     socket.on('disconnect', () => {

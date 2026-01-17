@@ -134,7 +134,7 @@ export const SKILLS = [
     // ============================================
     // コンボ技：立直システム
     // ============================================
-    { id: 111, name: '立直（リーチ）', type: 'buff', power: 0, description: '一撃必殺の準備！', effect: 'riichi' },
+    // { id: 111, name: '立直（リーチ）', type: 'buff', power: 0, description: '一撃必殺の準備！', effect: 'riichi' }, // 削除: 立直は専用ボタンでのみ発動
     { id: 112, name: 'ロン', type: 'special', power: 300, description: '立直からの一撃必殺！相手の攻撃を逆手に取る', effect: 'riichi_attack' },
     { id: 113, name: 'ツモ', type: 'special', power: 300, description: '立直からの一撃必殺！完璧な引きで決める', effect: 'riichi_attack' },
     // ============================================
@@ -148,7 +148,7 @@ export const SKILLS = [
     // ============================================
     // 【逆転の目】起死回生
     // ============================================
-    { id: 119, name: '起死回生', type: 'attack', power: 0, description: 'HPが減っているほど威力UP（最大HP - 現在HP）* 0.5', effect: 'comeback', dynamicPower: true },
+    { id: 119, name: '起死回生', type: 'attack', power: 0, description: 'ダメージ = max(20, floor((最大HP - 現在HP) * 2.0))', effect: 'comeback', dynamicPower: true },
     // ============================================
     // 【特殊勝利】出禁・メタ要素
     // ============================================
