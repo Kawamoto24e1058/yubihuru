@@ -22,9 +22,9 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
   // 判定パラメータ
   const bumpThreshold = 1.5; // 1回の加速度絶対値しきい値（半分に緩和）
   const gaugeMax = 6.0; // ゲージ満タン値（半分に緩和）
-  const lastBumpTimeRef = useRef(0);
   const gaugeBuffer = useRef<{ t: number; v: number }[]>([]); // 0.2秒間の加速度絶対値バッファ
   const avgWindowMs = 200;
+  const isCoolingDownRef = useRef(false);
 
   // 衝撃検知ハンドラー
   const handleMotion = (event: DeviceMotionEvent) => {
@@ -46,7 +46,7 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
       accX *= 3; accY *= 3; accZ *= 3;
     }
     const currentTotal = Math.sqrt(accX * accX + accY * accY + accZ * accZ);
-    const delta = Math.abs(currentTotal - lastTotalRef.current);
+    // deltaは未使用のため削除
     // 0.2秒間の加速度絶対値バッファに積分的に蓄積
     const now = Date.now();
     const absAcc = Math.abs(accX) + Math.abs(accY) + Math.abs(accZ);
@@ -69,15 +69,19 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
       setShowFlash(true);
       setTimeout(() => setShowFlash(false), 120);
     }
-    // 100%到達で即送信
-    if (nextStrength >= 100 && !isWaiting) {
+    // 100%到達で即送信（クールダウン中は無視）
+    if (nextStrength >= 100 && !isWaiting && !isCoolingDownRef.current) {
+      isCoolingDownRef.current = true;
       setShowDetected(true);
       setTimeout(() => setShowDetected(false), 800);
       if ('vibrate' in navigator) navigator.vibrate([100, 50, 100]);
       onBumpDetected();
       // ゲージリセット
       gaugeBuffer.current = [];
-      setTimeout(() => setBumpStrength(0), 400);
+      setTimeout(() => {
+        setBumpStrength(0);
+        isCoolingDownRef.current = false;
+      }, 800);
     }
     lastTotalRef.current = currentTotal;
   };
@@ -141,17 +145,6 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
     }
   };
 
-  const startCoolDown = () => {
-    isCoolingDownRef.current = true;
-    setTimeout(() => {
-      isCoolingDownRef.current = false;
-      setMaxBump(0);
-      if (isWaiting) {
-        setStatusText('もう一度ぶつけてみてください');
-        setIsWaiting(false);
-      }
-    }, 2000);
-  };
 
   // センサー監視開始（iOS許可取得）
   const startSensor = async () => {
