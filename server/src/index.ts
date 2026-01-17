@@ -1609,6 +1609,16 @@ io.on('connection', (socket) => {
     }
   });
 
+  // 【スマホ衝突マッチング】関連
+const bumpWaiters = new Map<string, { data: BumpData; timeoutId: NodeJS.Timeout }>();
+const BUMP_MATCH_WINDOW_MS = 3000; // 衝撃検知の許容時間差（3秒）
+const BUMP_MATCH_DISTANCE_THRESHOLD = 0.001; // 許容距離（約100m）
+
+io.on('connection', (socket) => {
+  console.log(`✅ User connected: ${socket.id}`);
+
+  // (中略: 他のイベントハンドラ)
+
   // 【スマホ衝突マッチング】bump_attempt ハンドラー
   socket.on('bump_attempt', (data: BumpData) => {
     const playerId = socketToPlayerId.get(socket.id);
@@ -1617,44 +1627,48 @@ io.on('connection', (socket) => {
       return;
     }
 
+    // 既に自分が待機リストにいたら、多重送信なので無視
+    if (bumpWaiters.has(socket.id)) {
+      console.log(`⏩ Bump attempt from ${data.username} ignored due to already waiting.`);
+      return;
+    }
+
     const { username, timestamp, lat, lng } = data;
     console.log(`🤜 Bump attempt from ${username} (${socket.id}) at (${lat}, ${lng}), timestamp: ${timestamp}`);
 
-    // 現在の待機リストから2秒以内かつ距離0.001以内（約100m）の相手を検索
-    const now = Date.now();
-    const matches = waitingRoom.filter((player) => {
-      if (player.socketId === socket.id) return false; // 自分自身は除外
-      
-      // タイムスタンプベースでマッチング（2秒以内）
-      const timeDiff = Math.abs(now - timestamp);
-      if (timeDiff > 2000) return false;
+    // 待機リストから条件に合う相手を検索
+    let matchedOpponentId: string | null = null;
+    let matchedOpponentData: { data: BumpData; timeoutId: NodeJS.Timeout } | null = null;
 
-      // 距離ベース（緯度経度の誤差 0.001 以内）
-      const playerSocket = io.sockets.sockets.get(player.socketId);
-      if (!playerSocket) return false;
+    for (const [opponentSocketId, waiter] of bumpWaiters.entries()) {
+      const timeDiff = Math.abs(timestamp - waiter.data.timestamp);
+      const latDiff = Math.abs(lat - waiter.data.lat);
+      const lngDiff = Math.abs(lng - waiter.data.lng);
 
-      // プレイヤーの位置情報は一時的にメモリに保存
-      const playerData = (playerSocket as any).bumpData as { lat: number; lng: number; timestamp: number } | undefined;
-      if (!playerData) return false;
+      console.log(`   - Comparing with ${waiter.data.username}: timeDiff=${timeDiff}ms, distDiff=${(latDiff + lngDiff).toFixed(5)}`);
 
-      const latDiff = Math.abs(playerData.lat - lat);
-      const lngDiff = Math.abs(playerData.lng - lng);
-      
-      return latDiff < 0.001 && lngDiff < 0.001;
-    });
+      if (timeDiff < BUMP_MATCH_WINDOW_MS && latDiff < BUMP_MATCH_DISTANCE_THRESHOLD && lngDiff < BUMP_MATCH_DISTANCE_THRESHOLD) {
+        matchedOpponentId = opponentSocketId;
+        matchedOpponentData = waiter;
+        break;
+      }
+    }
 
-    if (matches.length > 0) {
-      // マッチング成功！
-      const opponent = matches[0];
+    if (matchedOpponentId && matchedOpponentData) {
+      // --- マッチング成功 ---
+      const opponent = matchedOpponentData;
+      bumpWaiters.delete(matchedOpponentId);
+      clearTimeout(opponent.timeoutId);
+
+      const opponentSocket = io.sockets.sockets.get(matchedOpponentId);
+      if (!opponentSocket) {
+        console.log(`❌ Matched opponent ${matchedOpponentId} not found, but was in waiters list. Aborting match.`);
+        return; // 相手のソケットが消えていたら中止
+      }
+
+      console.log(`✅ Bump match success! ${username} (${socket.id}) <-> ${opponent.data.username} (${matchedOpponentId})`);
+
       const roomId = `bump_${uuidv4()}`;
-
-      console.log(`✅ Bump match success! ${username} (${socket.id}) <-> ${opponent.username} (${opponent.socketId})`);
-
-      // 両方を待機リストから削除
-      const idx1 = waitingRoom.findIndex(p => p.socketId === socket.id);
-      const idx2 = waitingRoom.findIndex(p => p.socketId === opponent.socketId);
-      if (idx1 > -1) waitingRoom.splice(idx1, 1);
-      if (idx2 > -1) waitingRoom.splice(idx2, 1);
 
       // ゲーム状態作成
       const player1 = {
@@ -1662,7 +1676,11 @@ io.on('connection', (socket) => {
         socketId: socket.id,
         username: username || 'Player1',
       };
-      const player2 = opponent;
+      const player2 = {
+        playerId: socketToPlayerId.get(matchedOpponentId) || 'unknown',
+        socketId: matchedOpponentId,
+        username: opponent.data.username,
+      };
 
       const gameState: GameState = {
         roomId,
@@ -1675,7 +1693,7 @@ io.on('connection', (socket) => {
           state: createPlayerState(),
         },
         currentTurn: 1,
-        currentTurnPlayerId: socket.id,
+        currentTurnPlayerId: socket.id, // 先にバンプした方が先攻（要調整）
         turnIndex: 0,
         shakeTurns: 0,
         isGameOver: false,
@@ -1691,9 +1709,7 @@ io.on('connection', (socket) => {
         opponentName: player2.username,
         gameState,
       });
-      
-      const opponentSocket = io.sockets.sockets.get(opponent.socketId);
-      opponentSocket?.emit('match_success', {
+      opponentSocket.emit('match_success', {
         roomId,
         opponentName: player1.username,
         gameState,
@@ -1701,20 +1717,18 @@ io.on('connection', (socket) => {
 
       // ルームに参加
       socket.join(roomId);
-      opponentSocket?.join(roomId);
+      opponentSocket.join(roomId);
 
       console.log(`🎮 Bump match game started in room ${roomId}`);
     } else {
-      // マッチング相手が見つからない → 自分の位置情報を一時保存
-      (socket as any).bumpData = { lat, lng, timestamp: now };
-      console.log(`⏳ No match found for ${username} (${socket.id}), stored location data`);
+      // --- マッチング相手が見つからない -> 待機リストに追加 ---
+      console.log(`⏳ No match found for ${username}, adding to bump waiting list.`);
+      const timeoutId = setTimeout(() => {
+        bumpWaiters.delete(socket.id);
+        console.log(`⌛️ Bump wait timed out for ${username}. Removed from list.`);
+      }, BUMP_MATCH_WINDOW_MS + 500); // 許容時間より少し長く待つ
 
-      // 2秒後にクリア
-      setTimeout(() => {
-        if ((socket as any).bumpData) {
-          delete (socket as any).bumpData;
-        }
-      }, 2000);
+      bumpWaiters.set(socket.id, { data, timeoutId });
     }
   });
 

@@ -16,20 +16,26 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
   const [sensorReady, setSensorReady] = useState(false);
   const [maxBump, setMaxBump] = useState(0);
   const [showFlash, setShowFlash] = useState(false);
-  const [showDetected, setShowDetected] = useState(false);
-  const lastTotalRef = useRef(9.8);
   const animationFrameRef = useRef<number>();
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null); // タイムアウトIDを保持
+
   // 判定パラメータ
-  const bumpThreshold = 1.5; // 1回の加速度絶対値しきい値（半分に緩和）
-  const gaugeMax = 6.0; // ゲージ満タン値（半分に緩和）
+  const bumpThreshold = 10; // 1. しきい値を高く設定 (旧: 1.5)
+  const gaugeMax = 30.0; // 1. ゲージ満タン値も高く設定 (旧: 6.0)
   const gaugeBuffer = useRef<{ t: number; v: number }[]>([]); // 0.2秒間の加速度絶対値バッファ
   const avgWindowMs = 200;
-  const isCoolingDownRef = useRef(false);
 
   // 衝撃検知ハンドラー
   const handleMotion = (event: DeviceMotionEvent) => {
+    // 4. 二重送信防止: 待機中は処理をスキップ
+    if (isWaiting) {
+      return;
+    }
+
     // iPhone: acceleration + accelerationIncludingGravity の両方を合算
-    let accX = 0, accY = 0, accZ = 0;
+    let accX = 0,
+      accY = 0,
+      accZ = 0;
     if (event.accelerationIncludingGravity) {
       accX += event.accelerationIncludingGravity.x ?? 0;
       accY += event.accelerationIncludingGravity.y ?? 0;
@@ -43,54 +49,64 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
     // iOSのみ3倍ブースト
     const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
     if (isIOS) {
-      accX *= 3; accY *= 3; accZ *= 3;
+      accX *= 3;
+      accY *= 3;
+      accZ *= 3;
     }
-    const currentTotal = Math.sqrt(accX * accX + accY * accY + accZ * accZ);
-    // deltaは未使用のため削除
-    // 0.2秒間の加速度絶対値バッファに積分的に蓄積
+
+    // 1. ハイパスフィルター強化: 急激な変化のみを捉える
     const now = Date.now();
     const absAcc = Math.abs(accX) + Math.abs(accY) + Math.abs(accZ);
+
     // 1回の加速度絶対値がしきい値超えたらゲージ加算
     let add = 0;
     if (absAcc > bumpThreshold) {
-      add = absAcc * 0.6; // 係数で調整
+      add = absAcc; // 係数を1.0に (旧: absAcc * 0.6)
     }
+
     // バッファに追加
     gaugeBuffer.current.push({ t: now, v: add });
     // 0.2秒より古い値を除去
-    gaugeBuffer.current = gaugeBuffer.current.filter(e => now - e.t <= avgWindowMs);
+    gaugeBuffer.current = gaugeBuffer.current.filter((e) => now - e.t <= avgWindowMs);
     // 合計値でゲージ進行
     const sum = gaugeBuffer.current.reduce((a, b) => a + b.v, 0);
     let nextStrength = Math.min(100, (sum / gaugeMax) * 100);
     setBumpStrength(nextStrength);
-    setMaxBump(prev => Math.max(prev, absAcc));
+    setMaxBump((prev) => Math.max(prev, absAcc));
+
     // 50%以上で白発光
     if (nextStrength > 50 && nextStrength < 100) {
       setShowFlash(true);
       setTimeout(() => setShowFlash(false), 120);
     }
-    // 100%到達で即送信（クールダウン中は無視）
-    if (nextStrength >= 100 && !isWaiting && !isCoolingDownRef.current) {
-      isCoolingDownRef.current = true;
-      setShowDetected(true);
-      setTimeout(() => setShowDetected(false), 800);
+
+    // 100%到達で即送信
+    if (nextStrength >= 100 && !isWaiting) {
       if ('vibrate' in navigator) navigator.vibrate([100, 50, 100]);
       onBumpDetected();
       // ゲージリセット
       gaugeBuffer.current = [];
       setTimeout(() => {
         setBumpStrength(0);
-        isCoolingDownRef.current = false;
       }, 800);
     }
-    lastTotalRef.current = currentTotal;
   };
 
   const onBumpDetected = () => {
-    setStatusText('マッチングリクエスト送信中... 相手の衝撃を待っています');
+    // 3. 視覚的な待機状態の明確化
+    setStatusText('衝撃検知！相手を探しています...（有効期限：3秒）');
     setIsWaiting(true);
+
+    // 3. 3秒のタイムアウトを設定
+    timeoutRef.current = setTimeout(() => {
+      setStatusText('タイムアウト。もう一度ぶつけてください');
+      setIsWaiting(false); // ステートをリセット
+      timeoutRef.current = null;
+    }, 3000);
+
     if (!socket) return;
-    // 位置情報取得
+
+    // 位置情報取得と送信
     let sent = false;
     if ('geolocation' in navigator) {
       navigator.geolocation.getCurrentPosition(
@@ -111,6 +127,7 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
           if (error.code === error.PERMISSION_DENIED) {
             setPermissionError('位置情報がブロックされています。ブラウザの設定から位置情報の使用を許可してください。');
             setIsWaiting(false);
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
             return;
           }
           // 位置情報取得失敗時もダミー値で送信
@@ -121,7 +138,7 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
             lng: 0,
           });
         },
-        { timeout: 5000, enableHighAccuracy: true }
+        { timeout: 5000, enableHighAccuracy: true },
       );
       // 5秒経過しても送信されていなければダミー値送信
       setTimeout(() => {
@@ -144,7 +161,6 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
       });
     }
   };
-
 
   // センサー監視開始（iOS許可取得）
   const startSensor = async () => {
@@ -174,6 +190,13 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
   useEffect(() => {
     if (!socket) return;
     const handleMatchSuccess = (data: { roomId: string; opponentName: string }) => {
+      // 3. タイムアウト前に成功した場合、タイムアウト処理をクリア
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+
+      setIsWaiting(false); // 念のため
       setStatusText('✅ マッチング成功！');
       setTimeout(() => {
         onMatchSuccess(data.roomId, data.opponentName);
@@ -185,6 +208,10 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
       socket.off('match_success', handleMatchSuccess);
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
+      }
+      // コンポーネントのアンマウント時にもタイムアウトをクリア
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
       }
     };
   }, [socket, onMatchSuccess]);
@@ -212,9 +239,7 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
             <h2 className="text-2xl font-black text-center" style={{ WebkitTextStroke: '2px black', color: '#ff3333' }}>
               ⚠️ 権限エラー
             </h2>
-            <p className="text-center font-bold text-sm leading-relaxed">
-              {permissionError}
-            </p>
+            <p className="text-center font-bold text-sm leading-relaxed">{permissionError}</p>
             <div className="space-y-2">
               <button
                 onClick={() => setPermissionError(null)}
@@ -243,7 +268,9 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
 
       {/* タイトル */}
       <h1 className="text-4xl font-black mb-8 text-center" style={{ WebkitTextStroke: '2px black', color: 'white' }}>
-        スマホをぶつけて<br />マッチング！
+        スマホをぶつけて
+        <br />
+        マッチング！
       </h1>
 
       {/* マッチング開始ボタン（iOSセンサー許可） */}
@@ -272,9 +299,7 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
         ) : (
           <>
             <p className="text-center font-bold text-lg">{statusText}</p>
-            {sensorReady && (
-              <div className="mt-2 text-center text-xs text-gray-500">センサー許可済み</div>
-            )}
+            {sensorReady && <div className="mt-2 text-center text-xs text-gray-500">センサー許可済み</div>}
           </>
         )}
       </div>
@@ -282,13 +307,7 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
       {/* 衝撃強度ビジュアライザー＋フィードバック */}
       <div className="w-full max-w-md relative">
         {/* 白発光 */}
-        {showFlash && <div className="absolute inset-0 z-20 bg-white opacity-70 pointer-events-none animate-flash" style={{borderRadius:'12px'}} />}
-        {/* SHOCK DETECTED! */}
-        {showDetected && (
-          <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
-            <span className="text-4xl font-black text-yellow-400" style={{WebkitTextStroke:'2px #000',textShadow:'0 0 24px #fff,0 0 40px #ff0'}}>SHOCK DETECTED!</span>
-          </div>
-        )}
+        {showFlash && <div className="absolute inset-0 z-20 bg-white opacity-70 pointer-events-none animate-flash" style={{ borderRadius: '12px' }} />}
         <p className="text-sm font-bold mb-2 text-center">衝撃の強さ</p>
         <div className="relative h-8 bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
           {/* 目標ライン（赤い縦線） */}
@@ -300,21 +319,21 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
               zIndex: 2,
               borderRadius: '2px',
               boxShadow: '0 0 8px 2px #ff0000cc',
-              transform: 'translateX(-50%)'
+              transform: 'translateX(-50%)',
             }}
           />
           {/* ゲージ本体 */}
           <div
-            className={`h-full transition-all duration-100 ${bumpStrength >= 100 ? 'bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-500' : 'bg-gradient-to-r from-blue-400 via-blue-300 to-blue-200'}`}
+            className={`h-full transition-all duration-100 ${
+              bumpStrength >= 100 ? 'bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-500' : 'bg-gradient-to-r from-blue-400 via-blue-300 to-blue-200'
+            }`}
             style={{ width: `${bumpStrength}%`, zIndex: 1 }}
           />
         </div>
         <p className="text-xs text-center mt-2 font-bold">
           最大値: {maxBump.toFixed(1)} / しきい値: {bumpThreshold}
         </p>
-        <p className="text-xs text-center mt-2 font-bold">
-          {bumpStrength > 75 ? '🔥 強い！' : bumpStrength > 40 ? '💪 良い感じ' : '👆 もっと強く！'}
-        </p>
+        <p className="text-xs text-center mt-2 font-bold">{bumpStrength > 75 ? '🔥 強い！' : bumpStrength > 40 ? '💪 良い感じ' : '👆 もっと強く！'}</p>
       </div>
       {/* 追加: 目標ラインの説明 */}
       <div className="w-full max-w-md text-xs text-center mt-2 text-red-600 font-bold">
@@ -323,7 +342,8 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
       {/* 追加: スピナー用アニメーション */}
       <style>{`
         @keyframes bounce-horizontal {
-          0%, 100% {
+          0%,
+          100% {
             transform: translateX(-20px) rotate(-10deg);
           }
           50% {
@@ -334,18 +354,24 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
           animation: bounce-horizontal 1.5s ease-in-out infinite;
         }
         .animate-pulse {
-          animation: pulse 1.2s cubic-bezier(0.4,0,0.6,1) infinite;
+          animation: pulse 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
         }
         @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
+          0%,
+          100% {
+            opacity: 1;
+          }
+          50% {
+            opacity: 0.5;
+          }
         }
       `}</style>
 
       {/* CSS for bounce animation */}
       <style>{`
         @keyframes bounce-horizontal {
-          0%, 100% {
+          0%,
+          100% {
             transform: translateX(-20px) rotate(-10deg);
           }
           50% {
