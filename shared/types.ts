@@ -86,6 +86,8 @@ export interface PlayerState {
   activeEffect?: 'ink' | 'shake' | 'none'; // メタ要素
   activeEffectTurns?: number; // 効果の残りターン数
   riichiBombCount?: number; // 立直時の連続パンチカウント
+  isBroken?: boolean; // 指が折れている状態（行動不能）
+  brokenTurns?: number; // 行動不能の残りターン数
 }
 
 /**

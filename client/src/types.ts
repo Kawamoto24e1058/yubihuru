@@ -88,6 +88,8 @@ export interface PlayerState {
   activeEffect?: 'ink' | 'shake' | 'none'; // メタ要素：インクこぼし、ウィンドウシェイク
   activeEffectTurns?: number; // アクティブ効果の残りターン数
   riichiBombCount?: number; // 数え役満カウント用
+  isBroken?: boolean; // 指が折れている状態（行動不能）
+  brokenTurns?: number; // 行動不能の残りターン数
 }
 
 /**

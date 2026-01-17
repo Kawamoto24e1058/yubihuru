@@ -1458,7 +1458,18 @@ function App() {
           {/* 相手ステータス */}
           <div className="pointer-events-auto bg-white/95 border-3 border-black shadow-[4px_4px_0px_rgba(0,0,0,1)] p-2 rounded max-w-[90vw] mx-auto">
             <div className="flex items-center justify-between mb-1">
-              <p className="font-black text-xs">OPPONENT</p>
+              <div className="flex items-center gap-1">
+                <p className="font-black text-xs">OPPONENT</p>
+                {opponentData.state.status.poison && (
+                  <span className="text-[8px] font-black px-1 py-0.5 bg-purple-600 text-white rounded">☠️</span>
+                )}
+                {opponentData.state.isBroken && opponentData.state.brokenTurns && opponentData.state.brokenTurns > 0 && (
+                  <span className="text-[8px] font-black px-1 py-0.5 bg-orange-600 text-white rounded animate-pulse">🦴</span>
+                )}
+                {opponentData.state.isRiichi && (
+                  <span className="text-[8px] font-black px-1 py-0.5 bg-red-600 text-white rounded animate-pulse">🀄</span>
+                )}
+              </div>
               {opponentData.state.activeZone.type !== 'none' && (
                 <span className="text-[9px] font-black px-1.5 py-0.5 bg-yellow-200 border-2 border-black rounded">
                   {opponentData.state.activeZone.type}
@@ -1496,7 +1507,18 @@ function App() {
           {/* 自分ステータス */}
           <div className="pointer-events-auto bg-white/95 border-3 border-black shadow-[4px_4px_0px_rgba(0,0,0,1)] p-2 rounded max-w-[90vw] mx-auto">
             <div className="flex items-center justify-between mb-1">
-              <p className="font-black text-xs flex items-center gap-1">YOU {isMyTurn && <span className="text-[8px] animate-pulse">⭐</span>}</p>
+              <div className="flex items-center gap-1">
+                <p className="font-black text-xs flex items-center gap-1">YOU {isMyTurn && <span className="text-[8px] animate-pulse">⭐</span>}</p>
+                {myData.state.status.poison && (
+                  <span className="text-[8px] font-black px-1 py-0.5 bg-purple-600 text-white rounded">☠️</span>
+                )}
+                {myData.state.isBroken && myData.state.brokenTurns && myData.state.brokenTurns > 0 && (
+                  <span className="text-[8px] font-black px-1 py-0.5 bg-orange-600 text-white rounded animate-pulse">🦴{myData.state.brokenTurns}</span>
+                )}
+                {myData.state.isRiichi && (
+                  <span className="text-[8px] font-black px-1 py-0.5 bg-red-600 text-white rounded animate-pulse">🀄</span>
+                )}
+              </div>
               {myData.state.activeZone.type !== 'none' && (
                 <span className="text-[9px] font-black px-1.5 py-0.5 bg-yellow-200 border-2 border-black rounded">
                   {myData.state.activeZone.type}
@@ -1849,6 +1871,9 @@ function App() {
                     {myData.state.status.poison && (
                       <span className="bg-purple-600 text-white text-xs font-black px-2 py-1 rounded">☠️ 毒</span>
                     )}
+                    {myData.state.isBroken && myData.state.brokenTurns && myData.state.brokenTurns > 0 && (
+                      <span className="bg-orange-600 text-white text-xs font-black px-2 py-1 rounded animate-pulse">🦴 骨折 ({myData.state.brokenTurns})</span>
+                    )}
                     {myData.state.isRiichi && (
                       <span className="bg-red-600 text-white text-xs font-black px-2 py-1 rounded animate-pulse">🀄 立直</span>
                     )}
@@ -2019,6 +2044,9 @@ function App() {
                   <p className="font-black text-xs md:text-sm">OPPONENT {!isMyTurn && '⭐'}</p>
                   {opponentData.state.status.poison && (
                     <span className="bg-purple-600 text-white text-xs font-black px-2 py-1 rounded">☠️ 毒</span>
+                  )}
+                  {opponentData.state.isBroken && opponentData.state.brokenTurns && opponentData.state.brokenTurns > 0 && (
+                    <span className="bg-orange-600 text-white text-xs font-black px-2 py-1 rounded animate-pulse">🦴 骨折 ({opponentData.state.brokenTurns})</span>
                   )}
                   {opponentData.state.isRiichi && (
                     <span className="bg-red-600 text-white text-xs font-black px-2 py-1 rounded animate-pulse">🀄 立直</span>
