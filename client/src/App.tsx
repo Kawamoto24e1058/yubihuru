@@ -1039,16 +1039,25 @@ function App() {
   // 飯テロ演出用状態
   const [currentFood, setCurrentFood] = useState('');
   const [showMeshi, setShowMeshi] = useState(false);
-  // 飯テロ演出（skillEffect監視）
+  // 飯テロ演出: 画像主役・自動消去・画面切替時クリーンアップ
   useEffect(() => {
+    let timer: number | null = null;
     if (skillEffect === 'food-terror') {
       const img = foodImages[Math.floor(Math.random() * foodImages.length)];
       setCurrentFood(img);
       setShowMeshi(true);
-      const timer = setTimeout(() => setShowMeshi(false), 3000);
-      return () => clearTimeout(timer);
+      timer = setTimeout(() => {
+        setShowMeshi(false);
+        setCurrentFood('');
+      }, 3000);
     }
-  }, [skillEffect]);
+    // クリーンアップ: skillEffect変化・画面切替時に画像消去
+    return () => {
+      if (timer) clearTimeout(timer);
+      setShowMeshi(false);
+      setCurrentFood('');
+    };
+  }, [skillEffect, gameStarted]);
 
   const handleJoin = () => {
     if (socket && name.trim()) {
@@ -2164,55 +2173,57 @@ function App() {
           }
         }, [skillEffect]); */}
 
-        {/* 飯テロ画像＋テロップ演出 */}
-        {showMeshi && (
-          <div style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            width: '100vw',
-            height: '100vh',
-            zIndex: 9999,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexDirection: 'column',
-            background: 'rgba(0,0,0,0.45)'
-          }}>
-            <div style={{
-              position: 'absolute',
-              top: '18%',
-              left: '50%',
-              transform: 'translate(-50%, 0)',
-              zIndex: 10001,
-              color: '#fff',
-              fontSize: '3rem',
-              fontWeight: 'bold',
-              textShadow: '2px 2px 12px #ff4500, 0 0 40px #fff',
-              WebkitTextStroke: '2px #ff4500',
-              padding: '0.2em 0.8em',
-              borderRadius: '12px',
-              background: 'rgba(255,69,0,0.85)',
-              border: '4px solid #fff',
-              boxShadow: '0 0 24px #ff4500'
-            }}>
-              飯テロ攻撃！！
+        {/* 飯テロ画像＋テロップ演出（画像主役・自動消去・アニメ付き） */}
+        {showMeshi && currentFood && (
+          <div
+            className="fixed inset-0 z-[9999] flex items-center justify-center"
+            style={{ background: 'rgba(0,0,0,0.65)' }}
+          >
+            {/* テロップは画面最上部に分離配置 */}
+            <div
+              className="absolute top-0 left-0 w-full flex items-center justify-center pt-8 z-[10001]"
+            >
+              <span
+                className="text-4xl md:text-5xl font-black px-8 py-2 rounded-lg border-4 border-white"
+                style={{
+                  color: '#fff',
+                  background: 'rgba(255,69,0,0.85)',
+                  textShadow: '2px 2px 0 #000, 0 0 12px #ff4500, 0 0 40px #fff',
+                  WebkitTextStroke: '2px #000',
+                  boxShadow: '0 0 24px #ff4500',
+                }}
+              >
+                飯テロ攻撃！！
+              </span>
             </div>
+            {/* 画像本体（中央・ふわっと拡大アニメ） */}
             <img
               src={currentFood}
               alt="飯テロ画像"
+              className="meshi-terror-img"
               style={{
-                position: 'relative',
-                top: '0',
-                left: '0',
-                transform: 'none',
-                zIndex: 10000,
-                width: '85%',
-                borderRadius: '15px',
+                width: '80vw',
+                maxWidth: '700px',
+                height: 'auto',
+                borderRadius: '18px',
                 border: '8px solid #ff4500',
-                boxShadow: '0 0 40px #fff, 0 0 80px #ff4500'
+                boxShadow: '0 0 40px #fff, 0 0 80px #ff4500',
+                zIndex: 10000,
+                background: 'rgba(0,0,0,0.15)',
+                animation: 'meshi-pop 0.7s cubic-bezier(0.4,0,0.6,1)',
               }}
             />
+            {/* CSSアニメーション追加 */}
+            <style>{`
+              @keyframes meshi-pop {
+                0% { transform: scale(0.5); opacity: 0.2; }
+                60% { transform: scale(1.08); opacity: 1; }
+                100% { transform: scale(1.0); opacity: 1; }
+              }
+              .meshi-terror-img {
+                animation: meshi-pop 0.7s cubic-bezier(0.4,0,0.6,1);
+              }
+            `}</style>
           </div>
         )}
       </div>

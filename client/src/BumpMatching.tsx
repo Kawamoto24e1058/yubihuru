@@ -19,7 +19,7 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
   const isCoolingDownRef = useRef(false);
   const animationFrameRef = useRef<number>();
   // 超高感度設定
-  const bumpThreshold = 3.0;
+  const bumpThreshold = 3.0; // しきい値
   const gaugeMax = 10.0;
   // 0.2秒間の平均値用バッファ
   const avgBuffer = useRef<{ t: number; v: number }[]>([]);
@@ -57,7 +57,8 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
       boostedDelta > bumpThreshold || avg > 2.0
     )) {
       if (now - lastBumpTimeRef.current > 300) { // 連続誤爆防止
-        if ('vibrate' in navigator) navigator.vibrate(50);
+        // しきい値を超えた瞬間バイブ（強調）
+        if ('vibrate' in navigator) navigator.vibrate([100, 50, 100]);
         onBumpDetected();
         startCoolDown();
         lastBumpTimeRef.current = now;
@@ -67,7 +68,7 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
   };
 
   const onBumpDetected = () => {
-    setStatusText('🔍 近くの相手を探しています...');
+    setStatusText('マッチングリクエスト送信中... 相手の衝撃を待っています');
     setIsWaiting(true);
     if (!socket) return;
     // 位置情報取得
@@ -254,24 +255,42 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
 
       {/* ステータステキスト */}
       <div className="bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-6 mb-8 max-w-md w-full">
-        <p className="text-center font-bold text-lg">{statusText}</p>
-        {isWaiting && (
-          <div className="mt-4 flex justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-4 border-black border-t-transparent"></div>
+        {isWaiting ? (
+          <div className="flex flex-col items-center justify-center min-h-[120px]">
+            <p className="text-center font-black text-2xl mb-4 text-blue-700 animate-pulse">{statusText}</p>
+            <div className="animate-spin rounded-full h-14 w-14 border-8 border-yellow-400 border-t-transparent mb-2"></div>
+            <p className="text-center text-xs text-gray-500">スマホを持ったままお待ちください</p>
           </div>
-        )}
-        {sensorReady && (
-          <div className="mt-2 text-center text-xs text-gray-500">センサー許可済み</div>
+        ) : (
+          <>
+            <p className="text-center font-bold text-lg">{statusText}</p>
+            {sensorReady && (
+              <div className="mt-2 text-center text-xs text-gray-500">センサー許可済み</div>
+            )}
+          </>
         )}
       </div>
 
       {/* 衝撃強度ビジュアライザー */}
       <div className="w-full max-w-md">
         <p className="text-sm font-bold mb-2 text-center">衝撃の強さ</p>
-        <div className="h-8 bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
+        <div className="relative h-8 bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
+          {/* 目標ライン（赤い縦線） */}
           <div
-            className="h-full bg-gradient-to-r from-yellow-400 via-orange-400 to-red-500 transition-all duration-100"
-            style={{ width: `${bumpStrength}%` }}
+            className="absolute top-0 bottom-0 w-1"
+            style={{
+              left: `${Math.min(100, (bumpThreshold / gaugeMax) * 100)}%`,
+              background: 'linear-gradient(to bottom, #ff0000 60%, #ffcc00 100%)',
+              zIndex: 2,
+              borderRadius: '2px',
+              boxShadow: '0 0 8px 2px #ff0000cc',
+              transform: 'translateX(-50%)'
+            }}
+          />
+          {/* ゲージ本体 */}
+          <div
+            className={`h-full transition-all duration-100 ${maxBump > bumpThreshold ? 'bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-500' : 'bg-gradient-to-r from-blue-400 via-blue-300 to-blue-200'}`}
+            style={{ width: `${bumpStrength}%`, zIndex: 1 }}
           />
         </div>
         <p className="text-xs text-center mt-2 font-bold">
@@ -281,6 +300,31 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
           {bumpStrength > 75 ? '🔥 強い！' : bumpStrength > 40 ? '💪 良い感じ' : '👆 もっと強く！'}
         </p>
       </div>
+      {/* 追加: 目標ラインの説明 */}
+      <div className="w-full max-w-md text-xs text-center mt-2 text-red-600 font-bold">
+        <span>赤いラインを超えるとマッチングリクエストが送信されます</span>
+      </div>
+      {/* 追加: スピナー用アニメーション */}
+      <style>{`
+        @keyframes bounce-horizontal {
+          0%, 100% {
+            transform: translateX(-20px) rotate(-10deg);
+          }
+          50% {
+            transform: translateX(20px) rotate(10deg);
+          }
+        }
+        .animate-bounce-horizontal {
+          animation: bounce-horizontal 1.5s ease-in-out infinite;
+        }
+        .animate-pulse {
+          animation: pulse 1.2s cubic-bezier(0.4,0,0.6,1) infinite;
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      `}</style>
 
       {/* CSS for bounce animation */}
       <style>{`
