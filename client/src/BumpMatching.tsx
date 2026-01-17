@@ -18,31 +18,50 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
   const lastTotalRef = useRef(9.8);
   const isCoolingDownRef = useRef(false);
   const animationFrameRef = useRef<number>();
-  const bumpThreshold = (() => {
-    const ua = navigator.userAgent;
-    if (/iPhone|iPad|iPod/.test(ua)) {
-      return 12; // iOSは少し低め
-    } else if (/Android/.test(ua)) {
-      return 12;
-    }
-    return 12;
-  })();
+  // 超高感度設定
+  const bumpThreshold = 3.0;
+  const gaugeMax = 10.0;
+  // 0.2秒間の平均値用バッファ
+  const avgBuffer = useRef<{ t: number; v: number }[]>([]);
+  const avgWindowMs = 200;
+  const lastBumpTimeRef = useRef(0);
 
   // 衝撃検知ハンドラー
   const handleMotion = (event: DeviceMotionEvent) => {
-    const acc = event.accelerationIncludingGravity;
-    if (!acc || acc.x === null || acc.y === null || acc.z === null) return;
-    const { x, y, z } = acc;
-    const currentTotal = Math.sqrt(x * x + y * y + z * z);
+    // iPhone: acceleration + accelerationIncludingGravity の両方を合算
+    let accX = 0, accY = 0, accZ = 0;
+    if (event.accelerationIncludingGravity) {
+      accX += event.accelerationIncludingGravity.x ?? 0;
+      accY += event.accelerationIncludingGravity.y ?? 0;
+      accZ += event.accelerationIncludingGravity.z ?? 0;
+    }
+    if (event.acceleration) {
+      accX += event.acceleration.x ?? 0;
+      accY += event.acceleration.y ?? 0;
+      accZ += event.acceleration.z ?? 0;
+    }
+    const currentTotal = Math.sqrt(accX * accX + accY * accY + accZ * accZ);
     const delta = Math.abs(currentTotal - lastTotalRef.current);
-    // ゲージの伸びを3倍敏感に
-    setBumpStrength(Math.min(100, delta * 9));
-    setMaxBump(prev => Math.max(prev, delta));
-    // 一瞬でもしきい値を超えたら即 bump_attempt
-    if (delta > bumpThreshold && !isCoolingDownRef.current) {
-      if ('vibrate' in navigator) navigator.vibrate(50);
-      onBumpDetected();
-      startCoolDown();
+    const boostedDelta = delta * 5;
+    // ゲージ表示（満タン=10）
+    setBumpStrength(Math.min(100, (boostedDelta / gaugeMax) * 100));
+    setMaxBump(prev => Math.max(prev, boostedDelta));
+    // 0.2秒間の平均値バッファ
+    const now = Date.now();
+    avgBuffer.current.push({ t: now, v: boostedDelta });
+    // バッファから0.2秒より古い値を除去
+    avgBuffer.current = avgBuffer.current.filter(e => now - e.t <= avgWindowMs);
+    const avg = avgBuffer.current.length > 0 ? avgBuffer.current.reduce((a, b) => a + b.v, 0) / avgBuffer.current.length : 0;
+    // 判定（ピーク or 平均）
+    if (!isCoolingDownRef.current && (
+      boostedDelta > bumpThreshold || avg > 2.0
+    )) {
+      if (now - lastBumpTimeRef.current > 300) { // 連続誤爆防止
+        if ('vibrate' in navigator) navigator.vibrate(50);
+        onBumpDetected();
+        startCoolDown();
+        lastBumpTimeRef.current = now;
+      }
     }
     lastTotalRef.current = currentTotal;
   };
@@ -256,7 +275,7 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
           />
         </div>
         <p className="text-xs text-center mt-2 font-bold">
-          最大値: {maxBump.toFixed(1)} / しきい値: {bumpThreshold}
+          最大値: {maxBump.toFixed(1)} / しきい値: {bumpThreshold} / 平均: {avgBuffer.current.length > 0 ? (avgBuffer.current.reduce((a, b) => a + b.v, 0) / avgBuffer.current.length).toFixed(2) : '0'}
         </p>
         <p className="text-xs text-center mt-2 font-bold">
           {bumpStrength > 75 ? '🔥 強い！' : bumpStrength > 40 ? '💪 良い感じ' : '👆 もっと強く！'}

@@ -77,7 +77,9 @@ function App() {
   const [inkSplashes, setInkSplashes] = useState<Array<{id: number, x: number, y: number, size: number}>>([])
   const [specialVictoryText, setSpecialVictoryText] = useState<string | null>(null) // 'BAN' or '役満'
   const [skillEffect, setSkillEffect] = useState<string | null>(null)
-  const [foodImage, setFoodImage] = useState<string | null>(null) // 飯テロ画像URL
+  // 不要なBase64画像配列の残骸を削除
+  // 飯テロ画像ポップアップ用
+  // 飯テロ！！アニメーション文字のランダム値をuseMemoで固定
 
   // フィニッシュ・インパクト演出用
   const [showFinishText, setShowFinishText] = useState(false)
@@ -235,7 +237,6 @@ function App() {
       setSlowMotion(false)
       setBuffedDamage(null)
       setSkillEffect(null)
-      setFoodImage(null)
       setScreenShake(false)
       setDamageFlash(false)
       setHealFlash(false)
@@ -296,6 +297,8 @@ function App() {
         document.body.classList.remove('no-flash')
       }, 500)
       
+      // 飯テロ画像表示用
+
       console.log('✅ All effects cleared')
     }
 
@@ -512,33 +515,12 @@ function App() {
     // Bump matching success handler
     newSocket.on('match_success', (data: any) => {
       console.log('Match success!', data)
-      const { roomId, opponentName, gameState } = data
+      const { roomId, opponentName } = data
       
       setCurrentRoomId(roomId)
       setScreen('game')
       setGameStarted(true)
       setIsWaiting(false)
-      
-      // ゲーム状態をリセット
-      setIsGameOver(false)
-      setWinner(null)
-      setLogs([])
-      
-      // プレイヤーデータを設定
-      const mySocketId = newSocket.id || ''
-      const me = gameState.player1.socketId === mySocketId ? gameState.player1 : gameState.player2
-      const opponent = gameState.player1.socketId === mySocketId ? gameState.player2 : gameState.player1
-      
-      setMyData(me)
-      setOpponentData(opponent)
-      
-      // myIndex を設定
-      const myIndexValue = gameState.player1.socketId === mySocketId ? 0 : 1
-      setMyIndex(myIndexValue)
-      
-      // turnIndex を初期化
-      setTurnIndex(0)
-      
       setLogs([`⚔️ バトル開始！ vs ${opponentName}`])
     })
 
@@ -586,16 +568,6 @@ function App() {
         setSkillEffect(data.skillEffect)
       }
 
-      // 【飯テロ】画像表示
-      if (data.extraImage) {
-        console.log('🍱 飯テロ画像を受信:', data.extraImage)
-        setFoodImage(data.extraImage)
-        // 3秒後に画像を消す
-        setTimeout(() => {
-          console.log('🍱 飯テロ画像を非表示')
-          setFoodImage(null)
-        }, 3000)
-      }
       
       // 役満フリーズ演出（国士無双・九蓮宝燈）
       if (data.skillEffect === 'yakuman-freeze') {
@@ -805,6 +777,7 @@ function App() {
 
         // 最大HP増加検知（自分）
         const prevMaxHp = myData?.state.maxHp ?? me.state.maxHp
+       
         if (me.state.maxHp > prevMaxHp) {
           setMyMaxHpExpand(true)
           setTimeout(() => setMyMaxHpExpand(false), 500)
@@ -865,7 +838,7 @@ function App() {
 
       // ターン進行時に演出を強制クリア（残留防止）
       setSkillEffect(null)
-      setFoodImage(null)  // 飯テロ画像も同時にリセット
+      // setFoodImage(null)  // 飯テロ画像も同時にリセット（未定義のため削除）
       setYakumanFreeze(false)  // 役満フリーズもリセット
       
       // shakeTurns を更新（画面揺れ管理用）
@@ -1059,6 +1032,23 @@ function App() {
     const timer = setTimeout(() => setSkillEffect(null), 3000)
     return () => clearTimeout(timer)
   }, [skillEffect])
+
+
+  // 飯テロ画像リスト（publicフォルダの画像パス）
+  const foodImages = ['/hamburg.png', '/karaage.jpg', '/ramen.jpg', '/sushi.jpg'];
+  // 飯テロ演出用状態
+  const [currentFood, setCurrentFood] = useState('');
+  const [showMeshi, setShowMeshi] = useState(false);
+  // 飯テロ演出（skillEffect監視）
+  useEffect(() => {
+    if (skillEffect === 'food-terror') {
+      const img = foodImages[Math.floor(Math.random() * foodImages.length)];
+      setCurrentFood(img);
+      setShowMeshi(true);
+      const timer = setTimeout(() => setShowMeshi(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [skillEffect]);
 
   const handleJoin = () => {
     if (socket && name.trim()) {
@@ -1673,58 +1663,6 @@ function App() {
           </div>
         )}
 
-        {/* 【飯テロ】画像表示オーバーレイ */}
-        {foodImage && (
-          <div 
-            className="pointer-events-auto fixed inset-0 flex items-center justify-center bg-black/80 animate-fade-in cursor-pointer"
-            style={{
-              zIndex: 10000,
-              animation: 'fadeIn 0.3s ease-in'
-            }}
-            onClick={() => setFoodImage(null)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                setFoodImage(null)
-              }
-            }}
-          >
-            <div className="relative w-full h-full flex items-center justify-center p-4">
-              <img 
-                src={foodImage} 
-                alt="飯テロ" 
-                className="max-w-2xl max-h-2xl object-cover rounded-lg shadow-2xl animate-scale-up"
-                style={{
-                  animation: 'scaleUp 0.4s ease-out'
-                }}
-              />
-              <div 
-                className="absolute inset-0 flex items-center justify-center text-white text-5xl font-black pointer-events-none"
-                style={{
-                  textShadow: '2px 2px 10px rgba(0, 0, 0, 0.8)',
-                  animation: 'fadeOut 0.5s ease-in 2.5s forwards'
-                }}
-              >
-                🤤
-              </div>
-            </div>
-            <style>{`
-              @keyframes fadeIn {
-                from { opacity: 0; }
-                to { opacity: 1; }
-              }
-              @keyframes fadeOut {
-                from { opacity: 1; }
-                to { opacity: 0; }
-              }
-              @keyframes scaleUp {
-                from { transform: scale(0.8); opacity: 0; }
-                to { transform: scale(1); opacity: 1; }
-              }
-            `}</style>
-          </div>
-        )}
         
         {/* ホワイトアウトフラッシュ（天和用） */}
         {whiteoutFlash && (
@@ -1897,9 +1835,9 @@ function App() {
                     </div>
                   </div>
                   <div>
-                    <div className="flex justify-between text-xs font-bold mb-1">
+                    <div className="flex justify-between text-xs font-bold mb-0.5">
                       <span>MP</span>
-                      <span>{myData.state.mp}/5</span>
+                      <span className="text-[8px]">{myData.state.mp}/5</span>
                     </div>
                     <div className="h-2 md:h-3 border-2 border-black bg-gray-200">
                       <div 
@@ -2069,7 +2007,7 @@ function App() {
                   <div>
                     <div className="flex justify-between text-xs font-bold mb-1">
                       <span>MP</span>
-                      <span>{opponentData.state.mp}/5</span>
+                      <span className="text-[8px]">{opponentData.state.mp}/5</span>
                     </div>
                     <div className="h-2 md:h-3 border-2 border-black bg-gray-200">
                       <div 
@@ -2148,7 +2086,7 @@ function App() {
               <button
                 type="button"
                 onClick={() => setMobileZoneInfoOpen(true)}
-                className="w-8 h-8 shrink-0 border-2 border-black bg-white font-black text-xs rounded-full shadow-[3px_3px_0px_0px_rgba(0,0,0,1)]"
+                className="w-8 h-8 shrink-0 border-2 border-black bg-white font-black text-xs rounded-full shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
               >
                 ?
               </button>
@@ -2210,6 +2148,71 @@ function App() {
                 閉じる
               </button>
             </div>
+          </div>
+        )}
+
+
+        {/* 飯テロ発動時の処理例（handleActionやskillEffect監視の中で）
+        useEffect(() => {
+          if (skillEffect === 'food-terror') {
+            // ランダム画像選択
+            const img = foodImages[Math.floor(Math.random() * foodImages.length)];
+            setCurrentFood(img);
+            setShowMeshi(true);
+            const timer = setTimeout(() => setShowMeshi(false), 3000);
+            return () => clearTimeout(timer);
+          }
+        }, [skillEffect]); */}
+
+        {/* 飯テロ画像＋テロップ演出 */}
+        {showMeshi && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexDirection: 'column',
+            background: 'rgba(0,0,0,0.45)'
+          }}>
+            <div style={{
+              position: 'absolute',
+              top: '18%',
+              left: '50%',
+              transform: 'translate(-50%, 0)',
+              zIndex: 10001,
+              color: '#fff',
+              fontSize: '3rem',
+              fontWeight: 'bold',
+              textShadow: '2px 2px 12px #ff4500, 0 0 40px #fff',
+              WebkitTextStroke: '2px #ff4500',
+              padding: '0.2em 0.8em',
+              borderRadius: '12px',
+              background: 'rgba(255,69,0,0.85)',
+              border: '4px solid #fff',
+              boxShadow: '0 0 24px #ff4500'
+            }}>
+              飯テロ攻撃！！
+            </div>
+            <img
+              src={currentFood}
+              alt="飯テロ画像"
+              style={{
+                position: 'relative',
+                top: '0',
+                left: '0',
+                transform: 'none',
+                zIndex: 10000,
+                width: '85%',
+                borderRadius: '15px',
+                border: '8px solid #ff4500',
+                boxShadow: '0 0 40px #fff, 0 0 80px #ff4500'
+              }}
+            />
           </div>
         )}
       </div>
