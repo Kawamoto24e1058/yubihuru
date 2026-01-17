@@ -305,40 +305,16 @@ function App() {
 
       console.log('✅ All effects cleared')
     }
+  }, [myData?.state.hp])
 
-    if (!gameStarted) {
-      console.log('🔄 Game ended - clearing all effects')
-      // 1. Reactの演出Stateをリセット
-      setSpecialVictoryText(null)
-      setVictoryResult(null)
-      setOpponentInkEffect(false)
-      setInkSplashes([])
-      setYakumanFreeze(false)
-      setLastAttackGrayscale(false)
-      setLastAttackFlash(false)
-      setShowImpact(false)
-      setShowFinishText(false)
-      setFatalFlash(false)
-      setFatalWarning(false)
-      setGlassBreak(false)
-      setSlowMotion(false)
-      setBuffedDamage(null)
-      setSkillEffect(null)
-      setScreenShake(false)
-      setDamageFlash(false)
-      setHealFlash(false)
-      setPoisonFlash(false)
-      setShieldEffect(false)
-      setYakumanFreeze(false)
-      setTenpaiUltimate(false)
-      setWhiteoutFlash(false)
-      setMahjongTiles([])
-      setIsShaking(false)
-      // リーチ状態もリセット
+  // 2戦目以降のリーチ状態リセットをゲーム開始時にも確実に行う
+  useEffect(() => {
+    if (gameStarted) {
       setMyRiichiState(false);
       setOpponentRiichiState(false);
       setShowRiichiLightning(false);
-  }, [myData?.state.hp])
+    }
+  }, [gameStarted]);
 
   useEffect(() => {
     const socketUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
