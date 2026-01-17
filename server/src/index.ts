@@ -1,13 +1,13 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 import { createServer } from 'http';
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import cors from 'cors';
 import { v4 as uuidv4 } from 'uuid';
 import {
   PlayerState,
   Skill,
-} from './types.js';
-import { SKILLS } from './data/skills.js';
+} from './types';
+import { SKILLS } from './data/skills';
 
 const app = express();
 const httpServer = createServer(app);
@@ -119,7 +119,7 @@ function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean
   if (currentTurn === 1) {
     const tenpaiLuck = Math.random();
     if (tenpaiLuck < 0.0001) { // 0.01%（1/10000）
-      const tenpai = SKILLS.find(skill => skill.id === 131);
+      const tenpai = SKILLS.find((skill: Skill) => skill.id === 131);
       console.log('🌟✨ 天和（テンホウ）が発動！究極のレア技！！！');
       return tenpai!;
     }
@@ -128,8 +128,8 @@ function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean
   // 博打のゾーン判定を最初に実行
   if (activeZone.type === '博打のゾーン') {
     const random = Math.random();
-    const gigaImpact = SKILLS.find(skill => skill.id === 200); // ギガインパクト
-    const doNothing = SKILLS.find(skill => skill.id === 201); // 何もしない
+    const gigaImpact = SKILLS.find((skill: Skill) => skill.id === 200); // ギガインパクト
+    const doNothing = SKILLS.find((skill: Skill) => skill.id === 201); // 何もしない
     
     if (random < 0.3) {
       // 30%の確率でギガインパクト
@@ -147,7 +147,7 @@ function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean
   if (currentHpPercent <= 0.25) {
     const comebackChance = Math.random();
     if (comebackChance < 0.4) { // 40%の確率で起死回生
-      const comeback = SKILLS.find(skill => skill.id === 119);
+      const comeback = SKILLS.find((skill: Skill) => skill.id === 119);
       console.log('🔄 HP危機的！起死回生が出現！');
       return comeback!;
     }
@@ -156,7 +156,7 @@ function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean
     // 【一撃必殺】超激レア抽選（0.1%）
     const ichigekiLuck = Math.random();
     if (ichigekiLuck < 0.001) { // 0.1%
-      const ichigeki = SKILLS.find(skill => skill.id === 120); // id:120 = 出禁/一撃必殺
+      const ichigeki = SKILLS.find((skill: Skill) => skill.id === 120); // id:120 = 出禁/一撃必殺
       if (ichigeki) {
         console.log('💥 一撃必殺（超激レア0.1%）が発動！');
         return ichigeki;
@@ -166,7 +166,7 @@ function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean
   // 【麻雀役満】九蓮宝燈の超超超レア抽選（0.05%）
   const chuurenLuck = Math.random();
   if (chuurenLuck < 0.0005) { // 0.05%
-    const chuuren = SKILLS.find(skill => skill.id === 130);
+    const chuuren = SKILLS.find((skill: Skill) => skill.id === 130);
     console.log('🀄✨ 幻の役満！九蓮宝燈が出現！');
     return chuuren!;
   }
@@ -174,7 +174,7 @@ function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean
   // 【麻雀役満】国士無双のレア抽選（0.1%）
   const kokushiLuck = Math.random();
   if (kokushiLuck < 0.001) { // 0.1%
-    const kokushi = SKILLS.find(skill => skill.id === 129);
+    const kokushi = SKILLS.find((skill: Skill) => skill.id === 129);
     console.log('🀄 役満！国士無双が出現！');
     return kokushi!;
   }
@@ -182,21 +182,21 @@ function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean
   // 【麻雀役】清一色の低確率抽選（2%）
   const chinItsuLuck = Math.random();
   if (chinItsuLuck < 0.02) { // 2%
-    const chinItsu = SKILLS.find(skill => skill.id === 128);
+    const chinItsu = SKILLS.find((skill: Skill) => skill.id === 128);
     console.log('🀄 清一色が出現！');
     return chinItsu!;
   }
 
   // 通常技リスト（ギガインパクト、何もしない、天和を除外 - id 200, 201, 131）
   // 天和（id:131）は1ターン目の特殊抽選でのみ出現
-  let availableSkills = SKILLS.filter(skill => 
+  let availableSkills = SKILLS.filter((skill: Skill) => 
     skill.id < 200 && skill.id !== 131 // 天和を除外
   );
 
   // 立直状態の場合、ロン/ツモを追加
   if (isRiichi) {
-    const ron = SKILLS.find(skill => skill.id === 112); // ロン
-    const tsumo = SKILLS.find(skill => skill.id === 113); // ツモ
+    const ron = SKILLS.find((skill: Skill) => skill.id === 112); // ロン
+    const tsumo = SKILLS.find((skill: Skill) => skill.id === 113); // ツモ
     if (ron && tsumo) {
       availableSkills = [...availableSkills, ron, tsumo];
       console.log('🀄 立直状態：ロン/ツモが出現可能！');
@@ -206,14 +206,14 @@ function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean
   // ゾーン効果：条件に合う技のみに絞り込む
   if (activeZone.type === '強攻のゾーン') {
     // 威力50以上の技のみ
-    const powerSkills = availableSkills.filter(skill => skill.power >= 50);
+    const powerSkills = availableSkills.filter((skill: Skill) => skill.power >= 50);
     if (powerSkills.length > 0) {
       availableSkills = powerSkills;
       console.log(`🔥 強攻のゾーン: 威力50以上の技のみ抽選 (${powerSkills.length}種類)`);
     }
   } else if (activeZone.type === '集中のゾーン') {
     // 回復・最大HP増加・補助系のみ
-    const supportSkills = availableSkills.filter(skill => 
+    const supportSkills = availableSkills.filter((skill: Skill) => 
       skill.type === 'heal' || 
       skill.type === 'buff' ||
       skill.effect === 'max_hp_boost' ||
@@ -226,7 +226,7 @@ function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean
     }
   } else if (activeZone.type === '乱舞のゾーン') {
     // 攻撃技のみ
-    const attackSkills = availableSkills.filter(skill => skill.type === 'attack');
+    const attackSkills = availableSkills.filter((skill: Skill) => skill.type === 'attack');
     if (attackSkills.length > 0) {
       availableSkills = attackSkills;
       console.log(`🌪️ 乱舞のゾーン: 攻撃技のみ抽選 (${attackSkills.length}種類)`);
@@ -319,7 +319,7 @@ function applySkillEffect(
         logs.push(`🥚 ${attacker.username}の${skill.name}！`);
         logs.push(`🤖 全自動で卵を割る機械で攻撃... ${defender.username}に${damage}ダメージ！`);
       } else {
-        logs.push(`${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ与えた！`);
+        logs.push(`${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージを与えた！`);
       }
 
       // ひっかく：10%で2回連続攻撃
@@ -566,7 +566,7 @@ function applySkillEffect(
       }
       // 「何もしない」技の特別処理
       else if (skill.id === 201) {
-        // 博打ゾーンのスカ（何も起きない）時の明確なログ
+        // 博打ゾーン의スカ（何も起きない）時の明確なログ
         logs.push(`💫 運が悪すぎる！何も起きなかった！`);
       }
       // ネタ技の処理
@@ -632,7 +632,7 @@ function applySkillEffect(
   };
 }
 
-io.on('connection', (socket) => {
+io.on('connection', (socket: Socket) => {
   console.log(`✅ User connected: ${socket.id}`);
 
   // 共通：技発動処理（手動/自動どちらもここで実行）
@@ -797,7 +797,7 @@ io.on('connection', (socket) => {
       
       if (upgradeRoll < 0.01) {
         // 1%: 九蓮宝燈（威力999, rainbow）
-        const chuuren = SKILLS.find(skill => skill.id === 130);
+        const chuuren = SKILLS.find((skill: Skill) => skill.id === 130);
         if (chuuren) {
           upgradedSkill = chuuren;
           riichiResolved = true;
@@ -805,7 +805,7 @@ io.on('connection', (socket) => {
         }
       } else if (upgradeRoll < 0.04) {
         // 3%: 国士無双（威力130, flash）
-        const kokushi = SKILLS.find(skill => skill.id === 129);
+        const kokushi = SKILLS.find((skill: Skill) => skill.id === 129);
         if (kokushi) {
           upgradedSkill = kokushi;
           riichiResolved = true;
@@ -813,7 +813,7 @@ io.on('connection', (socket) => {
         }
       } else if (upgradeRoll < 0.09) {
         // 5%: 清一色（威力80, blue）
-        const chinItsu = SKILLS.find(skill => skill.id === 128);
+        const chinItsu = SKILLS.find((skill: Skill) => skill.id === 128);
         if (chinItsu) {
           upgradedSkill = chinItsu;
           riichiResolved = true;
@@ -821,7 +821,7 @@ io.on('connection', (socket) => {
         }
       } else if (upgradeRoll < 0.19) {
         // 10%: 断幺九（威力40, yellow）
-        const tanYao = SKILLS.find(skill => skill.id === 127);
+        const tanYao = SKILLS.find((skill: Skill) => skill.id === 127);
         if (tanYao) {
           upgradedSkill = tanYao;
           riichiResolved = true;
@@ -1067,7 +1067,7 @@ io.on('connection', (socket) => {
     const yakuNames = ['断幺九', '清一色', '国士無双', '九蓮宝燈'];
     if (yakuNames.includes(upgradedSkill.name)) {
       const roomId = currentRoomId as string;
-      [currentGame.player1, currentGame.player2].forEach(p => {
+      [currentGame.player1, currentGame.player2].forEach((p: any) => {
         if (p.state.isRiichi) {
           p.state.isRiichi = false;
           p.state.riichiBombCount = 0;
@@ -1610,14 +1610,9 @@ io.on('connection', (socket) => {
   });
 
   // 【スマホ衝突マッチング】関連
-const bumpWaiters = new Map<string, { data: BumpData; timeoutId: ReturnType<typeof setTimeout> }>();
-const BUMP_MATCH_WINDOW_MS = 3000; // 衝撃検知の許容時間差（3秒）
-const BUMP_MATCH_DISTANCE_THRESHOLD = 0.001; // 許容距離（約100m）
-
-io.on('connection', (socket) => {
-  console.log(`✅ User connected: ${socket.id}`);
-
-  // (中略: 他のイベントハンドラ)
+  const bumpWaiters = new Map<string, { data: BumpData; timeoutId: ReturnType<typeof setTimeout> }>();
+  const BUMP_MATCH_WINDOW_MS = 3000; // 衝撃検知の許容時間差（3秒）
+  const BUMP_MATCH_DISTANCE_THRESHOLD = 0.001; // 許容距離（約100m）
 
   // 【スマホ衝突マッチング】bump_attempt ハンドラー
   socket.on('bump_attempt', (data: BumpData) => {
@@ -1638,7 +1633,7 @@ io.on('connection', (socket) => {
 
     // 待機リストから条件に合う相手を検索
     let matchedOpponentId: string | null = null;
-    let matchedOpponentData: { data: BumpData; timeoutId: NodeJS.Timeout } | null = null;
+    let matchedOpponentData: { data: BumpData; timeoutId: ReturnType<typeof setTimeout> } | null = null;
 
     for (const [opponentSocketId, waiter] of bumpWaiters.entries()) {
       const timeDiff = Math.abs(timestamp - waiter.data.timestamp);
@@ -1791,7 +1786,7 @@ setInterval(() => {
 
 const PORT = process.env.PORT || 3000;
 
-app.get('/', (req, res) => {
+app.get('/', (req: Request, res: Response) => {
   res.json({
     message: 'Yubifuru Game Server',
     status: 'running',
