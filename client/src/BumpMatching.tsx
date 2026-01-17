@@ -11,128 +11,147 @@ interface BumpMatchingProps {
 export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, onMatchSuccess, onBack }) => {
   const [bumpStrength, setBumpStrength] = useState(0);
   const [isWaiting, setIsWaiting] = useState(false);
-  const [statusText, setStatusText] = useState('スマホを相手とコツンとぶつけてください');
+  const [statusText, setStatusText] = useState('「マッチングを開始する」ボタンを押してください');
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  const [sensorReady, setSensorReady] = useState(false);
+  const [maxBump, setMaxBump] = useState(0);
   const lastTotalRef = useRef(9.8);
   const isCoolingDownRef = useRef(false);
   const animationFrameRef = useRef<number>();
+  const bumpThreshold = (() => {
+    const ua = navigator.userAgent;
+    if (/iPhone|iPad|iPod/.test(ua)) {
+      return 12; // iOSは少し低め
+    } else if (/Android/.test(ua)) {
+      return 12;
+    }
+    return 12;
+  })();
 
   // 衝撃検知ハンドラー
-  useEffect(() => {
+  const handleMotion = (event: DeviceMotionEvent) => {
+    const acc = event.accelerationIncludingGravity;
+    if (!acc || acc.x === null || acc.y === null || acc.z === null) return;
+    const { x, y, z } = acc;
+    const currentTotal = Math.sqrt(x * x + y * y + z * z);
+    const delta = Math.abs(currentTotal - lastTotalRef.current);
+    // ゲージの伸びを3倍敏感に
+    setBumpStrength(Math.min(100, delta * 9));
+    setMaxBump(prev => Math.max(prev, delta));
+    // 一瞬でもしきい値を超えたら即 bump_attempt
+    if (delta > bumpThreshold && !isCoolingDownRef.current) {
+      if ('vibrate' in navigator) navigator.vibrate(50);
+      onBumpDetected();
+      startCoolDown();
+    }
+    lastTotalRef.current = currentTotal;
+  };
+
+  const onBumpDetected = () => {
+    setStatusText('🔍 近くの相手を探しています...');
+    setIsWaiting(true);
     if (!socket) return;
-
-    const handleMotion = (event: DeviceMotionEvent) => {
-      const acc = event.accelerationIncludingGravity;
-      if (!acc || acc.x === null || acc.y === null || acc.z === null) return;
-
-      const { x, y, z } = acc;
-      const currentTotal = Math.sqrt(x * x + y * y + z * z);
-      const delta = Math.abs(currentTotal - lastTotalRef.current);
-
-      // ビジュアライザー更新
-      setBumpStrength(Math.min(100, delta * 3));
-
-      // 衝撃検知（しきい値25）
-      if (delta > 25 && !isCoolingDownRef.current) {
-        // 触覚フィードバック (Vibration API)
-        if ('vibrate' in navigator) {
-          navigator.vibrate(50);
-        }
-        onBumpDetected();
-        startCoolDown();
-      }
-
-      lastTotalRef.current = currentTotal;
-    };
-
-    const onBumpDetected = () => {
-      setStatusText('🔍 近くの相手を探しています...');
-      setIsWaiting(true);
-
-      // 位置情報取得
-      if ('geolocation' in navigator) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            const { latitude: lat, longitude: lng } = position.coords;
-            socket.emit('bump_attempt', {
-              username: playerName,
-              timestamp: Date.now(),
-              lat,
-              lng,
-            });
-            console.log('Bump detected with location:', { lat, lng });
-          },
-          (error) => {
-            console.error('Geolocation error:', error);
-            // 権限がブロックされている場合
-            if (error.code === error.PERMISSION_DENIED) {
-              setPermissionError('位置情報がブロックされています。ブラウザの設定から位置情報の使用を許可してください。');
-              setIsWaiting(false);
-              return;
-            }
-            // 位置情報取得失敗時もダミー値で送信（テスト用）
-            socket.emit('bump_attempt', {
-              username: playerName,
-              timestamp: Date.now(),
-              lat: 0,
-              lng: 0,
-            });
-          },
-          { timeout: 5000, enableHighAccuracy: true }
-        );
-      } else {
-        // 位置情報非対応
-        socket.emit('bump_attempt', {
-          username: playerName,
-          timestamp: Date.now(),
-          lat: 0,
-          lng: 0,
-        });
-      }
-    };
-
-    const startCoolDown = () => {
-      isCoolingDownRef.current = true;
-      setTimeout(() => {
-        isCoolingDownRef.current = false;
-        if (isWaiting) {
-          setStatusText('もう一度ぶつけてみてください');
-          setIsWaiting(false);
-        }
-      }, 2000);
-    };
-
-    // モーションイベント登録
-    if (typeof DeviceMotionEvent !== 'undefined') {
-      // iOS13+の許可リクエスト対応
-      if (typeof (DeviceMotionEvent as any).requestPermission === 'function') {
-        (DeviceMotionEvent as any).requestPermission()
-          .then((response: string) => {
-            if (response === 'granted') {
-              window.addEventListener('devicemotion', handleMotion as any);
-            } else if (response === 'denied') {
-              setPermissionError('モーションセンサーへのアクセスが拒否されました。ブラウザの設定から許可してください。');
-            }
-          })
-          .catch(() => {
-            setPermissionError('モーションセンサーへのアクセスに失敗しました。ブラウザの設定を確認してください。');
+    // 位置情報取得
+    let sent = false;
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          if (sent) return;
+          sent = true;
+          const { latitude: lat, longitude: lng } = position.coords;
+          socket.emit('bump_attempt', {
+            username: playerName,
+            timestamp: Date.now(),
+            lat,
+            lng,
           });
+        },
+        (error) => {
+          if (sent) return;
+          sent = true;
+          if (error.code === error.PERMISSION_DENIED) {
+            setPermissionError('位置情報がブロックされています。ブラウザの設定から位置情報の使用を許可してください。');
+            setIsWaiting(false);
+            return;
+          }
+          // 位置情報取得失敗時もダミー値で送信
+          socket.emit('bump_attempt', {
+            username: playerName,
+            timestamp: Date.now(),
+            lat: 0,
+            lng: 0,
+          });
+        },
+        { timeout: 5000, enableHighAccuracy: true }
+      );
+      // 5秒経過しても送信されていなければダミー値送信
+      setTimeout(() => {
+        if (!sent) {
+          sent = true;
+          socket.emit('bump_attempt', {
+            username: playerName,
+            timestamp: Date.now(),
+            lat: 0,
+            lng: 0,
+          });
+        }
+      }, 5000);
+    } else {
+      socket.emit('bump_attempt', {
+        username: playerName,
+        timestamp: Date.now(),
+        lat: 0,
+        lng: 0,
+      });
+    }
+  };
+
+  const startCoolDown = () => {
+    isCoolingDownRef.current = true;
+    setTimeout(() => {
+      isCoolingDownRef.current = false;
+      setMaxBump(0);
+      if (isWaiting) {
+        setStatusText('もう一度ぶつけてみてください');
+        setIsWaiting(false);
+      }
+    }, 2000);
+  };
+
+  // センサー監視開始（iOS許可取得）
+  const startSensor = async () => {
+    if (typeof DeviceMotionEvent !== 'undefined') {
+      if (typeof (DeviceMotionEvent as any).requestPermission === 'function') {
+        try {
+          const response = await (DeviceMotionEvent as any).requestPermission();
+          if (response === 'granted') {
+            window.addEventListener('devicemotion', handleMotion as any);
+            setSensorReady(true);
+            setStatusText('スマホを相手とコツンとぶつけてください');
+          } else {
+            setPermissionError('モーションセンサーへのアクセスが拒否されました。ブラウザの設定から許可してください。');
+          }
+        } catch {
+          setPermissionError('モーションセンサーへのアクセスに失敗しました。ブラウザの設定を確認してください。');
+        }
       } else {
         window.addEventListener('devicemotion', handleMotion as any);
+        setSensorReady(true);
+        setStatusText('スマホを相手とコツンとぶつけてください');
       }
     }
+  };
 
-    // マッチング成功ハンドラー
+  // マッチング成功ハンドラー
+  useEffect(() => {
+    if (!socket) return;
     const handleMatchSuccess = (data: { roomId: string; opponentName: string }) => {
-      console.log('Match success!', data);
       setStatusText('✅ マッチング成功！');
       setTimeout(() => {
         onMatchSuccess(data.roomId, data.opponentName);
       }, 500);
     };
-
     socket.on('match_success', handleMatchSuccess);
-
     return () => {
       window.removeEventListener('devicemotion', handleMotion as any);
       socket.off('match_success', handleMatchSuccess);
@@ -140,12 +159,12 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [socket, isWaiting, onMatchSuccess]);
+  }, [socket, onMatchSuccess]);
 
   // ビジュアライザーの減衰アニメーション
   useEffect(() => {
     const decay = () => {
-      setBumpStrength((prev) => Math.max(0, prev - 2));
+      setBumpStrength((prev) => Math.max(0, prev - 6)); // 3倍敏感
       animationFrameRef.current = requestAnimationFrame(decay);
     };
     animationFrameRef.current = requestAnimationFrame(decay);
@@ -199,6 +218,16 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
         スマホをぶつけて<br />マッチング！
       </h1>
 
+      {/* マッチング開始ボタン（iOSセンサー許可） */}
+      {!sensorReady && (
+        <button
+          className="w-full max-w-md py-6 mb-8 text-2xl font-black bg-yellow-400 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-yellow-300 active:scale-95 transition-all"
+          onClick={startSensor}
+        >
+          マッチングを開始する
+        </button>
+      )}
+
       {/* 手アイコン（揺れるアニメーション） */}
       <div className="relative mb-12 animate-bounce-horizontal">
         <div className="text-9xl">☝️</div>
@@ -212,6 +241,9 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
             <div className="animate-spin rounded-full h-8 w-8 border-4 border-black border-t-transparent"></div>
           </div>
         )}
+        {sensorReady && (
+          <div className="mt-2 text-center text-xs text-gray-500">センサー許可済み</div>
+        )}
       </div>
 
       {/* 衝撃強度ビジュアライザー */}
@@ -223,6 +255,9 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
             style={{ width: `${bumpStrength}%` }}
           />
         </div>
+        <p className="text-xs text-center mt-2 font-bold">
+          最大値: {maxBump.toFixed(1)} / しきい値: {bumpThreshold}
+        </p>
         <p className="text-xs text-center mt-2 font-bold">
           {bumpStrength > 75 ? '🔥 強い！' : bumpStrength > 40 ? '💪 良い感じ' : '👆 もっと強く！'}
         </p>
