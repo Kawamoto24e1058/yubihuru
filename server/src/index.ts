@@ -153,13 +153,15 @@ function getRandomSkill(activeZone: PlayerState['activeZone'], isRiichi: boolean
     }
   }
 
-  // 【特殊勝利】出禁の超レア抽選（0.15%）
-  const rareLuck = Math.random();
-  if (rareLuck < 0.0015) { // 0.15%
-    const kinshi = SKILLS.find(skill => skill.id === 120);
-    console.log('⛔ 出禁が発動！相手を場外へ！');
-    return kinshi!;
-  }
+    // 【一撃必殺】超激レア抽選（0.1%）
+    const ichigekiLuck = Math.random();
+    if (ichigekiLuck < 0.001) { // 0.1%
+      const ichigeki = SKILLS.find(skill => skill.id === 120); // id:120 = 出禁/一撃必殺
+      if (ichigeki) {
+        console.log('💥 一撃必殺（超激レア0.1%）が発動！');
+        return ichigeki;
+      }
+    }
 
   // 【麻雀役満】九蓮宝燈の超超超レア抽選（0.05%）
   const chuurenLuck = Math.random();
@@ -609,7 +611,7 @@ function applySkillEffect(
       // ケースB: 通常技の場合
       // ・ダメージ倍率はかけない（1.0倍）
       // ・「裏ドラ（ランダム追加ダメージ 10〜50）」を加算する
-      const uraDora = Math.floor(Math.random() * 41) + 10;
+        const uraDora = Math.floor(Math.random() * 41) + 10; // 10〜50の範囲
       damage += uraDora;
       defender.state.hp = Math.max(0, defender.state.hp - uraDora);
       console.log(`🀄 裏ドラ適用: +${uraDora} -> ${damage}`);
