@@ -9,22 +9,22 @@ interface BumpMatchingProps {
 }
 
 export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, onMatchSuccess, onBack }) => {
-  const [bumpStrength, setBumpStrength] = useState(0);
+  const [bumpStrength, setBumpStrength] = useState(0); // 0-100
   const [isWaiting, setIsWaiting] = useState(false);
   const [statusText, setStatusText] = useState('「マッチングを開始する」ボタンを押してください');
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [sensorReady, setSensorReady] = useState(false);
   const [maxBump, setMaxBump] = useState(0);
+  const [showFlash, setShowFlash] = useState(false);
+  const [showDetected, setShowDetected] = useState(false);
   const lastTotalRef = useRef(9.8);
-  const isCoolingDownRef = useRef(false);
   const animationFrameRef = useRef<number>();
-  // 超高感度設定
-  const bumpThreshold = 3.0; // しきい値
-  const gaugeMax = 10.0;
-  // 0.2秒間の平均値用バッファ
-  const avgBuffer = useRef<{ t: number; v: number }[]>([]);
-  const avgWindowMs = 200;
+  // 判定パラメータ
+  const bumpThreshold = 1.5; // 1回の加速度絶対値しきい値（半分に緩和）
+  const gaugeMax = 6.0; // ゲージ満タン値（半分に緩和）
   const lastBumpTimeRef = useRef(0);
+  const gaugeBuffer = useRef<{ t: number; v: number }[]>([]); // 0.2秒間の加速度絶対値バッファ
+  const avgWindowMs = 200;
 
   // 衝撃検知ハンドラー
   const handleMotion = (event: DeviceMotionEvent) => {
@@ -40,29 +40,44 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
       accY += event.acceleration.y ?? 0;
       accZ += event.acceleration.z ?? 0;
     }
+    // iOSのみ3倍ブースト
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isIOS) {
+      accX *= 3; accY *= 3; accZ *= 3;
+    }
     const currentTotal = Math.sqrt(accX * accX + accY * accY + accZ * accZ);
     const delta = Math.abs(currentTotal - lastTotalRef.current);
-    const boostedDelta = delta * 5;
-    // ゲージ表示（満タン=10）
-    setBumpStrength(Math.min(100, (boostedDelta / gaugeMax) * 100));
-    setMaxBump(prev => Math.max(prev, boostedDelta));
-    // 0.2秒間の平均値バッファ
+    // 0.2秒間の加速度絶対値バッファに積分的に蓄積
     const now = Date.now();
-    avgBuffer.current.push({ t: now, v: boostedDelta });
-    // バッファから0.2秒より古い値を除去
-    avgBuffer.current = avgBuffer.current.filter(e => now - e.t <= avgWindowMs);
-    const avg = avgBuffer.current.length > 0 ? avgBuffer.current.reduce((a, b) => a + b.v, 0) / avgBuffer.current.length : 0;
-    // 判定（ピーク or 平均）
-    if (!isCoolingDownRef.current && (
-      boostedDelta > bumpThreshold || avg > 2.0
-    )) {
-      if (now - lastBumpTimeRef.current > 300) { // 連続誤爆防止
-        // しきい値を超えた瞬間バイブ（強調）
-        if ('vibrate' in navigator) navigator.vibrate([100, 50, 100]);
-        onBumpDetected();
-        startCoolDown();
-        lastBumpTimeRef.current = now;
-      }
+    const absAcc = Math.abs(accX) + Math.abs(accY) + Math.abs(accZ);
+    // 1回の加速度絶対値がしきい値超えたらゲージ加算
+    let add = 0;
+    if (absAcc > bumpThreshold) {
+      add = absAcc * 0.6; // 係数で調整
+    }
+    // バッファに追加
+    gaugeBuffer.current.push({ t: now, v: add });
+    // 0.2秒より古い値を除去
+    gaugeBuffer.current = gaugeBuffer.current.filter(e => now - e.t <= avgWindowMs);
+    // 合計値でゲージ進行
+    const sum = gaugeBuffer.current.reduce((a, b) => a + b.v, 0);
+    let nextStrength = Math.min(100, (sum / gaugeMax) * 100);
+    setBumpStrength(nextStrength);
+    setMaxBump(prev => Math.max(prev, absAcc));
+    // 50%以上で白発光
+    if (nextStrength > 50 && nextStrength < 100) {
+      setShowFlash(true);
+      setTimeout(() => setShowFlash(false), 120);
+    }
+    // 100%到達で即送信
+    if (nextStrength >= 100 && !isWaiting) {
+      setShowDetected(true);
+      setTimeout(() => setShowDetected(false), 800);
+      if ('vibrate' in navigator) navigator.vibrate([100, 50, 100]);
+      onBumpDetected();
+      // ゲージリセット
+      gaugeBuffer.current = [];
+      setTimeout(() => setBumpStrength(0), 400);
     }
     lastTotalRef.current = currentTotal;
   };
@@ -271,8 +286,16 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
         )}
       </div>
 
-      {/* 衝撃強度ビジュアライザー */}
-      <div className="w-full max-w-md">
+      {/* 衝撃強度ビジュアライザー＋フィードバック */}
+      <div className="w-full max-w-md relative">
+        {/* 白発光 */}
+        {showFlash && <div className="absolute inset-0 z-20 bg-white opacity-70 pointer-events-none animate-flash" style={{borderRadius:'12px'}} />}
+        {/* SHOCK DETECTED! */}
+        {showDetected && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center pointer-events-none">
+            <span className="text-4xl font-black text-yellow-400" style={{WebkitTextStroke:'2px #000',textShadow:'0 0 24px #fff,0 0 40px #ff0'}}>SHOCK DETECTED!</span>
+          </div>
+        )}
         <p className="text-sm font-bold mb-2 text-center">衝撃の強さ</p>
         <div className="relative h-8 bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] overflow-hidden">
           {/* 目標ライン（赤い縦線） */}
@@ -289,12 +312,12 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
           />
           {/* ゲージ本体 */}
           <div
-            className={`h-full transition-all duration-100 ${maxBump > bumpThreshold ? 'bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-500' : 'bg-gradient-to-r from-blue-400 via-blue-300 to-blue-200'}`}
+            className={`h-full transition-all duration-100 ${bumpStrength >= 100 ? 'bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-500' : 'bg-gradient-to-r from-blue-400 via-blue-300 to-blue-200'}`}
             style={{ width: `${bumpStrength}%`, zIndex: 1 }}
           />
         </div>
         <p className="text-xs text-center mt-2 font-bold">
-          最大値: {maxBump.toFixed(1)} / しきい値: {bumpThreshold} / 平均: {avgBuffer.current.length > 0 ? (avgBuffer.current.reduce((a, b) => a + b.v, 0) / avgBuffer.current.length).toFixed(2) : '0'}
+          最大値: {maxBump.toFixed(1)} / しきい値: {bumpThreshold}
         </p>
         <p className="text-xs text-center mt-2 font-bold">
           {bumpStrength > 75 ? '🔥 強い！' : bumpStrength > 40 ? '💪 良い感じ' : '👆 もっと強く！'}
