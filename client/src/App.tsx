@@ -126,6 +126,10 @@ function App() {
       setLogs([]);
       setShowMenu(false);
       setShowQuitConfirm(false);
+      // リーチ状態もリセット
+      setMyRiichiState(false);
+      setOpponentRiichiState(false);
+      setShowRiichiLightning(false);
     }
   }, [screen])
 
@@ -302,34 +306,38 @@ function App() {
       console.log('✅ All effects cleared')
     }
 
-    if (isGameOver) {
-      const timer = setTimeout(() => {
-        setSpecialVictoryText(null)
-        setVictoryResult(null)
-        setOpponentInkEffect(false)
-        setInkSplashes([])
-        setYakumanFreeze(false)
-        setLastAttackGrayscale(false)
-        setLastAttackFlash(false)
-        setShowImpact(false)
-        setShowFinishText(false)
-        setFatalFlash(false)
-        setFatalWarning(false)
-        setGlassBreak(false)
-        setSlowMotion(false)
-        setBuffedDamage(null)
-      }, 2000)
-      return () => clearTimeout(timer)
-    }
-  }, [gameStarted, isGameOver])
-
-  // HP減少時のshakeアニメーション
-  useEffect(() => {
-    if (myData && myData.state.hp > 0) {
-      setIsShaking(true)
-      const timer = setTimeout(() => setIsShaking(false), 500)
-      return () => clearTimeout(timer)
-    }
+    if (!gameStarted) {
+      console.log('🔄 Game ended - clearing all effects')
+      // 1. Reactの演出Stateをリセット
+      setSpecialVictoryText(null)
+      setVictoryResult(null)
+      setOpponentInkEffect(false)
+      setInkSplashes([])
+      setYakumanFreeze(false)
+      setLastAttackGrayscale(false)
+      setLastAttackFlash(false)
+      setShowImpact(false)
+      setShowFinishText(false)
+      setFatalFlash(false)
+      setFatalWarning(false)
+      setGlassBreak(false)
+      setSlowMotion(false)
+      setBuffedDamage(null)
+      setSkillEffect(null)
+      setScreenShake(false)
+      setDamageFlash(false)
+      setHealFlash(false)
+      setPoisonFlash(false)
+      setShieldEffect(false)
+      setYakumanFreeze(false)
+      setTenpaiUltimate(false)
+      setWhiteoutFlash(false)
+      setMahjongTiles([])
+      setIsShaking(false)
+      // リーチ状態もリセット
+      setMyRiichiState(false);
+      setOpponentRiichiState(false);
+      setShowRiichiLightning(false);
   }, [myData?.state.hp])
 
   useEffect(() => {
