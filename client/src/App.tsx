@@ -60,6 +60,9 @@ function App() {
     type?: string;
   } | null>(null)
   
+  // リーチ状態を管理
+  const [isRiichiActive, setIsRiichiActive] = useState(false)
+  
   // turnIndex ターン管理用（新方式）
   const [myIndex, setMyIndex] = useState<number | null>(null)
   const [turnIndex, setTurnIndex] = useState<number>(0)
@@ -71,6 +74,12 @@ function App() {
   const [myRiichiState, setMyRiichiState] = useState(false)
   const [opponentRiichiState, setOpponentRiichiState] = useState(false)
   const [showRiichiLightning, setShowRiichiLightning] = useState(false) // 稲妻エフェクト
+  
+  // リーチ状態の監視 - いずれかのプレイヤーがリーチ状態なら背景演出を有効化
+  useEffect(() => {
+    const shouldActivateRiichi = myRiichiState || opponentRiichiState;
+    setIsRiichiActive(shouldActivateRiichi);
+  }, [myRiichiState, opponentRiichiState]);
   
   // 技名表示用
   const [showImpact, setShowImpact] = useState(false)
@@ -1418,7 +1427,8 @@ function App() {
         {/* バトル背景エフェクト */}
         <BattleBackground 
           currentSkill={currentSkill} 
-          isBattleActive={gameStarted} 
+          isBattleActive={gameStarted}
+          isRiichiActive={isRiichiActive}
         />
 
         {/* メニューボタン（右上） */}

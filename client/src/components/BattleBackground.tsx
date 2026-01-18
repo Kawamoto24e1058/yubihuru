@@ -19,16 +19,20 @@ interface BattleBackgroundProps {
     type?: string;
   } | null;
   isBattleActive?: boolean;
+  isRiichiActive?: boolean; // リーチ状態を検知するためのprops
 }
 
 const BattleBackground: React.FC<BattleBackgroundProps> = ({ 
   currentSkill, 
-  isBattleActive = false 
+  isBattleActive = false,
+  isRiichiActive = false 
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [backgroundObjects, setBackgroundObjects] = useState<BackgroundObject[]>([]);
   const objectPoolRef = useRef<BackgroundObject[]>([]);
   const activeAnimationsRef = useRef<gsap.core.Tween[]>([]);
+  const riichiAnimationsRef = useRef<gsap.core.Tween[]>([]);
+  const [isRiichiMode, setIsRiichiMode] = useState(false);
 
   // オブジェクトプールの初期化
   useEffect(() => {
@@ -47,6 +51,129 @@ const BattleBackground: React.FC<BattleBackgroundProps> = ({
     objectPoolRef.current = pool;
     setBackgroundObjects([...pool]);
   }, []);
+
+  // リーチ状態の監視と演出制御
+  useEffect(() => {
+    if (isRiichiActive && !isRiichiMode) {
+      // リーチ開始
+      setIsRiichiMode(true);
+      startRiichiEffects();
+    } else if (!isRiichiActive && isRiichiMode) {
+      // リーチ解除
+      setIsRiichiMode(false);
+      stopRiichiEffects();
+    }
+  }, [isRiichiActive, isRiichiMode]);
+
+  // リーチ演出の開始
+  const startRiichiEffects = () => {
+    console.log('🔥 リーチ演出開始！');
+    
+    // すべてのアクティブなオブジェクトに燃えるエフェクトを適用
+    objectPoolRef.current.forEach((obj, index) => {
+      if (obj.isActive && obj.element) {
+        // 燃える色に変更
+        gsap.to(obj.element, {
+          background: 'linear-gradient(45deg, #FF6B35, #F7931E, #FF0000)',
+          boxShadow: '0 0 30px rgba(255, 107, 53, 0.9), 0 0 60px rgba(247, 147, 30, 0.6)',
+          filter: 'brightness(1.5) saturate(1.5)',
+          duration: 0.5,
+          delay: index * 0.02,
+          ease: "power2.out"
+        });
+
+        // 落下アニメーション開始
+        startFallingAnimation(obj);
+        
+        // 火の粉パーティクル効果
+        createFireParticles(obj);
+      }
+    });
+  };
+
+  // リーチ演出の停止
+  const stopRiichiEffects = () => {
+    console.log('💧 リーチ演出停止！');
+    
+    // すべてのアニメーションを停止
+    riichiAnimationsRef.current.forEach(tween => tween.kill());
+    riichiAnimationsRef.current = [];
+    
+    // 元の色にフェードアウト
+    objectPoolRef.current.forEach((obj) => {
+      if (obj.isActive && obj.element) {
+        gsap.to(obj.element, {
+          background: '', // 元のスタイルに戻す
+          boxShadow: '',
+          filter: 'brightness(1) saturate(1)',
+          duration: 1.0,
+          ease: "power2.inOut"
+        });
+      }
+    });
+  };
+
+  // 落下アニメーション
+  const startFallingAnimation = (obj: BackgroundObject) => {
+    if (!obj.element) return;
+    
+    const fallAnimation = gsap.to(obj.element!, {
+      y: window.innerHeight + 100, // 画面下端まで落下
+      duration: 3 + Math.random() * 2, // 3-5秒で落下
+      ease: "none",
+      repeat: -1, // 無限ループ
+      onRepeat: () => {
+        // 画面上端にリセット
+        gsap.set(obj.element!, { y: -100 });
+      }
+    });
+    
+    riichiAnimationsRef.current.push(fallAnimation);
+  };
+
+  // 火の粉パーティクル効果
+  const createFireParticles = (obj: BackgroundObject) => {
+    if (!obj.element) return;
+    
+    for (let i = 0; i < 3; i++) {
+      const particle = document.createElement('div');
+      particle.className = 'fire-particle';
+      particle.style.cssText = `
+        position: absolute;
+        width: 4px;
+        height: 4px;
+        background: radial-gradient(circle, #FF6B35, #FF0000);
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 5;
+      `;
+      
+      obj.element.appendChild(particle);
+      
+      // パーティクルアニメーション
+      const angle = (Math.PI * 2 * i) / 3;
+      const distance = 20 + Math.random() * 10;
+      
+      gsap.fromTo(particle, 
+        {
+          x: 0,
+          y: 0,
+          opacity: 1,
+          scale: 1
+        },
+        {
+          x: Math.cos(angle) * distance,
+          y: Math.sin(angle) * distance - 20,
+          opacity: 0,
+          scale: 0.3,
+          duration: 1.5 + Math.random() * 0.5,
+          ease: "power2.out",
+          repeat: -1,
+          repeatDelay: 0.5
+        }
+      );
+    }
+  };
 
   // 技に応じた背景エフェクトをトリガー
   const triggerBackgroundEffect = (skillType: string, skillEffect?: string) => {
@@ -174,6 +301,7 @@ const BattleBackground: React.FC<BattleBackgroundProps> = ({
   useEffect(() => {
     return () => {
       activeAnimationsRef.current.forEach(tween => tween.kill());
+      riichiAnimationsRef.current.forEach(tween => tween.kill());
     };
   }, []);
 
