@@ -763,6 +763,7 @@ io.on('connection', (socket: Socket) => {
         if (defender.state.activeEffectTurns === 0) defender.state.activeEffect = 'none';
       }
 
+      // ターン交代処理
       currentGame.currentTurn++;
       const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId 
         ? currentGame.player2 
@@ -782,11 +783,20 @@ io.on('connection', (socket: Socket) => {
       };
       io.to(currentRoomId).emit('battle_update', battleUpdate);
 
+      // クライアントへの明確な通知
+      io.to(currentRoomId).emit('skill_effect', {
+        skill: { name: '骨折', effect: 'broken', type: 'status' },
+        message: `${attacker.username}は骨折していて動けない！`,
+        target: attacker.username
+      });
+
       io.to(currentRoomId).emit('turn_change', {
         currentTurnPlayerId: currentGame.currentTurnPlayerId,
         currentTurnPlayerName: nextPlayer.username,
       });
 
+      console.log(`🔄 ${attacker.username} is broken, turn switched to ${nextPlayer.username}`);
+      console.log(`📊 Game state after broken turn: turn=${currentGame.currentTurn}, currentPlayer=${nextPlayer.username}`);
       return;
     }
 
