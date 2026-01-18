@@ -33,15 +33,15 @@ const ZONE_DESCRIPTIONS = {
 
 function App() {
   const [socket, setSocket] = useState<Socket | null>(null)
-  const [name, setName] = useState('')
-  const [isWaiting, setIsWaiting] = useState(false)
+  const [screen, setScreen] = useState<'start' | 'bump' | 'game' | 'result'>('start')
   const [gameStarted, setGameStarted] = useState(false)
   const [myData, setMyData] = useState<PlayerData | null>(null)
   const [opponentData, setOpponentData] = useState<PlayerData | null>(null)
   const [logs, setLogs] = useState<string[]>([])
   const [isProcessing, setIsProcessing] = useState<boolean>(false)
   const [isAnimating, setIsAnimating] = useState<boolean>(false)
-
+  const [isWaiting, setIsWaiting] = useState(false)
+  
   const [isShaking, setIsShaking] = useState(false)
   const [selectedZoneType, setSelectedZoneType] = useState<'強攻のゾーン' | '集中のゾーン' | '乱舞のゾーン' | '博打のゾーン'>('強攻のゾーン')
   const [damageFlash, setDamageFlash] = useState(false)
@@ -53,6 +53,42 @@ function App() {
   const [shieldEffect, setShieldEffect] = useState(false)
   const [myMaxHpExpand, setMyMaxHpExpand] = useState(false)
   const [opponentMaxHpExpand, setOpponentMaxHpExpand] = useState(false)
+  
+  // 名前と戦績の永続化
+  const [savedPlayerName, setSavedPlayerName] = useState('')
+  const [totalWins, setTotalWins] = useState(0)
+  
+  // localStorageから名前と戦績を読み込み
+  useEffect(() => {
+    const savedName = localStorage.getItem('playerName');
+    const savedWins = localStorage.getItem('totalWins');
+    
+    if (savedName) {
+      setSavedPlayerName(savedName);
+    }
+    if (savedWins) {
+      setTotalWins(parseInt(savedWins, 10));
+    }
+  }, []);
+  
+  // 名前と戦績の保存
+  useEffect(() => {
+    if (savedPlayerName) {
+      localStorage.setItem('playerName', savedPlayerName);
+    }
+    if (totalWins > 0) {
+      localStorage.setItem('totalWins', totalWins.toString());
+    }
+  }, [savedPlayerName, totalWins]);
+  
+  // 段位計算関数
+  const calculateRank = (wins: number): string => {
+    if (wins >= 50) return '破壊神';
+    if (wins >= 20) return '指振り名人';
+    if (wins >= 10) return '指振り専門学生級';
+    if (wins >= 5) return '指振り見習い';
+    return '初心者';
+  };
   
   // 背景エフェクト用の現在のスキル情報
   const [currentSkill, setCurrentSkill] = useState<{
@@ -166,12 +202,10 @@ function App() {
   const [glassBreak, setGlassBreak] = useState(false)
   const [slowMotion, setSlowMotion] = useState(false)
   const [buffedDamage, setBuffedDamage] = useState<number | null>(null)
-  const [screen, setScreen] = useState<'start' | 'bump' | 'game'>('start')
   const [showMenu, setShowMenu] = useState(false)
   const [showQuitConfirm, setShowQuitConfirm] = useState(false)
   const [canReconnect, setCanReconnect] = useState(false)
   const [isCheckingReconnect, setIsCheckingReconnect] = useState(true)
-  const [totalWins, setTotalWins] = useState(0) // 通算勝利数
   const [currentStreak, setCurrentStreak] = useState(0) // 連勝数
   const [shakeTurns, setShakeTurns] = useState(0) // サーバー側のターンベースの画面揺れ管理
   const [canResume, setCanResume] = useState(false) // オートセーブデータから復帰可能かチェック
@@ -1005,35 +1039,14 @@ function App() {
       
       // 戦績を更新・保存
       if (isWinner) {
-        // 勝利時：通算勝利数と連勝数を +1
+        // 勝利時：通算勝利数を +1
         const newTotalWins = totalWins + 1
-        const newStreak = currentStreak + 1
         setTotalWins(newTotalWins)
-        setCurrentStreak(newStreak)
-        localStorage.setItem('yubihuru_total_wins', newTotalWins.toString())
-        localStorage.setItem('yubihuru_current_streak', newStreak.toString())
-      } else {
-        // 敗北時：連勝数をリセット（通算勝利数は変わらない）
-        setCurrentStreak(0)
-        localStorage.setItem('yubihuru_current_streak', '0')
+        
+        // localStorageにも保存
+        localStorage.setItem('totalWins', newTotalWins.toString())
       }
-      
-      // バトル終了時、active_battle をクリア
-      localStorage.removeItem('yubihuru_active_battle')
-      // セッションを完全に破棄（復帰ボタンを無効化）
-      localStorage.removeItem('yubihuru_player_id')
-      
-      // グレースケール解除
-      setLastAttackGrayscale(false)
-      setLastAttackFlash(false)
-      
-      // ★演出終了後にスタート画面に遷移（背景点滅防止）
-      setTimeout(() => {
-        console.log('🏁 Transitioning to start screen after 2.5s')
-        setScreen('start') // Trigger background cleanup via screen state change
-        setGameStarted(false)
-      }, 2500)
-    })
+    });
 
     // 【スマホ救済】しつこい同期：待機中は1秒ごとにサーバーへ状態確認
     newSocket.on('force_battle_sync', (data: any) => {
@@ -1134,13 +1147,20 @@ function App() {
   }, [skillEffect, gameStarted]);
 
   const handleJoin = () => {
-    if (socket && name.trim()) {
+    if (socket && savedPlayerName.trim()) {
+      // AudioContextを初期化（ブラウザの自動再生制限解除）
+      audioManager.initAudioContext();
+      audioManager.resumeAudioContext();
+      
+      // BGMを再生開始
+      audioManager.playBGM('normal');
+      
       // ユーザー名を localStorage に保存
-      localStorage.setItem('yubihuru_user_name', name)
+      localStorage.setItem('playerName', savedPlayerName);
       // 新規開始時はセーブデータを削除
       localStorage.removeItem('yubihuru_save')
       setCanResume(false)
-      socket.emit('joinGame', { username: name })
+      socket.emit('joinGame', { username: savedPlayerName })
       setIsWaiting(true)
     }
   }
@@ -2334,18 +2354,6 @@ function App() {
               50% { opacity: 1; }
             }
             .lightning-flash {
-              position: fixed;
-              top: 0;
-              left: 0;
-              right: 0;
-              bottom: 0;
-              background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.8) 50%, transparent 100%);
-              animation: lightning 0.1s infinite;
-              pointer-events: none;
-              z-index: 10;
-            }
-          `}</style>
-          <div className="lightning-flash"></div>
         </>
       )}
       <div className="login-card bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-8 max-w-md w-full relative z-20">
@@ -2381,18 +2389,26 @@ function App() {
                 </button>
               )}
 
-              <div>
-                <label className="block font-black text-sm mb-2">PLAYER NAME</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleJoin()}
-                  placeholder="Enter your name..."
-                  className="w-full px-4 py-3 border-4 border-black font-bold focus:outline-none focus:ring-4 focus:ring-yellow-300"
-                  maxLength={20}
-                />
-              </div>
+              <div className="bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-4 text-center">
+                <label className="block font-black text-sm mb-2">
+                  PLAYER NAME
+                </label>
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={savedPlayerName}
+                    onChange={(e) => setSavedPlayerName(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleJoin()}
+                    placeholder="Enter your name..."
+                    className="w-full px-4 py-3 border-4 border-black font-bold focus:outline-none focus:ring-4 focus:ring-yellow-300"
+                    maxLength={20}
+                  />
+                  <div className="text-center">
+                    <span className="text-lg font-bold">{totalWins}</span>
+                    <span className="text-sm font-bold text-gray-600 ml-2">勝</span>
+                    <span className="text-sm font-bold text-blue-600 ml-1">{calculateRank(totalWins)}</span>
+                  </div>
+                </div>
 
               {/* 戦績表示 */}
               <div 
@@ -2414,29 +2430,7 @@ function App() {
               </div>
 
               <button
-                onClick={handleJoin}
-                className="w-full py-4 bg-blue-500 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-400 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black text-xl"
-              >
-                ⚔️ 新しいバトルを始める
-              </button>
-
-              <button
-                onClick={() => setScreen('bump')}
-                disabled={!name.trim()}
-                className={`w-full py-4 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-xl ${
-                  name.trim()
-                    ? 'bg-orange-500 hover:bg-orange-400 active:translate-x-1 active:translate-y-1 active:shadow-none'
-                    : 'bg-gray-400 cursor-not-allowed'
-                }`}
-              >
-                📱 スマホをぶつけてマッチ
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  )
+            </div>
 }
 
-export default App
+export default App;
