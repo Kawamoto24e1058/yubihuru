@@ -316,6 +316,9 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
         lat: 0,
         lng: 0,
       });
+    }
+  };
+
   // センサー監視開始（iOS許可取得）
   const startSensor = async () => {
     // AudioContextを初期化（ブラウザの自動再生制限解除）
@@ -451,3 +454,5 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
     </div>
   );
 };
+
+export default BumpMatching;

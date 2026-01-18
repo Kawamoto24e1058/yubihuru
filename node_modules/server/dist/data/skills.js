@@ -1,5 +1,8 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SKILLS = void 0;
 // 100種類以上の技マスターデータ
-export const SKILLS = [
+exports.SKILLS = [
     // ============================================
     // カテゴリー1: 通常攻撃系 (40種類) - 威力10〜40
     // ============================================

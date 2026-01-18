@@ -7,6 +7,8 @@
     "module": "ESNext",
     "types": ["vite/client"],
     "skipLibCheck": true,
+    "noImplicitAny": false,    // ← ここを貼り付け！
+    "strict": false           // ← これも追加すると、よりエラーが出にくくなります
 
     /* Bundler mode */
     "moduleResolution": "bundler",

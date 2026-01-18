@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { io, Socket } from 'socket.io-client'
 import './App.css'
 import type { GameStartData, PlayerData } from './types'
-import { FallingBackground3D } from './FallingBackground3D'
+import { BackgroundView } from './components/BackgroundView'
 import { BumpMatching } from './BumpMatching'
 import BattleBackground from './components/BattleBackground'
 import { audioManager } from './utils/AudioManager'
@@ -1489,7 +1489,9 @@ function App() {
       <div className={`game-container min-h-screen p-4 pt-[150px] pb-[140px] md:pt-4 md:pb-0 transition-all relative ${isShaking ? 'animate-shake' : ''} ${screenShake ? 'scale-110 rotate-3' : ''} ${gameState.shakeTurns > 0 ? 'animate-window-shake' : ''} ${lastAttackGrayscale ? 'filter grayscale' : ''} ${slowMotion ? 'animate-slow-motion' : ''}`}>
         {/* 3D背景 (技に応じて変化、UIの見やすさのためopacity 0.4) */}
         <div className="fixed inset-0 z-0 pointer-events-none">
-          <FallingBackground3D objectType={fallingType} opacity={0.4} burst={burstEffect} />
+          <div style={{ opacity: 0.4 }}>
+            <BackgroundView />
+          </div>
         </div>
 
         {/* バトル背景エフェクト */}
@@ -2344,7 +2346,7 @@ function App() {
   return (
     <div className={`min-h-screen ${showRiichiLightning ? 'animate-pulse' : ''} flex items-center justify-center p-4 relative`}>
       {/* 3D背景 */}
-      <FallingBackground3D />
+      <BackgroundView />
       {/* 立直時の稲妻エフェクト */}
       {(myRiichiState || opponentRiichiState) && (
         <>
@@ -2354,6 +2356,18 @@ function App() {
               50% { opacity: 1; }
             }
             .lightning-flash {
+              position: fixed;
+              top: 0;
+              left: 0;
+              right: 0;
+              bottom: 0;
+              background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.8) 50%, transparent 100%);
+              animation: lightning 0.1s infinite;
+              pointer-events: none;
+              z-index: 10;
+            }
+          `}</style>
+          <div className="lightning-flash"></div>
         </>
       )}
       <div className="login-card bg-white border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] p-8 max-w-md w-full relative z-20">
@@ -2430,7 +2444,30 @@ function App() {
               </div>
 
               <button
-            </div>
+                onClick={handleJoin}
+                className="w-full py-4 bg-blue-500 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] hover:bg-blue-400 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all font-black text-xl"
+              >
+                ⚔️ 新しいバトルを始める
+              </button>
+
+              <button
+                onClick={() => setScreen('bump')}
+                disabled={!savedPlayerName.trim()}
+                className={`w-full py-4 border-4 border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] transition-all font-black text-xl ${
+                  savedPlayerName.trim()
+                    ? 'bg-orange-500 hover:bg-orange-400 active:translate-x-1 active:translate-y-1 active:shadow-none'
+                    : 'bg-gray-400 cursor-not-allowed'
+                }`}
+              >
+                📱 スマホをぶつけてマッチ
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+    </div>
+  );
 }
 
 export default App;

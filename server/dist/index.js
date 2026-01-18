@@ -1,14 +1,19 @@
-import express from 'express';
-import { createServer } from 'http';
-import { Server } from 'socket.io';
-import cors from 'cors';
-import { v4 as uuidv4 } from 'uuid';
-import { SKILLS } from './data/skills';
-const app = express();
-const httpServer = createServer(app);
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = __importDefault(require("express"));
+const http_1 = require("http");
+const socket_io_1 = require("socket.io");
+const cors_1 = __importDefault(require("cors"));
+const uuid_1 = require("uuid");
+const skills_1 = require("./data/skills");
+const app = (0, express_1.default)();
+const httpServer = (0, http_1.createServer)(app);
 // Configure Socket.io with CORS
 // Allow all origins for deployment (Vercel frontend + Render backend)
-const io = new Server(httpServer, {
+const io = new socket_io_1.Server(httpServer, {
     cors: {
         origin: '*',
         methods: ['GET', 'POST'],
@@ -18,10 +23,10 @@ const io = new Server(httpServer, {
     pingTimeout: 10000, // 10秒でタイムアウト
     transports: ['websocket', 'polling'],
 });
-app.use(cors({
+app.use((0, cors_1.default)({
     origin: '*',
 }));
-app.use(express.json());
+app.use(express_1.default.json());
 const waitingRoom = [];
 const activeGames = new Map();
 // オフライン保持: playerId -> { roomId, lastSeen, username }
@@ -68,7 +73,7 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
     if (currentTurn === 1) {
         const tenpaiLuck = Math.random();
         if (tenpaiLuck < 0.0001) { // 0.01%（1/10000）
-            const tenpai = SKILLS.find((skill) => skill.id === 131);
+            const tenpai = skills_1.SKILLS.find((skill) => skill.id === 131);
             console.log('🌟✨ 天和（テンホウ）が発動！究極のレア技！！！');
             return tenpai;
         }
@@ -76,8 +81,8 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
     // 博打のゾーン判定を最初に実行
     if (activeZone.type === '博打のゾーン') {
         const random = Math.random();
-        const gigaImpact = SKILLS.find((skill) => skill.id === 200); // ギガインパクト
-        const doNothing = SKILLS.find((skill) => skill.id === 201); // 何もしない
+        const gigaImpact = skills_1.SKILLS.find((skill) => skill.id === 200); // ギガインパクト
+        const doNothing = skills_1.SKILLS.find((skill) => skill.id === 201); // 何もしない
         if (random < 0.3) {
             // 30%の確率でギガインパクト
             console.log('🎰 博打判定：成功（ギガインパクト発動 / 30%）');
@@ -94,7 +99,7 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
     if (currentHpPercent <= 0.25) {
         const comebackChance = Math.random();
         if (comebackChance < 0.4) { // 40%の確率で起死回生
-            const comeback = SKILLS.find((skill) => skill.id === 119);
+            const comeback = skills_1.SKILLS.find((skill) => skill.id === 119);
             console.log('🔄 HP危機的！起死回生が出現！');
             return comeback;
         }
@@ -102,7 +107,7 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
     // 【一撃必殺】超激レア抽選（0.1%）
     const ichigekiLuck = Math.random();
     if (ichigekiLuck < 0.001) { // 0.1%
-        const ichigeki = SKILLS.find((skill) => skill.id === 120); // id:120 = 出禁/一撃必殺
+        const ichigeki = skills_1.SKILLS.find((skill) => skill.id === 120); // id:120 = 出禁/一撃必殺
         if (ichigeki) {
             console.log('💥 一撃必殺（超激レア0.1%）が発動！');
             return ichigeki;
@@ -111,32 +116,32 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
     // 【麻雀役満】九蓮宝燈の超超超レア抽選（0.05%）
     const chuurenLuck = Math.random();
     if (chuurenLuck < 0.0005) { // 0.05%
-        const chuuren = SKILLS.find((skill) => skill.id === 130);
+        const chuuren = skills_1.SKILLS.find((skill) => skill.id === 130);
         console.log('🀄✨ 幻の役満！九蓮宝燈が出現！');
         return chuuren;
     }
     // 【麻雀役満】国士無双のレア抽選（0.1%）
     const kokushiLuck = Math.random();
     if (kokushiLuck < 0.001) { // 0.1%
-        const kokushi = SKILLS.find((skill) => skill.id === 129);
+        const kokushi = skills_1.SKILLS.find((skill) => skill.id === 129);
         console.log('🀄 役満！国士無双が出現！');
         return kokushi;
     }
     // 【麻雀役】清一色の低確率抽選（2%）
     const chinItsuLuck = Math.random();
     if (chinItsuLuck < 0.02) { // 2%
-        const chinItsu = SKILLS.find((skill) => skill.id === 128);
+        const chinItsu = skills_1.SKILLS.find((skill) => skill.id === 128);
         console.log('🀄 清一色が出現！');
         return chinItsu;
     }
     // 通常技リスト（ギガインパクト、何もしない、天和を除外 - id 200, 201, 131）
     // 天和（id:131）は1ターン目の特殊抽選でのみ出現
-    let availableSkills = SKILLS.filter((skill) => skill.id < 200 && skill.id !== 131 // 天和を除外
+    let availableSkills = skills_1.SKILLS.filter((skill) => skill.id < 200 && skill.id !== 131 // 天和を除外
     );
     // 立直状態の場合、ロン/ツモを追加
     if (isRiichi) {
-        const ron = SKILLS.find((skill) => skill.id === 112); // ロン
-        const tsumo = SKILLS.find((skill) => skill.id === 113); // ツモ
+        const ron = skills_1.SKILLS.find((skill) => skill.id === 112); // ロン
+        const tsumo = skills_1.SKILLS.find((skill) => skill.id === 113); // ツモ
         if (ron && tsumo) {
             availableSkills = [...availableSkills, ron, tsumo];
             console.log('🀄 立直状態：ロン/ツモが出現可能！');
@@ -191,14 +196,15 @@ function applySkillEffect(skill, attacker, defender, isAttackerRiichi = false, i
     };
     // ダメージ計算（基本値に乱数を適用）
     const calculateDamage = (base) => {
-        return Math.floor(base * damageVariance());
+        return Math.max(1, Math.floor(base * damageVariance())); // 最低1ダメージを保証
     };
     // ダメージ軽減（集中のゾーン）を計算する補助
     const applyDefense = (base) => {
+        let damage = base;
         if (defender.state.activeZone.type === '集中のゾーン') {
-            return Math.floor(base * 0.75);
+            damage = Math.floor(base * 0.75);
         }
-        return base;
+        return Math.max(1, damage); // 最低1ダメージを保証
     };
     switch (skill.type) {
         case 'attack': {
@@ -228,13 +234,21 @@ function applySkillEffect(skill, attacker, defender, isAttackerRiichi = false, i
             }
             damage = applyDefense(baseDamage);
             defender.state.hp = Math.max(0, defender.state.hp - damage);
+            // 攻撃ログを追加
+            console.log(`⚔️ [ダメージログ] ${attacker.username} → ${defender.username}: ${damage}ダメージ (${skill.name})`);
             // ネタ技の特別ログ
             if (skill.id === 115) {
                 logs.push(`🥚 ${attacker.username}の${skill.name}！`);
                 logs.push(`🤖 全自動で卵を割る機械で攻撃... ${defender.username}に${damage}ダメージ！`);
             }
             else {
-                logs.push(`${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージを与えた！`);
+                // 立直状態に応じてメッセージを出し分け
+                if (isAttackerRiichi) {
+                    logs.push(`🀄 ${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！`);
+                }
+                else {
+                    logs.push(`${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージを与えた！`);
+                }
             }
             // ひっかく：10%で2回連続攻撃
             if (skill.effect === 'multi_hit' && skill.multiHitChance) {
@@ -369,7 +383,13 @@ function applySkillEffect(skill, attacker, defender, isAttackerRiichi = false, i
                 const baseDamage = calculateDamage(skill.power);
                 damage = applyDefense(baseDamage);
                 defender.state.hp = Math.max(0, defender.state.hp - damage);
-                logs.push(`${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！！`);
+                // 立直状態に応じてメッセージを出し分け
+                if (isAttackerRiichi) {
+                    logs.push(`🀄 ${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！！`);
+                }
+                else {
+                    logs.push(`${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！！`);
+                }
                 break;
             }
             // 【逆転の目】起死回生
@@ -378,9 +398,11 @@ function applySkillEffect(skill, attacker, defender, isAttackerRiichi = false, i
                 const maxHp = Number(attacker.state.maxHp) || 100;
                 const currentHp = Number(attacker.state.hp) || 0;
                 const rawDamage = (maxHp - currentHp) * 2.5 + 30;
-                damage = Math.floor(rawDamage);
+                damage = Math.max(1, Math.floor(rawDamage)); // 最低1ダメージを保証
                 // デバッグログ
                 console.log(`🔄 起死回生発動計算:`);
+                console.log(`   攻撃者: ${attacker.username}`);
+                console.log(`   防御者: ${defender.username}`);
                 console.log(`   現在HP: ${currentHp}`);
                 console.log(`   最大HP: ${maxHp}`);
                 console.log(`   失ったHP: ${maxHp - currentHp}`);
@@ -389,6 +411,8 @@ function applySkillEffect(skill, attacker, defender, isAttackerRiichi = false, i
                 defender.state.hp = Math.max(0, Number(defender.state.hp) - damage);
                 logs.push(`🔄 ${attacker.username}の${skill.name}！！！`);
                 logs.push(`💫 絶望から蘇る... ${defender.username}に${damage}ダメージ！`);
+                // 攻撃ログを追加
+                console.log(`⚔️ [ダメージログ] ${attacker.username} → ${defender.username}: ${damage}ダメージ (起死回生)`);
             }
             // 【特殊勝利】出禁 - 即座に勝利判定
             else if (skill.effect === 'instant_win') {
@@ -471,7 +495,7 @@ function applySkillEffect(skill, attacker, defender, isAttackerRiichi = false, i
                 damage = skill.power;
                 defender.state.hp = Math.max(0, defender.state.hp - damage);
                 logs.push(`🀄💥 ${attacker.username}の${skill.name}！！！`);
-                logs.push(`⚡ 立直からの一撃必殺！ ${defender.username}に${damage}ダメージ！！`);
+                logs.push(`⚡ 立直一発ロン！ ${defender.username}に${damage}ダメージ！！`);
                 // 立直状態を解除
                 attacker.state.isRiichi = false;
                 logs.push(`🀄 立直状態が解除された`);
@@ -504,7 +528,7 @@ function applySkillEffect(skill, attacker, defender, isAttackerRiichi = false, i
     // 特殊技（起死回生、天和など）は立直ボーナスをスキップ
     const SPECIAL_SKILLS_SKIP_RIICHI = ['起死回生', '天和', '出禁', '九蓮宝燈'];
     const shouldSkipRiichiBonus = SPECIAL_SKILLS_SKIP_RIICHI.includes(skill.name);
-    // 立直中の計算ロジック（特殊技以外）
+    // 立直中の計算ロジック（特殊技以外）- 厳格化
     if (isAttackerRiichi && damage > 0 && !shouldSkipRiichiBonus) {
         if (isYaku) {
             // ケースA: 役の場合
@@ -515,7 +539,7 @@ function applySkillEffect(skill, attacker, defender, isAttackerRiichi = false, i
             damage = finalDamage;
             defender.state.hp = Math.max(0, defender.state.hp - yakuBonus);
             console.log(`🀄 役ボーナス適用: 1.5倍 -> ${finalDamage}`);
-            logs.push(`🀄 役が確定！ダメージが1.5倍に！ ${yakuBonus}の追加ダメージ！`);
+            logs.push(`🀄 立直一発！${skill.name}！ダメージが1.5倍に！ ${yakuBonus}の追加ダメージ！`);
         }
         else {
             // ケースB: 通常技の場合
@@ -525,8 +549,12 @@ function applySkillEffect(skill, attacker, defender, isAttackerRiichi = false, i
             damage += uraDora;
             defender.state.hp = Math.max(0, defender.state.hp - uraDora);
             console.log(`🀄 裏ドラ適用: +${uraDora} -> ${damage}`);
-            logs.push(`🀄 裏ドラが発動！ さらに${uraDora}ダメージ！`);
+            logs.push(`🀄 立直！裏ドラが発動！ さらに${uraDora}ダメージ！`);
         }
+    }
+    else if (!isAttackerRiichi && isYaku) {
+        // 非立直で役が出た場合の特別メッセージ
+        logs.push(`🎌 ${skill.name}ロン！ ${defender.username}に${damage}ダメージ！`);
     }
     return {
         damage,
@@ -648,6 +676,7 @@ io.on('connection', (socket) => {
                 if (defender.state.activeEffectTurns === 0)
                     defender.state.activeEffect = 'none';
             }
+            // ターン交代処理
             currentGame.currentTurn++;
             const nextPlayer = currentGame.currentTurnPlayerId === currentGame.player1.socketId
                 ? currentGame.player2
@@ -665,10 +694,18 @@ io.on('connection', (socket) => {
                 gameState: currentGame,
             };
             io.to(currentRoomId).emit('battle_update', battleUpdate);
+            // クライアントへの明確な通知
+            io.to(currentRoomId).emit('skill_effect', {
+                skill: { name: '骨折', effect: 'broken', type: 'status' },
+                message: `${attacker.username}は骨折していて動けない！`,
+                target: attacker.username
+            });
             io.to(currentRoomId).emit('turn_change', {
                 currentTurnPlayerId: currentGame.currentTurnPlayerId,
                 currentTurnPlayerName: nextPlayer.username,
             });
+            console.log(`🔄 ${attacker.username} is broken, turn switched to ${nextPlayer.username}`);
+            console.log(`📊 Game state after broken turn: turn=${currentGame.currentTurn}, currentPlayer=${nextPlayer.username}`);
             return;
         }
         const selectedSkill = getRandomSkill(attacker.state.activeZone, attacker.state.isRiichi, attacker.state.hp, attacker.state.maxHp, currentGame.currentTurn);
@@ -685,7 +722,7 @@ io.on('connection', (socket) => {
             const upgradeRoll = Math.random();
             if (upgradeRoll < 0.01) {
                 // 1%: 九蓮宝燈（威力999, rainbow）
-                const chuuren = SKILLS.find((skill) => skill.id === 130);
+                const chuuren = skills_1.SKILLS.find((skill) => skill.id === 130);
                 if (chuuren) {
                     upgradedSkill = chuuren;
                     riichiResolved = true;
@@ -694,7 +731,7 @@ io.on('connection', (socket) => {
             }
             else if (upgradeRoll < 0.04) {
                 // 3%: 国士無双（威力130, flash）
-                const kokushi = SKILLS.find((skill) => skill.id === 129);
+                const kokushi = skills_1.SKILLS.find((skill) => skill.id === 129);
                 if (kokushi) {
                     upgradedSkill = kokushi;
                     riichiResolved = true;
@@ -703,7 +740,7 @@ io.on('connection', (socket) => {
             }
             else if (upgradeRoll < 0.09) {
                 // 5%: 清一色（威力80, blue）
-                const chinItsu = SKILLS.find((skill) => skill.id === 128);
+                const chinItsu = skills_1.SKILLS.find((skill) => skill.id === 128);
                 if (chinItsu) {
                     upgradedSkill = chinItsu;
                     riichiResolved = true;
@@ -712,7 +749,7 @@ io.on('connection', (socket) => {
             }
             else if (upgradeRoll < 0.19) {
                 // 10%: 断幺九（威力40, yellow）
-                const tanYao = SKILLS.find((skill) => skill.id === 127);
+                const tanYao = skills_1.SKILLS.find((skill) => skill.id === 127);
                 if (tanYao) {
                     upgradedSkill = tanYao;
                     riichiResolved = true;
@@ -987,7 +1024,7 @@ io.on('connection', (socket) => {
     }
     socket.on('joinGame', (payload) => {
         console.log(`🎮 ${payload.username} (${socket.id}) joining game...`);
-        const playerId = uuidv4();
+        const playerId = (0, uuid_1.v4)();
         socketToPlayerId.set(socket.id, playerId);
         socket.emit('player_id', { playerId });
         // Add player to waiting room
@@ -1003,7 +1040,7 @@ io.on('connection', (socket) => {
             const player1 = waitingRoom.shift();
             const player2 = waitingRoom.shift();
             // Generate new room ID with UUID
-            const roomId = uuidv4();
+            const roomId = (0, uuid_1.v4)();
             console.log(`🎯 Creating room ${roomId}`);
             console.log(`   Player 1: ${player1.username} (${player1.socketId})`);
             console.log(`   Player 2: ${player2.username} (${player2.socketId})`);
@@ -1430,7 +1467,7 @@ io.on('connection', (socket) => {
                 return; // 相手のソケットが消えていたら中止
             }
             console.log(`✅ Bump match success! ${username} (${socket.id}) <-> ${opponent.data.username} (${matchedOpponentId})`);
-            const roomId = `bump_${uuidv4()}`;
+            const roomId = `bump_${(0, uuid_1.v4)()}`;
             // ゲーム状態作成
             const player1 = {
                 playerId,
