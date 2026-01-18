@@ -323,7 +323,12 @@ function applySkillEffect(
         logs.push(`🥚 ${attacker.username}の${skill.name}！`);
         logs.push(`🤖 全自動で卵を割る機械で攻撃... ${defender.username}に${damage}ダメージ！`);
       } else {
-        logs.push(`${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージを与えた！`);
+        // 立直状態に応じてメッセージを出し分け
+        if (isAttackerRiichi) {
+          logs.push(`🀄 ${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！`);
+        } else {
+          logs.push(`${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージを与えた！`);
+        }
       }
 
       // ひっかく：10%で2回連続攻撃
@@ -458,7 +463,13 @@ function applySkillEffect(
         const baseDamage = calculateDamage(skill.power);
         damage = applyDefense(baseDamage);
         defender.state.hp = Math.max(0, defender.state.hp - damage);
-        logs.push(`${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！！`);
+        
+        // 立直状態に応じてメッセージを出し分け
+        if (isAttackerRiichi) {
+          logs.push(`🀄 ${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！！`);
+        } else {
+          logs.push(`${attacker.username}の${skill.name}！ ${defender.username}に${damage}ダメージ！！`);
+        }
         break;
       }
 
@@ -568,7 +579,7 @@ function applySkillEffect(
         damage = skill.power;
         defender.state.hp = Math.max(0, defender.state.hp - damage);
         logs.push(`🀄💥 ${attacker.username}の${skill.name}！！！`);
-        logs.push(`⚡ 立直からの一撃必殺！ ${defender.username}に${damage}ダメージ！！`);
+        logs.push(`⚡ 立直一発ロン！ ${defender.username}に${damage}ダメージ！！`);
         // 立直状態を解除
         attacker.state.isRiichi = false;
         logs.push(`🀄 立直状態が解除された`);
@@ -604,7 +615,7 @@ function applySkillEffect(
   const SPECIAL_SKILLS_SKIP_RIICHI = ['起死回生', '天和', '出禁', '九蓮宝燈'];
   const shouldSkipRiichiBonus = SPECIAL_SKILLS_SKIP_RIICHI.includes(skill.name);
 
-  // 立直中の計算ロジック（特殊技以外）
+  // 立直中の計算ロジック（特殊技以外）- 厳格化
   if (isAttackerRiichi && damage > 0 && !shouldSkipRiichiBonus) {
     if (isYaku) {
       // ケースA: 役の場合
@@ -615,17 +626,20 @@ function applySkillEffect(
       damage = finalDamage;
       defender.state.hp = Math.max(0, defender.state.hp - yakuBonus);
       console.log(`🀄 役ボーナス適用: 1.5倍 -> ${finalDamage}`);
-      logs.push(`🀄 役が確定！ダメージが1.5倍に！ ${yakuBonus}の追加ダメージ！`);
+      logs.push(`🀄 立直一発！${skill.name}！ダメージが1.5倍に！ ${yakuBonus}の追加ダメージ！`);
     } else {
       // ケースB: 通常技の場合
       // ・ダメージ倍率はかけない（1.0倍）
       // ・「裏ドラ（ランダム追加ダメージ 10〜50）」を加算する
-        const uraDora = Math.floor(Math.random() * 41) + 10; // 10〜50の範囲
+      const uraDora = Math.floor(Math.random() * 41) + 10; // 10〜50の範囲
       damage += uraDora;
       defender.state.hp = Math.max(0, defender.state.hp - uraDora);
       console.log(`🀄 裏ドラ適用: +${uraDora} -> ${damage}`);
-      logs.push(`🀄 裏ドラが発動！ さらに${uraDora}ダメージ！`);
+      logs.push(`🀄 立直！裏ドラが発動！ さらに${uraDora}ダメージ！`);
     }
+  } else if (!isAttackerRiichi && isYaku) {
+    // 非立直で役が出た場合の特別メッセージ
+    logs.push(`🎌 ${skill.name}ロン！ ${defender.username}に${damage}ダメージ！`);
   }
 
   return { 
