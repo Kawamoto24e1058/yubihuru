@@ -5,6 +5,7 @@ import type { GameStartData, PlayerData } from './types'
 import { FallingBackground3D } from './FallingBackground3D'
 import { BumpMatching } from './BumpMatching'
 import BattleBackground from './components/BattleBackground'
+import { audioManager } from './utils/AudioManager'
 
 // ゾーン効果の説明データ
 const ZONE_DESCRIPTIONS = {
@@ -80,6 +81,53 @@ function App() {
     const shouldActivateRiichi = myRiichiState || opponentRiichiState;
     setIsRiichiActive(shouldActivateRiichi);
   }, [myRiichiState, opponentRiichiState]);
+  
+  // BGM管理
+  const [isMuted, setIsMuted] = useState(audioManager.getIsMuted());
+  
+  // 最初のユーザーインタラクションでAudioContextを再開
+  const handleFirstInteraction = () => {
+    audioManager.resumeAudioContext();
+    // イベントリスナーを一度だけ実行
+    document.removeEventListener('click', handleFirstInteraction);
+    document.removeEventListener('touchstart', handleFirstInteraction);
+  };
+  
+  // ミュート切り替え
+  const toggleMute = () => {
+    const newMuteState = audioManager.toggleMute();
+    setIsMuted(newMuteState);
+  };
+  
+  // 初回マウント時にイベントリスナーを設定
+  useEffect(() => {
+    // AudioContextを初期化
+    audioManager.initAudioContext();
+    
+    // 最初のユーザーインタラクションを待機
+    document.addEventListener('click', handleFirstInteraction);
+    document.addEventListener('touchstart', handleFirstInteraction);
+    
+    // クリーンアップ
+    return () => {
+      document.removeEventListener('click', handleFirstInteraction);
+      document.removeEventListener('touchstart', handleFirstInteraction);
+    };
+  }, []);
+  
+  // リーチ状態の変化を監視してBGMを切り替え
+  useEffect(() => {
+    if (gameStarted) {
+      if (isRiichiActive) {
+        audioManager.playBGM('riichi');
+      } else {
+        audioManager.playBGM('normal');
+      }
+    } else {
+      // ゲームが開始されていない場合はBGMを停止
+      audioManager.stopBGM();
+    }
+  }, [isRiichiActive, gameStarted]);
   
   // 技名表示用
   const [showImpact, setShowImpact] = useState(false)
@@ -1430,6 +1478,15 @@ function App() {
           isBattleActive={gameStarted}
           isRiichiActive={isRiichiActive}
         />
+
+        {/* BGMミュートボタン（右上） */}
+        <button
+          onClick={toggleMute}
+          className="fixed top-4 right-20 z-[110] w-12 h-12 bg-white border-4 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100 active:translate-x-1 active:translate-y-1 active:shadow-none transition-all flex items-center justify-center"
+          aria-label="BGMミュート切り替え"
+        >
+          <span className="text-2xl">{isMuted ? '🔇' : '🔊'}</span>
+        </button>
 
         {/* メニューボタン（右上） */}
         <button
