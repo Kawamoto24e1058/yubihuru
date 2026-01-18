@@ -4,6 +4,7 @@ import './App.css'
 import type { GameStartData, PlayerData } from './types'
 import { FallingBackground3D } from './FallingBackground3D'
 import { BumpMatching } from './BumpMatching'
+import BattleBackground from './components/BattleBackground'
 
 // ゾーン効果の説明データ
 const ZONE_DESCRIPTIONS = {
@@ -51,6 +52,13 @@ function App() {
   const [shieldEffect, setShieldEffect] = useState(false)
   const [myMaxHpExpand, setMyMaxHpExpand] = useState(false)
   const [opponentMaxHpExpand, setOpponentMaxHpExpand] = useState(false)
+  
+  // 背景エフェクト用の現在のスキル情報
+  const [currentSkill, setCurrentSkill] = useState<{
+    name: string;
+    effect?: string;
+    type?: string;
+  } | null>(null)
   
   // turnIndex ターン管理用（新方式）
   const [myIndex, setMyIndex] = useState<number | null>(null)
@@ -510,8 +518,23 @@ function App() {
 
     const handleSkillEffect = (payload: any) => {
       const effect = payload?.skill?.effect || payload?.skillEffect || null
+      const skillName = payload?.skill?.name || payload?.skillName || ''
+      const skillType = payload?.skill?.type || payload?.skillType || 'attack'
+      
       if (effect) {
         setSkillEffect(effect)
+      }
+      
+      // 背景エフェクト用に現在のスキル情報を設定
+      if (skillName) {
+        setCurrentSkill({
+          name: skillName,
+          effect: effect,
+          type: skillType
+        })
+        
+        // 3秒後にスキル情報をクリア
+        setTimeout(() => setCurrentSkill(null), 3000)
       }
     }
 
@@ -521,6 +544,16 @@ function App() {
 
       // 技に応じて3D背景のオブジェクトタイプを変更
       if (data.skillName) {
+        // 背景エフェクト用にスキル情報を設定
+        setCurrentSkill({
+          name: data.skillName,
+          effect: data.skillEffect,
+          type: data.skillType || 'attack'
+        })
+        
+        // 3秒後にスキル情報をクリア
+        setTimeout(() => setCurrentSkill(null), 3000)
+        
         // バースト演出を有効化
         setBurstEffect(true)
         setTimeout(() => setBurstEffect(false), 500)
@@ -1381,6 +1414,12 @@ function App() {
         <div className="fixed inset-0 z-0 pointer-events-none">
           <FallingBackground3D objectType={fallingType} opacity={0.4} burst={burstEffect} />
         </div>
+
+        {/* バトル背景エフェクト */}
+        <BattleBackground 
+          currentSkill={currentSkill} 
+          isBattleActive={gameStarted} 
+        />
 
         {/* メニューボタン（右上） */}
         <button
