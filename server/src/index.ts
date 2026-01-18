@@ -273,15 +273,16 @@ function applySkillEffect(
 
   // ダメージ計算（基本値に乱数を適用）
   const calculateDamage = (base: number): number => {
-    return Math.floor(base * damageVariance());
+    return Math.max(1, Math.floor(base * damageVariance())); // 最低1ダメージを保証
   };
 
   // ダメージ軽減（集中のゾーン）を計算する補助
   const applyDefense = (base: number) => {
+    let damage = base;
     if (defender.state.activeZone.type === '集中のゾーン') {
-      return Math.floor(base * 0.75);
+      damage = Math.floor(base * 0.75);
     }
-    return base;
+    return Math.max(1, damage); // 最低1ダメージを保証
   };
 
   switch (skill.type) {
@@ -313,6 +314,9 @@ function applySkillEffect(
       }
       damage = applyDefense(baseDamage);
       defender.state.hp = Math.max(0, defender.state.hp - damage);
+      
+      // 攻撃ログを追加
+      console.log(`⚔️ [ダメージログ] ${attacker.username} → ${defender.username}: ${damage}ダメージ (${skill.name})`);
       
       // ネタ技の特別ログ
       if (skill.id === 115) {
@@ -464,10 +468,12 @@ function applySkillEffect(
         const maxHp = Number(attacker.state.maxHp) || 100;
         const currentHp = Number(attacker.state.hp) || 0;
         const rawDamage = (maxHp - currentHp) * 2.5 + 30;
-        damage = Math.floor(rawDamage);
+        damage = Math.max(1, Math.floor(rawDamage)); // 最低1ダメージを保証
         
         // デバッグログ
         console.log(`🔄 起死回生発動計算:`);
+        console.log(`   攻撃者: ${attacker.username}`);
+        console.log(`   防御者: ${defender.username}`);
         console.log(`   現在HP: ${currentHp}`);
         console.log(`   最大HP: ${maxHp}`);
         console.log(`   失ったHP: ${maxHp - currentHp}`);
@@ -477,6 +483,9 @@ function applySkillEffect(
         defender.state.hp = Math.max(0, Number(defender.state.hp) - damage);
         logs.push(`🔄 ${attacker.username}の${skill.name}！！！`);
         logs.push(`💫 絶望から蘇る... ${defender.username}に${damage}ダメージ！`);
+        
+        // 攻撃ログを追加
+        console.log(`⚔️ [ダメージログ] ${attacker.username} → ${defender.username}: ${damage}ダメージ (起死回生)`);
       }
       // 【特殊勝利】出禁 - 即座に勝利判定
       else if (skill.effect === 'instant_win') {
