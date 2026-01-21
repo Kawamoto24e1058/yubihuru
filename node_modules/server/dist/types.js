@@ -1,7 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.SocketEvent = exports.SkillType = void 0;
 /**
  * Skill Types for the game
  */
-export var SkillType;
+var SkillType;
 (function (SkillType) {
     SkillType["FIRE"] = "FIRE";
     SkillType["WATER"] = "WATER";
@@ -9,11 +12,11 @@ export var SkillType;
     SkillType["WIND"] = "WIND";
     SkillType["LIGHT"] = "LIGHT";
     SkillType["DARK"] = "DARK";
-})(SkillType || (SkillType = {}));
+})(SkillType || (exports.SkillType = SkillType = {}));
 /**
  * Socket Event Types
  */
-export var SocketEvent;
+var SocketEvent;
 (function (SocketEvent) {
     // Connection events
     SocketEvent["CONNECT"] = "connect";
@@ -27,5 +30,5 @@ export var SocketEvent;
     SocketEvent["GAME_OVER"] = "gameOver";
     // Error events
     SocketEvent["ERROR"] = "error";
-})(SocketEvent || (SocketEvent = {}));
+})(SocketEvent || (exports.SocketEvent = SocketEvent = {}));
 //# sourceMappingURL=types.js.map

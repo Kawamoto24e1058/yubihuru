@@ -1,14 +1,19 @@
-import express from 'express';
-import { createServer } from 'http';
-import { Server } from 'socket.io';
-import cors from 'cors';
-import { v4 as uuidv4 } from 'uuid';
-import { SKILLS } from './data/skills';
-const app = express();
-const httpServer = createServer(app);
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = __importDefault(require("express"));
+const http_1 = require("http");
+const socket_io_1 = require("socket.io");
+const cors_1 = __importDefault(require("cors"));
+const uuid_1 = require("uuid");
+const skills_1 = require("./data/skills");
+const app = (0, express_1.default)();
+const httpServer = (0, http_1.createServer)(app);
 // Configure Socket.io with CORS
 // Allow all origins for deployment (Vercel frontend + Render backend)
-const io = new Server(httpServer, {
+const io = new socket_io_1.Server(httpServer, {
     cors: {
         origin: '*',
         methods: ['GET', 'POST'],
@@ -18,10 +23,10 @@ const io = new Server(httpServer, {
     pingTimeout: 10000, // 10秒でタイムアウト
     transports: ['websocket', 'polling'],
 });
-app.use(cors({
+app.use((0, cors_1.default)({
     origin: '*',
 }));
-app.use(express.json());
+app.use(express_1.default.json());
 const waitingRoom = [];
 const activeGames = new Map();
 // オフライン保持: playerId -> { roomId, lastSeen, username }
@@ -68,7 +73,7 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
     if (currentTurn === 1) {
         const tenpaiLuck = Math.random();
         if (tenpaiLuck < 0.0001) { // 0.01%（1/10000）
-            const tenpai = SKILLS.find((skill) => skill.id === 131);
+            const tenpai = skills_1.SKILLS.find((skill) => skill.id === 131);
             console.log('🌟✨ 天和（テンホウ）が発動！究極のレア技！！！');
             return tenpai;
         }
@@ -76,8 +81,8 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
     // 博打のゾーン判定を最初に実行
     if (activeZone.type === '博打のゾーン') {
         const random = Math.random();
-        const gigaImpact = SKILLS.find((skill) => skill.id === 200); // ギガインパクト
-        const doNothing = SKILLS.find((skill) => skill.id === 201); // 何もしない
+        const gigaImpact = skills_1.SKILLS.find((skill) => skill.id === 200); // ギガインパクト
+        const doNothing = skills_1.SKILLS.find((skill) => skill.id === 201); // 何もしない
         if (random < 0.3) {
             // 30%の確率でギガインパクト
             console.log('🎰 博打判定：成功（ギガインパクト発動 / 30%）');
@@ -94,7 +99,7 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
     if (currentHpPercent <= 0.25) {
         const comebackChance = Math.random();
         if (comebackChance < 0.4) { // 40%の確率で起死回生
-            const comeback = SKILLS.find((skill) => skill.id === 119);
+            const comeback = skills_1.SKILLS.find((skill) => skill.id === 119);
             console.log('🔄 HP危機的！起死回生が出現！');
             return comeback;
         }
@@ -102,7 +107,7 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
     // 【一撃必殺】超激レア抽選（0.1%）
     const ichigekiLuck = Math.random();
     if (ichigekiLuck < 0.001) { // 0.1%
-        const ichigeki = SKILLS.find((skill) => skill.id === 120); // id:120 = 出禁/一撃必殺
+        const ichigeki = skills_1.SKILLS.find((skill) => skill.id === 120); // id:120 = 出禁/一撃必殺
         if (ichigeki) {
             console.log('💥 一撃必殺（超激レア0.1%）が発動！');
             return ichigeki;
@@ -111,32 +116,32 @@ function getRandomSkill(activeZone, isRiichi = false, attackerHp = 500, maxHp = 
     // 【麻雀役満】九蓮宝燈の超超超レア抽選（0.05%）
     const chuurenLuck = Math.random();
     if (chuurenLuck < 0.0005) { // 0.05%
-        const chuuren = SKILLS.find((skill) => skill.id === 130);
+        const chuuren = skills_1.SKILLS.find((skill) => skill.id === 130);
         console.log('🀄✨ 幻の役満！九蓮宝燈が出現！');
         return chuuren;
     }
     // 【麻雀役満】国士無双のレア抽選（0.1%）
     const kokushiLuck = Math.random();
     if (kokushiLuck < 0.001) { // 0.1%
-        const kokushi = SKILLS.find((skill) => skill.id === 129);
+        const kokushi = skills_1.SKILLS.find((skill) => skill.id === 129);
         console.log('🀄 役満！国士無双が出現！');
         return kokushi;
     }
     // 【麻雀役】清一色の低確率抽選（2%）
     const chinItsuLuck = Math.random();
     if (chinItsuLuck < 0.02) { // 2%
-        const chinItsu = SKILLS.find((skill) => skill.id === 128);
+        const chinItsu = skills_1.SKILLS.find((skill) => skill.id === 128);
         console.log('🀄 清一色が出現！');
         return chinItsu;
     }
     // 通常技リスト（ギガインパクト、何もしない、天和を除外 - id 200, 201, 131）
     // 天和（id:131）は1ターン目の特殊抽選でのみ出現
-    let availableSkills = SKILLS.filter((skill) => skill.id < 200 && skill.id !== 131 // 天和を除外
+    let availableSkills = skills_1.SKILLS.filter((skill) => skill.id < 200 && skill.id !== 131 // 天和を除外
     );
     // 立直状態の場合、ロン/ツモを追加
     if (isRiichi) {
-        const ron = SKILLS.find((skill) => skill.id === 112); // ロン
-        const tsumo = SKILLS.find((skill) => skill.id === 113); // ツモ
+        const ron = skills_1.SKILLS.find((skill) => skill.id === 112); // ロン
+        const tsumo = skills_1.SKILLS.find((skill) => skill.id === 113); // ツモ
         if (ron && tsumo) {
             availableSkills = [...availableSkills, ron, tsumo];
             console.log('🀄 立直状態：ロン/ツモが出現可能！');
@@ -685,7 +690,7 @@ io.on('connection', (socket) => {
             const upgradeRoll = Math.random();
             if (upgradeRoll < 0.01) {
                 // 1%: 九蓮宝燈（威力999, rainbow）
-                const chuuren = SKILLS.find((skill) => skill.id === 130);
+                const chuuren = skills_1.SKILLS.find((skill) => skill.id === 130);
                 if (chuuren) {
                     upgradedSkill = chuuren;
                     riichiResolved = true;
@@ -694,7 +699,7 @@ io.on('connection', (socket) => {
             }
             else if (upgradeRoll < 0.04) {
                 // 3%: 国士無双（威力130, flash）
-                const kokushi = SKILLS.find((skill) => skill.id === 129);
+                const kokushi = skills_1.SKILLS.find((skill) => skill.id === 129);
                 if (kokushi) {
                     upgradedSkill = kokushi;
                     riichiResolved = true;
@@ -703,7 +708,7 @@ io.on('connection', (socket) => {
             }
             else if (upgradeRoll < 0.09) {
                 // 5%: 清一色（威力80, blue）
-                const chinItsu = SKILLS.find((skill) => skill.id === 128);
+                const chinItsu = skills_1.SKILLS.find((skill) => skill.id === 128);
                 if (chinItsu) {
                     upgradedSkill = chinItsu;
                     riichiResolved = true;
@@ -712,7 +717,7 @@ io.on('connection', (socket) => {
             }
             else if (upgradeRoll < 0.19) {
                 // 10%: 断幺九（威力40, yellow）
-                const tanYao = SKILLS.find((skill) => skill.id === 127);
+                const tanYao = skills_1.SKILLS.find((skill) => skill.id === 127);
                 if (tanYao) {
                     upgradedSkill = tanYao;
                     riichiResolved = true;
@@ -987,7 +992,7 @@ io.on('connection', (socket) => {
     }
     socket.on('joinGame', (payload) => {
         console.log(`🎮 ${payload.username} (${socket.id}) joining game...`);
-        const playerId = uuidv4();
+        const playerId = (0, uuid_1.v4)();
         socketToPlayerId.set(socket.id, playerId);
         socket.emit('player_id', { playerId });
         // Add player to waiting room
@@ -1003,7 +1008,7 @@ io.on('connection', (socket) => {
             const player1 = waitingRoom.shift();
             const player2 = waitingRoom.shift();
             // Generate new room ID with UUID
-            const roomId = uuidv4();
+            const roomId = (0, uuid_1.v4)();
             console.log(`🎯 Creating room ${roomId}`);
             console.log(`   Player 1: ${player1.username} (${player1.socketId})`);
             console.log(`   Player 2: ${player2.username} (${player2.socketId})`);
@@ -1389,8 +1394,8 @@ io.on('connection', (socket) => {
     });
     // 【スマホ衝突マッチング】関連
     const bumpWaiters = new Map();
-    const BUMP_MATCH_WINDOW_MS = 3000; // 衝撃検知の許容時間差（3秒）
-    const BUMP_MATCH_DISTANCE_THRESHOLD = 0.001; // 許容距離（約100m）
+    const BUMP_MATCH_WINDOW_MS = 500; // 衝撃検知の許容時間差（0.5秒）
+    const BUMP_MATCH_DISTANCE_THRESHOLD = 0.00045; // 許容距離（約50m）
     // 【スマホ衝突マッチング】bump_attempt ハンドラー
     socket.on('bump_attempt', (data) => {
         const playerId = socketToPlayerId.get(socket.id);
@@ -1405,42 +1410,44 @@ io.on('connection', (socket) => {
         }
         const { username, timestamp, lat, lng } = data;
         console.log(`🤜 Bump attempt from ${username} (${socket.id}) at (${lat}, ${lng}), timestamp: ${timestamp}`);
-        // 待機リストから条件に合う相手を検索
-        let matchedOpponentId = null;
-        let matchedOpponentData = null;
+        // 待機リストから最も条件が近い相手を厳密に1組だけ選ぶ
+        let bestMatch = null;
         for (const [opponentSocketId, waiter] of bumpWaiters.entries()) {
+            // 位置情報が取得できていない場合は除外
+            if ((lat === 0 && lng === 0) || (waiter.data.lat === 0 && waiter.data.lng === 0))
+                continue;
             const timeDiff = Math.abs(timestamp - waiter.data.timestamp);
             const latDiff = Math.abs(lat - waiter.data.lat);
             const lngDiff = Math.abs(lng - waiter.data.lng);
-            console.log(`   - Comparing with ${waiter.data.username}: timeDiff=${timeDiff}ms, distDiff=${(latDiff + lngDiff).toFixed(5)}`);
-            if (timeDiff < BUMP_MATCH_WINDOW_MS && latDiff < BUMP_MATCH_DISTANCE_THRESHOLD && lngDiff < BUMP_MATCH_DISTANCE_THRESHOLD) {
-                matchedOpponentId = opponentSocketId;
-                matchedOpponentData = waiter;
-                break;
+            // 距離のスコア（ピタリほど小さい）
+            const dist = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
+            if (timeDiff < BUMP_MATCH_WINDOW_MS && dist < BUMP_MATCH_DISTANCE_THRESHOLD) {
+                const score = timeDiff + dist * 100000; // ms + 距離(m単位)
+                if (!bestMatch || score < bestMatch.score) {
+                    bestMatch = { id: opponentSocketId, data: waiter.data, timeoutId: waiter.timeoutId, score };
+                }
             }
         }
-        if (matchedOpponentId && matchedOpponentData) {
-            // --- マッチング成功 ---
-            const opponent = matchedOpponentData;
-            bumpWaiters.delete(matchedOpponentId);
-            clearTimeout(opponent.timeoutId);
-            const opponentSocket = io.sockets.sockets.get(matchedOpponentId);
+        if (bestMatch) {
+            // --- マッチング成功（最も近い1組のみ） ---
+            bumpWaiters.delete(bestMatch.id);
+            clearTimeout(bestMatch.timeoutId);
+            const opponentSocket = io.sockets.sockets.get(bestMatch.id);
             if (!opponentSocket) {
-                console.log(`❌ Matched opponent ${matchedOpponentId} not found, but was in waiters list. Aborting match.`);
-                return; // 相手のソケットが消えていたら中止
+                console.log(`❌ Matched opponent ${bestMatch.id} not found, but was in waiters list. Aborting match.`);
+                return;
             }
-            console.log(`✅ Bump match success! ${username} (${socket.id}) <-> ${opponent.data.username} (${matchedOpponentId})`);
-            const roomId = `bump_${uuidv4()}`;
-            // ゲーム状態作成
+            console.log(`✅ Bump match success! ${username} (${socket.id}) <-> ${bestMatch.data.username} (${bestMatch.id})`);
+            const roomId = `bump_${(0, uuid_1.v4)()}`;
             const player1 = {
                 playerId,
                 socketId: socket.id,
                 username: username || 'Player1',
             };
             const player2 = {
-                playerId: socketToPlayerId.get(matchedOpponentId) || 'unknown',
-                socketId: matchedOpponentId,
-                username: opponent.data.username,
+                playerId: socketToPlayerId.get(bestMatch.id) || 'unknown',
+                socketId: bestMatch.id,
+                username: bestMatch.data.username,
             };
             const gameState = {
                 roomId,
@@ -1453,7 +1460,7 @@ io.on('connection', (socket) => {
                     state: createPlayerState(),
                 },
                 currentTurn: 1,
-                currentTurnPlayerId: socket.id, // 先にバンプした方が先攻（要調整）
+                currentTurnPlayerId: socket.id,
                 turnIndex: 0,
                 shakeTurns: 0,
                 isGameOver: false,
@@ -1461,7 +1468,6 @@ io.on('connection', (socket) => {
                 startedAt: Date.now(),
             };
             activeGames.set(roomId, gameState);
-            // 両者にマッチング成功通知
             socket.emit('match_success', {
                 roomId,
                 opponentName: player2.username,
@@ -1472,7 +1478,6 @@ io.on('connection', (socket) => {
                 opponentName: player1.username,
                 gameState,
             });
-            // ルームに参加
             socket.join(roomId);
             opponentSocket.join(roomId);
             console.log(`🎮 Bump match game started in room ${roomId}`);

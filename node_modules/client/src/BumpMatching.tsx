@@ -9,7 +9,56 @@ interface BumpMatchingProps {
 }
 
 export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, onMatchSuccess, onBack }) => {
-  const [bumpStrength, setBumpStrength] = useState(0); // 0-100
+    // devicemotionイベント用のダミー関数（本来は加速度検知ロジックを実装）
+    function handleMotion(event: DeviceMotionEvent) {
+      // 加速度データ取得
+      const acc = event.accelerationIncludingGravity;
+      if (!acc) return;
+      const now = Date.now();
+      // 三軸合成加速度
+      const x = acc.x ?? 0;
+      const y = acc.y ?? 0;
+      const z = acc.z ?? 0;
+      const composite = Math.sqrt(x * x + y * y + z * z);
+      // 直前との差分（急激な変化＝衝撃）
+      const last = lastAcc.current;
+      const diff = Math.abs(composite - Math.sqrt(last.x * last.x + last.y * last.y + last.z * last.z));
+      lastAcc.current = { x, y, z, t: now };
+
+      // ノイズ耐性: 一定時間内の最大値をバッファ
+      gaugeBuffer.current.push({ t: now, v: diff });
+      // avgWindowMsミリ秒より古いデータを除外
+      gaugeBuffer.current = gaugeBuffer.current.filter(e => now - e.t <= avgWindowMs);
+      const maxInWindow = Math.max(...gaugeBuffer.current.map(e => e.v), 0);
+
+      // ゲージ表示・最大値記録
+      setBumpStrength(Math.min((maxInWindow / gaugeMax) * 100, 100));
+      setMaxBump(prev => Math.max(prev, maxInWindow));
+
+      // デバッグ用: 最大値を出力
+      if (maxInWindow > 0) {
+        console.log('合成加速度最大値:', maxInWindow.toFixed(2));
+      }
+
+      // 衝撃検知（しきい値超え）
+      if (maxInWindow > bumpThreshold && !isWaiting && sensorReady) {
+        setIsWaiting(true);
+        setStatusText('マッチングリクエスト送信中...');
+        setShowFlash(true);
+        setTimeout(() => setShowFlash(false), 120);
+        // サーバーへ送信
+        if (socket) {
+          socket.emit('bump', {
+            timestamp: now,
+            strength: maxInWindow,
+            playerName,
+          });
+        }
+        // バッファをリセット
+        gaugeBuffer.current = [];
+      }
+    }
+  const [bumpStrength, setBumpStrength] = useState(0);
   const [isWaiting, setIsWaiting] = useState(false);
   const [statusText, setStatusText] = useState('「マッチングを開始する」ボタンを押してください');
   const [permissionError, setPermissionError] = useState<string | null>(null);
@@ -17,150 +66,13 @@ export const BumpMatching: React.FC<BumpMatchingProps> = ({ socket, playerName, 
   const [maxBump, setMaxBump] = useState(0);
   const [showFlash, setShowFlash] = useState(false);
   const animationFrameRef = useRef<number>();
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null); // タイムアウトIDを保持
-
-  // 判定パラメータ
-  const bumpThreshold = 10; // 1. しきい値を高く設定 (旧: 1.5)
-  const gaugeMax = 30.0; // 1. ゲージ満タン値も高く設定 (旧: 6.0)
-  const gaugeBuffer = useRef<{ t: number; v: number }[]>([]); // 0.2秒間の加速度絶対値バッファ
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const bumpThreshold = 20;
+  const gaugeMax = 30.0;
+  const lastAcc = useRef<{x: number, y: number, z: number, t: number}>({x:0, y:0, z:0, t:0});
+  const gaugeBuffer = useRef<{ t: number; v: number }[]>([]);
   const avgWindowMs = 200;
 
-  // 衝撃検知ハンドラー
-  const handleMotion = (event: DeviceMotionEvent) => {
-    // 4. 二重送信防止: 待機中は処理をスキップ
-    if (isWaiting) {
-      return;
-    }
-
-    // iPhone: acceleration + accelerationIncludingGravity の両方を合算
-    let accX = 0,
-      accY = 0,
-      accZ = 0;
-    if (event.accelerationIncludingGravity) {
-      accX += event.accelerationIncludingGravity.x ?? 0;
-      accY += event.accelerationIncludingGravity.y ?? 0;
-      accZ += event.accelerationIncludingGravity.z ?? 0;
-    }
-    if (event.acceleration) {
-      accX += event.acceleration.x ?? 0;
-      accY += event.acceleration.y ?? 0;
-      accZ += event.acceleration.z ?? 0;
-    }
-    // iOSのみ3倍ブースト
-    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (isIOS) {
-      accX *= 3;
-      accY *= 3;
-      accZ *= 3;
-    }
-
-    // 1. ハイパスフィルター強化: 急激な変化のみを捉える
-    const now = Date.now();
-    const absAcc = Math.abs(accX) + Math.abs(accY) + Math.abs(accZ);
-
-    // 1回の加速度絶対値がしきい値超えたらゲージ加算
-    let add = 0;
-    if (absAcc > bumpThreshold) {
-      add = absAcc; // 係数を1.0に (旧: absAcc * 0.6)
-    }
-
-    // バッファに追加
-    gaugeBuffer.current.push({ t: now, v: add });
-    // 0.2秒より古い値を除去
-    gaugeBuffer.current = gaugeBuffer.current.filter((e) => now - e.t <= avgWindowMs);
-    // 合計値でゲージ進行
-    const sum = gaugeBuffer.current.reduce((a, b) => a + b.v, 0);
-    let nextStrength = Math.min(100, (sum / gaugeMax) * 100);
-    setBumpStrength(nextStrength);
-    setMaxBump((prev) => Math.max(prev, absAcc));
-
-    // 50%以上で白発光
-    if (nextStrength > 50 && nextStrength < 100) {
-      setShowFlash(true);
-      setTimeout(() => setShowFlash(false), 120);
-    }
-
-    // 100%到達で即送信
-    if (nextStrength >= 100 && !isWaiting) {
-      if ('vibrate' in navigator) navigator.vibrate([100, 50, 100]);
-      onBumpDetected();
-      // ゲージリセット
-      gaugeBuffer.current = [];
-      setTimeout(() => {
-        setBumpStrength(0);
-      }, 800);
-    }
-  };
-
-  const onBumpDetected = () => {
-    // 3. 視覚的な待機状態の明確化
-    setStatusText('衝撃検知！相手を探しています...（有効期限：3秒）');
-    setIsWaiting(true);
-
-    // 3. 3秒のタイムアウトを設定
-    timeoutRef.current = setTimeout(() => {
-      setStatusText('タイムアウト。もう一度ぶつけてください');
-      setIsWaiting(false); // ステートをリセット
-      timeoutRef.current = null;
-    }, 3000);
-
-    if (!socket) return;
-
-    // 位置情報取得と送信
-    let sent = false;
-    if ('geolocation' in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          if (sent) return;
-          sent = true;
-          const { latitude: lat, longitude: lng } = position.coords;
-          socket.emit('bump_attempt', {
-            username: playerName,
-            timestamp: Date.now(),
-            lat,
-            lng,
-          });
-        },
-        (error) => {
-          if (sent) return;
-          sent = true;
-          if (error.code === error.PERMISSION_DENIED) {
-            setPermissionError('位置情報がブロックされています。ブラウザの設定から位置情報の使用を許可してください。');
-            setIsWaiting(false);
-            if (timeoutRef.current) clearTimeout(timeoutRef.current);
-            return;
-          }
-          // 位置情報取得失敗時もダミー値で送信
-          socket.emit('bump_attempt', {
-            username: playerName,
-            timestamp: Date.now(),
-            lat: 0,
-            lng: 0,
-          });
-        },
-        { timeout: 5000, enableHighAccuracy: true },
-      );
-      // 5秒経過しても送信されていなければダミー値送信
-      setTimeout(() => {
-        if (!sent) {
-          sent = true;
-          socket.emit('bump_attempt', {
-            username: playerName,
-            timestamp: Date.now(),
-            lat: 0,
-            lng: 0,
-          });
-        }
-      }, 5000);
-    } else {
-      socket.emit('bump_attempt', {
-        username: playerName,
-        timestamp: Date.now(),
-        lat: 0,
-        lng: 0,
-      });
-    }
-  };
 
   // センサー監視開始（iOS許可取得）
   const startSensor = async () => {
